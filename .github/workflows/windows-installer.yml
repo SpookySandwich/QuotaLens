@@ -1,0 +1,56 @@
+name: Windows Installer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-installer:
+    name: Build Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install Inno Setup
+        run: choco install innosetup --yes --no-progress
+
+      - name: Restore
+        run: dotnet restore .\QuotaLens.slnx
+
+      - name: Build
+        run: dotnet build .\QuotaLens.slnx -c Release -p:Platform=x64 --no-restore
+
+      - name: Test
+        run: dotnet test .\QuotaLens.slnx -c Release -p:Platform=x64 --no-restore
+
+      - name: Package installer
+        shell: pwsh
+        run: .\scripts\package-windows.ps1 -Configuration Release -Platform x64 -Version "1.0.${{ github.run_number }}"
+
+      - name: Upload installer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuotaLens-windows-installer
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            artifacts/dist/QuotaLens-Setup-*-win-x64.exe
+            artifacts/dist/QuotaLens-portable-*-win-x64.zip

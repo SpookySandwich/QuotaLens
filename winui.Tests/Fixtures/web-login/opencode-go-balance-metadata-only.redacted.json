@@ -1,0 +1,6 @@
+{
+  "billing": {
+    "balanceEnabled": true,
+    "useBalance": false
+  }
+}

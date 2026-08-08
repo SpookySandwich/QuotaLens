@@ -1,0 +1,22 @@
+<UserControl
+    x:Class="QuotaLens.Views.QuotaBar"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:QuotaLens.Helpers"
+    mc:Ignorable="d"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+
+    <!-- A determinate track. The fill is a full-width layer scaled on X (0..1) so its
+         width can be animated smoothly via a ScaleTransform on value changes. -->
+    <Border Height="6" CornerRadius="3"
+            Background="{ThemeResource ControlStrongFillColorDefaultBrush}">
+        <Border x:Name="Fill" HorizontalAlignment="Stretch" CornerRadius="3"
+                Background="{x:Bind Severity, Converter={StaticResource SeverityToBrush}, Mode=OneWay}"
+                RenderTransformOrigin="0,0.5">
+            <Border.RenderTransform>
+                <ScaleTransform x:Name="FillScale" ScaleX="0" />
+            </Border.RenderTransform>
+        </Border>
+    </Border>
+</UserControl>

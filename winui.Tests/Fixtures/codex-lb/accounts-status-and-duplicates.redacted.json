@@ -1,0 +1,128 @@
+{
+  "accounts": [
+    {
+      "accountId": "acct_fresh",
+      "chatgptAccountId": "chatgpt_shared",
+      "email": "shared@example.invalid",
+      "displayName": "Fresh redacted account",
+      "workspaceId": "workspace_redacted",
+      "planType": "plus",
+      "status": "active",
+      "lastRefreshAt": "2030-01-03T00:00:00Z",
+      "isEmailDuplicate": true,
+      "usage": {
+        "primaryRemainingPercent": 80.0,
+        "secondaryRemainingPercent": 60.0
+      },
+      "capacityCreditsPrimary": 225.0,
+      "capacityCreditsSecondary": 7560.0,
+      "additionalQuotas": [
+        {
+          "quotaKey": "codex_spark",
+          "limitName": "codex_spark",
+          "meteredFeature": "codex_spark",
+          "displayLabel": "GPT-5.3-Codex-Spark",
+          "primaryWindow": {
+            "usedPercent": 30.0,
+            "resetAt": 1893456000,
+            "windowMinutes": 300
+          }
+        }
+      ],
+      "creditsHas": true,
+      "creditsUnlimited": false,
+      "creditsBalance": 10.0,
+      "availableResetCredits": 2,
+      "resetCreditNearestExpiresAt": "2030-01-03T03:04:05Z"
+    },
+    {
+      "accountId": "acct_stale",
+      "chatgptAccountId": "chatgpt_shared",
+      "email": "shared@example.invalid",
+      "displayName": "Older duplicate redacted account",
+      "workspaceId": "workspace_redacted",
+      "planType": "pro",
+      "status": "active",
+      "lastRefreshAt": "2030-01-01T00:00:00Z",
+      "isEmailDuplicate": true,
+      "usage": {
+        "primaryRemainingPercent": 100.0,
+        "secondaryRemainingPercent": 100.0
+      },
+      "capacityCreditsPrimary": 1500.0,
+      "capacityCreditsSecondary": 50400.0,
+      "additionalQuotas": [
+        {
+          "quotaKey": "codex_spark",
+          "limitName": "codex_spark",
+          "meteredFeature": "codex_spark",
+          "displayLabel": "GPT-5.3-Codex-Spark",
+          "primaryWindow": {
+            "usedPercent": 0.0,
+            "resetAt": 1893456000,
+            "windowMinutes": 300
+          }
+        }
+      ],
+      "creditsHas": true,
+      "creditsUnlimited": false,
+      "creditsBalance": 999.0,
+      "availableResetCredits": 99,
+      "resetCreditNearestExpiresAt": "2030-01-01T03:04:05Z"
+    },
+    {
+      "accountId": "acct_paused",
+      "chatgptAccountId": "chatgpt_paused",
+      "email": "paused@example.invalid",
+      "displayName": "Paused redacted account",
+      "planType": "team",
+      "status": "paused",
+      "usage": {
+        "primaryRemainingPercent": 100.0,
+        "secondaryRemainingPercent": 100.0
+      },
+      "capacityCreditsPrimary": 225.0,
+      "capacityCreditsSecondary": 7560.0,
+      "additionalQuotas": [],
+      "creditsHas": true,
+      "creditsUnlimited": false,
+      "creditsBalance": 500.0,
+      "availableResetCredits": 50,
+      "resetCreditNearestExpiresAt": "2030-01-01T04:04:05Z"
+    },
+    {
+      "accountId": "acct_active_b",
+      "chatgptAccountId": "chatgpt_active_b",
+      "email": "active-b@example.invalid",
+      "displayName": "Second redacted account",
+      "planType": "team",
+      "status": "active",
+      "lastRefreshAt": "2030-01-02T00:00:00Z",
+      "isEmailDuplicate": false,
+      "usage": {
+        "primaryRemainingPercent": 70.0,
+        "secondaryRemainingPercent": 50.0
+      },
+      "capacityCreditsPrimary": 225.0,
+      "capacityCreditsSecondary": 7560.0,
+      "additionalQuotas": [
+        {
+          "quotaKey": "codex_spark",
+          "limitName": "codex_spark",
+          "meteredFeature": "codex_spark",
+          "displayLabel": "GPT-5.3-Codex-Spark",
+          "primaryWindow": {
+            "usedPercent": 40.0,
+            "resetAt": 1893456000,
+            "windowMinutes": 300
+          }
+        }
+      ],
+      "creditsHas": true,
+      "creditsUnlimited": false,
+      "creditsBalance": 5.0,
+      "availableResetCredits": 1,
+      "resetCreditNearestExpiresAt": "2030-01-02T03:04:05Z"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "subscription": {
+    "plan": "Megawatt",
+    "otherRemainingPercent": 97,
+    "orbRemainingPercent": 100,
+    "renewalDays": 29
+  },
+  "individualCredits": 25.64,
+  "workspaceCreditTotal": 17.22,
+  "workspaceCount": 2
+}

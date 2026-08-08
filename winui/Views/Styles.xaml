@@ -1,0 +1,84 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:helpers="using:QuotaLens.Helpers">
+
+    <!-- Converters shared across all views. -->
+    <helpers:SeverityToBrushConverter x:Key="SeverityToBrush" />
+    <helpers:PercentToStarConverter x:Key="PercentToStar" />
+    <helpers:BoolToVisibilityConverter x:Key="BoolToVis" />
+    <helpers:StringToVisibilityConverter x:Key="StringToVis" />
+    <helpers:NullToVisibilityConverter x:Key="NullToVis" />
+    <helpers:UriToImageSourceConverter x:Key="UriToImageSource" />
+
+    <!-- ====================================================================
+         Fluent "Card" surface: a layer that floats above the Mica backdrop.
+         Subtle translucent fill + hairline stroke + the standard 8px overlay
+         corner radius. Padding follows the 4px layout grid.
+         ==================================================================== -->
+    <Style x:Key="CardStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource CardBackgroundFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource CardStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}" />
+        <Setter Property="Padding" Value="16" />
+    </Style>
+
+    <!-- Subtle icon button used for per-card / title-bar actions. -->
+    <Style x:Key="CardIconButton" TargetType="Button" BasedOn="{StaticResource SubtleButtonStyle}">
+        <Setter Property="Width" Value="32" />
+        <Setter Property="Height" Value="32" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+        <Setter Property="FontFamily" Value="{ThemeResource SymbolThemeFontFamily}" />
+    </Style>
+
+    <!-- Compact text action used when the command benefits from a visible label. -->
+    <Style x:Key="CardActionButton" TargetType="Button" BasedOn="{StaticResource SubtleButtonStyle}">
+        <Setter Property="Height" Value="32" />
+        <Setter Property="MinWidth" Value="0" />
+        <Setter Property="Padding" Value="8,0" />
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}" />
+    </Style>
+
+    <AcrylicBrush x:Key="PrivacyPlaceholderMaterialBrush"
+                  TintColor="#8B95A3"
+                  TintOpacity="0.32"
+                  TintLuminosityOpacity="0.18"
+                  FallbackColor="#707A88" />
+
+    <Style x:Key="PrivacyPlaceholderPill" TargetType="Border">
+        <Setter Property="Height" Value="12" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="{StaticResource PrivacyPlaceholderMaterialBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource ControlStrokeColorDefaultBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Opacity" Value="0.9" />
+    </Style>
+
+    <!-- ====================================================================
+         Typography — anchored to the Segoe UI Variable type ramp so every
+         label shares the system's optical sizes, weights and line heights.
+         ==================================================================== -->
+
+    <!-- Provider / card title: Body Strong (14 SemiBold). -->
+    <Style x:Key="ProviderNameText" TargetType="TextBlock" BasedOn="{StaticResource BodyStrongTextBlockStyle}">
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- Caption (12) for secondary/metadata text. -->
+    <Style x:Key="CaptionText" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+    </Style>
+
+    <!-- Compact label above the dashboard recommendation. -->
+    <Style x:Key="HeroEyebrowText" TargetType="TextBlock" BasedOn="{StaticResource CaptionTextBlockStyle}">
+        <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <!-- Recommendation name: subtitle scale, not display/hero scale. -->
+    <Style x:Key="HeroPickText" TargetType="TextBlock" BasedOn="{StaticResource SubtitleTextBlockStyle}">
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+</ResourceDictionary>

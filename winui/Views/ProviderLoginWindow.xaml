@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="QuotaLens.Views.ProviderLoginWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Grid>
+        <!--
+          The WebView2 hosts the logged-in provider page. CoreWebView2 is created
+          explicitly in code-behind with a CoreWebView2Environment pointed at the old
+          Tauri EBWebView profile so existing cookies/sessions are reused.
+        -->
+        <controls:WebView2 x:Name="Web" />
+    </Grid>
+</Window>

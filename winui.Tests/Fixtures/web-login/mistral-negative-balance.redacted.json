@@ -1,0 +1,16 @@
+{
+  "usage": {
+    "completion": {
+      "models": {}
+    },
+    "currency": "USD",
+    "currency_symbol": "$",
+    "prices": []
+  },
+  "credits": {
+    "wallet_amount": 1.0,
+    "credit_notes_amount": 0.5,
+    "ongoing_usage_balance": 3.0,
+    "currency": "USD"
+  }
+}

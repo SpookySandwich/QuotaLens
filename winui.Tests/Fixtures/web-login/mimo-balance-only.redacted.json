@@ -1,0 +1,16 @@
+{
+  "usage": null,
+  "detail": {
+    "code": 0,
+    "data": null
+  },
+  "balance": {
+    "code": 0,
+    "data": {
+      "balance": "25.51",
+      "currency": "USD",
+      "cashBalance": "20.00",
+      "giftBalance": "5.51"
+    }
+  }
+}

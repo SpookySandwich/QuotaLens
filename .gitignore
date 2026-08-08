@@ -1,0 +1,41 @@
+# Build outputs
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+*.zip
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+
+# Visual Studio and local user state
+.vs/
+*.user
+*.suo
+*.rsuser
+
+# Local configuration and logs
+*.log
+.env
+.env.*
+
+# Local reference checkouts and generated visual artifacts
+_CodexBar_ref/
+.pi/
+_visual_*.png
+preview*.png
+concept.png
+aurora.png
+fluent*.png
+luxe.png
+nul
+
+# Local agent/tooling state (kept out of the repo, not just the global ignore)
+.claude/
+AGENTS.local.md
+*.local.md
+
+# Editor state
+.vscode/
+.idea/

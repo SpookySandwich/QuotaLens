@@ -1,0 +1,7 @@
+{
+  "billingResponse": {
+    "customerID": "customer-redacted",
+    "balance": 1234560000,
+    "balanceEnabled": true
+  }
+}

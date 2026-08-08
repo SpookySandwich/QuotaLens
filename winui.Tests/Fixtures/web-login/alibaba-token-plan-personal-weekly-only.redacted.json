@@ -1,0 +1,16 @@
+{
+  "usage": {
+    "data": {
+      "DataV2": {
+        "data": {
+          "success": true,
+          "data": {
+            "per1WeekPercentage": 0.10007527475,
+            "per1WeekResetTime": 1785234900000
+          }
+        }
+      }
+    },
+    "successResponse": true
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "usage": {
+    "code": 500,
+    "data": {
+      "monthUsage": {
+        "items": [
+          {
+            "name": "month_total_token",
+            "used": 10,
+            "limit": 100,
+            "percent": 0.1
+          }
+        ]
+      }
+    }
+  },
+  "detail": {
+    "code": 500,
+    "data": {
+      "planName": "Stale Standard",
+      "expired": false
+    }
+  },
+  "balance": {
+    "code": 500,
+    "data": {
+      "balance": "99.99",
+      "currency": "USD"
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "status": 1,
+  "five_hour_usage_left_rate": 0.8,
+  "five_hour_usage_reset_time": "1786000000",
+  "weekly_usage_left_rate": 0.6,
+  "weekly_usage_reset_time": "1786500000",
+  "plan_family": 2,
+  "plan_credit_rate_limit": {
+    "subscription_credit_left_rate": 1,
+    "credit_buckets": []
+  }
+}

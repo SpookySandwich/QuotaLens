@@ -1,0 +1,49 @@
+{
+  "usage": {
+    "completion": {
+      "models": {
+        "mistral-large-latest::redacted": {
+          "input": [
+            {
+              "billing_metric": "mistral-large-redacted",
+              "billing_group": "input",
+              "value_paid": 1000
+            }
+          ],
+          "output": [
+            {
+              "billing_metric": "mistral-large-redacted",
+              "billing_group": "output",
+              "value_paid": 500
+            }
+          ]
+        }
+      }
+    },
+    "currency": "USD",
+    "currency_symbol": "$",
+    "end_date": "2030-02-01T00:00:00Z",
+    "prices": [
+      {
+        "billing_metric": "mistral-large-redacted",
+        "billing_group": "input",
+        "price": "0.000001"
+      },
+      {
+        "billing_metric": "mistral-large-redacted",
+        "billing_group": "output",
+        "price": "0.000002"
+      }
+    ]
+  },
+  "credits": {
+    "wallet_amount": 50.0,
+    "credit_notes_amount": 10.0,
+    "ongoing_usage_balance": 7.5,
+    "currency": "USD"
+  },
+  "vibe": {
+    "usagePercentage": 37.5,
+    "resetAt": "2030-02-01T00:00:00Z"
+  }
+}

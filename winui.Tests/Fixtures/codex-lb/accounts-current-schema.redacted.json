@@ -1,0 +1,66 @@
+{
+  "accounts": [
+    {
+      "accountId": "acct_redacted_a",
+      "email": "redacted-a@example.invalid",
+      "displayName": "Redacted A",
+      "planType": "team",
+      "status": "active",
+      "usage": {
+        "primaryRemainingPercent": 80.0,
+        "secondaryRemainingPercent": 60.0,
+        "monthlyRemainingPercent": null
+      },
+      "windowMinutesPrimary": 300,
+      "windowMinutesSecondary": 10080,
+      "capacityCreditsPrimary": 225.0,
+      "capacityCreditsSecondary": 7560.0,
+      "additionalQuotas": [
+        {
+          "quotaKey": "codex_spark",
+          "limitName": "codex_spark",
+          "meteredFeature": "codex_spark",
+          "displayLabel": "GPT-5.3-Codex-Spark",
+          "routingPolicy": "inherit",
+          "primaryWindow": {
+            "usedPercent": 25.5,
+            "resetAt": 1893456000,
+            "windowMinutes": 300
+          },
+          "secondaryWindow": {
+            "usedPercent": 75.25,
+            "resetAt": 1894060800,
+            "windowMinutes": 10080
+          }
+        }
+      ],
+      "creditsHas": true,
+      "creditsUnlimited": false,
+      "creditsBalance": 12.5,
+      "availableResetCredits": 2,
+      "resetCreditNearestExpiresAt": "2030-01-02T03:04:05Z"
+    },
+    {
+      "accountId": "acct_redacted_b",
+      "email": "redacted-b@example.invalid",
+      "displayName": "Redacted B",
+      "planType": "plus",
+      "status": "active",
+      "usage": {
+        "primaryRemainingPercent": 90.0,
+        "secondaryRemainingPercent": 70.0,
+        "monthlyRemainingPercent": null
+      },
+      "windowMinutesPrimary": 300,
+      "windowMinutesSecondary": 10080,
+      "capacityCreditsPrimary": 225.0,
+      "capacityCreditsSecondary": 7560.0,
+      "additionalQuotas": [],
+      "creditsHas": true,
+      "creditsUnlimited": false,
+      "creditsBalance": 7.5,
+      "availableResetCredits": 1,
+      "resetCreditNearestExpiresAt": "2030-01-03T03:04:05Z"
+    }
+  ]
+}

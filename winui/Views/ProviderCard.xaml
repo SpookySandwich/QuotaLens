@@ -1,0 +1,524 @@
+<UserControl
+    x:Class="QuotaLens.Views.ProviderCard"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:QuotaLens.Views"
+    xmlns:vm="using:QuotaLens.ViewModels"
+    xmlns:helpers="using:QuotaLens.Helpers"
+    mc:Ignorable="d"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006">
+
+    <UserControl.Resources>
+        <Storyboard x:Name="ShimmerStoryboard" RepeatBehavior="Forever">
+            <PointAnimation Storyboard.TargetName="ShimmerBrush"
+                            Storyboard.TargetProperty="StartPoint"
+                            From="-0.65,0"
+                            To="1.05,0"
+                            Duration="0:0:1.55"
+                            EnableDependentAnimation="True" />
+            <PointAnimation Storyboard.TargetName="ShimmerBrush"
+                            Storyboard.TargetProperty="EndPoint"
+                            From="-0.05,0"
+                            To="1.65,0"
+                            Duration="0:0:1.55"
+                            EnableDependentAnimation="True" />
+        </Storyboard>
+        <Storyboard x:Name="ShimmerFadeInStoryboard">
+            <DoubleAnimation Storyboard.TargetName="ShimmerOverlay"
+                             Storyboard.TargetProperty="Opacity"
+                             From="0"
+                             To="1"
+                             Duration="0:0:0.16" />
+        </Storyboard>
+        <Storyboard x:Name="ShimmerFadeOutStoryboard">
+            <DoubleAnimation Storyboard.TargetName="ShimmerOverlay"
+                             Storyboard.TargetProperty="Opacity"
+                             From="1"
+                             To="0"
+                             Duration="0:0:0.24" />
+        </Storyboard>
+        <!-- ============ Shared header (name + actions) ============ -->
+        <DataTemplate x:Key="HeaderTemplate" x:DataType="vm:ProviderItemViewModel">
+            <Grid ColumnSpacing="6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Border Grid.Column="0" Width="14" Height="14" CornerRadius="7"
+                        VerticalAlignment="Center"
+                        Background="{x:Bind BrandBrush}" />
+                <Grid Grid.Column="1" ColumnSpacing="8"
+                      Margin="11,0,0,0"
+                      VerticalAlignment="Center">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock VerticalAlignment="Center"
+                               MinWidth="0"
+                               Text="{x:Bind Name, Mode=OneWay}"
+                               Style="{StaticResource ProviderNameText}" />
+                    <Border Grid.Column="1"
+                            Width="74"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource PrivacyPlaceholderPill}"
+                            Visibility="{x:Bind HasNamePrivacyPlaceholder, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
+                </Grid>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <!-- Launch (IDE providers) -->
+                    <Button Visibility="{x:Bind CanLaunch, Converter={StaticResource BoolToVis}, Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind LaunchAutomationId}"
+                            AutomationProperties.Name="{x:Bind LaunchAutomationName, Mode=OneWay}"
+                            Command="{x:Bind LaunchCommand}"
+                            ToolTipService.ToolTip="{x:Bind LaunchAutomationName, Mode=OneWay}"
+                            Style="{StaticResource CardActionButton}">
+                        <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Grid Width="16" Height="16">
+                                <Image Source="{x:Bind LaunchIconUri, Converter={StaticResource UriToImageSource}, Mode=OneWay}"
+                                       Stretch="Uniform"
+                                       Visibility="{x:Bind HasLaunchIcon, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
+                                <FontIcon FontSize="14"
+                                          Glyph="&#xE8A7;"
+                                          Visibility="{x:Bind HasLaunchIcon, Converter={StaticResource BoolToVis}, ConverterParameter=invert, Mode=OneWay}" />
+                            </Grid>
+                            <TextBlock Text="{x:Bind LaunchText}" />
+                        </StackPanel>
+                    </Button>
+                    <!-- Edit -->
+                    <Button Command="{x:Bind EditCommand, Mode=OneWay}"
+                            Visibility="{x:Bind HasSettings, Converter={StaticResource BoolToVis}}"
+                            AutomationProperties.AutomationId="{x:Bind EditAutomationId}"
+                            AutomationProperties.Name="{x:Bind EditAutomationName, Mode=OneWay}"
+                            ToolTipService.ToolTip="Edit"
+                            Style="{StaticResource CardIconButton}">
+                        <FontIcon FontSize="14" Glyph="&#xE70F;" />
+                    </Button>
+                    <!-- Remove -->
+                    <Button Command="{x:Bind DeleteCommand}"
+                            AutomationProperties.AutomationId="{x:Bind DeleteAutomationId}"
+                            AutomationProperties.Name="{x:Bind DeleteAutomationName, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind DeleteAutomationName, Mode=OneWay}"
+                            Style="{StaticResource CardIconButton}">
+                        <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                    </Button>
+                    <!-- Per-card refresh -->
+                    <Button Command="{x:Bind RefreshCommand}"
+                            AutomationProperties.AutomationId="{x:Bind RefreshAutomationId}"
+                            AutomationProperties.Name="{x:Bind RefreshAutomationName, Mode=OneWay}"
+                            ToolTipService.ToolTip="Refresh"
+                            Style="{StaticResource CardIconButton}">
+                        <FontIcon FontSize="14" Glyph="&#xE72C;" />
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <!-- ============ Footer (updated time + stale + reset) ============ -->
+        <DataTemplate x:Key="FooterTemplate" x:DataType="vm:ProviderItemViewModel">
+            <Grid Margin="0,4,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <TextBlock Style="{StaticResource CaptionText}">
+                        <Run Text="{x:Bind UpdatedLabel}" /><Run Text=" " /><Run Text="{x:Bind FooterTime, Mode=OneWay}" />
+                    </TextBlock>
+                    <Border Visibility="{x:Bind IsStale, Converter={StaticResource BoolToVis}, Mode=OneWay}"
+                            Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
+                            CornerRadius="4" Padding="6,1">
+                        <TextBlock Text="{x:Bind StaleText}" FontSize="10"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        <ToolTipService.ToolTip>
+                            <TextBlock Text="{x:Bind StaleHint}" />
+                        </ToolTipService.ToolTip>
+                    </Border>
+                </StackPanel>
+                <TextBlock Grid.Column="1" Style="{StaticResource CaptionText}"
+                           Text="{x:Bind FooterReset, Mode=OneWay}"
+                           TextTrimming="CharacterEllipsis"
+                           Visibility="{x:Bind FooterReset, Converter={StaticResource StringToVis}, Mode=OneWay}" />
+            </Grid>
+        </DataTemplate>
+
+        <!-- ============ A single quota bar row ============ -->
+        <DataTemplate x:Key="QuotaRowTemplate" x:DataType="vm:QuotaRowViewModel">
+            <StackPanel
+                AutomationProperties.AutomationId="{x:Bind AutomationId}"
+                AutomationProperties.Name="{x:Bind AutomationName}"
+                Margin="0,2"
+                Spacing="4">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{x:Bind Label}" FontSize="12"
+                               MinWidth="0"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis" />
+                    <StackPanel
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        Visibility="{x:Bind IsQuota, Converter={StaticResource BoolToVis}}">
+                        <Ellipse Width="7" Height="7"
+                                 Fill="{x:Bind Severity, Converter={StaticResource SeverityToBrush}}" />
+                        <TextBlock FontSize="12" FontWeight="SemiBold">
+                            <Run Text="{x:Bind AvailableText}" /><Run Text=" " /><Run Text="{x:Bind AvailableSuffix}" />
+                        </TextBlock>
+                    </StackPanel>
+                    <TextBlock
+                        Grid.Column="1"
+                        MaxWidth="190"
+                        VerticalAlignment="Center"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        Text="{x:Bind ValueText}"
+                        TextAlignment="Right"
+                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="WrapWholeWords"
+                        Visibility="{x:Bind IsInformational, Converter={StaticResource BoolToVis}}" />
+                </Grid>
+                <local:QuotaBar
+                    AvailablePercent="{x:Bind AvailablePercent}"
+                    Severity="{x:Bind Severity}"
+                    Visibility="{x:Bind IsQuota, Converter={StaticResource BoolToVis}}" />
+                <TextBlock Text="{x:Bind ResetText}" FontSize="11"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                           Visibility="{x:Bind ResetText, Converter={StaticResource StringToVis}}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- ============ Antigravity family group ============ -->
+        <DataTemplate x:Key="FamilyTemplate" x:DataType="vm:FamilyGroupViewModel">
+            <StackPanel Spacing="2" Margin="0,2">
+                <TextBlock Text="{x:Bind Family}" FontSize="10" FontWeight="SemiBold"
+                           Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                <ContentControl HorizontalContentAlignment="Stretch"
+                                Content="{x:Bind Best}"
+                                ContentTemplate="{StaticResource QuotaRowTemplate}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <!-- ============ Account row ============ -->
+        <DataTemplate x:Key="AccountTemplate" x:DataType="vm:AccountRowViewModel">
+            <Grid
+                AutomationProperties.AutomationId="{x:Bind AutomationId}"
+                AutomationProperties.Name="{x:Bind AutomationName}"
+                HorizontalAlignment="Stretch"
+                Margin="0,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid Grid.Column="0" MinWidth="0">
+                    <TextBlock Text="{x:Bind Name}" FontSize="12"
+                               MinWidth="0"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                               TextTrimming="CharacterEllipsis"
+                               Visibility="{x:Bind IsNameHidden, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
+                    <Border Width="{x:Bind PrivacyPlaceholderWidth}"
+                            HorizontalAlignment="Left"
+                            VerticalAlignment="Center"
+                            Style="{StaticResource PrivacyPlaceholderPill}"
+                            Visibility="{x:Bind IsNameHidden, Converter={StaticResource BoolToVis}}" />
+                </Grid>
+                <StackPanel
+                    x:Name="WindowBreakdownPanel"
+                    Grid.Column="1"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Center"
+                    Orientation="Horizontal"
+                    Spacing="20"
+                    Visibility="{x:Bind HasWindowBreakdown, Converter={StaticResource BoolToVis}}">
+                    <Grid ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="48" />
+                            <ColumnDefinition Width="6" />
+                            <ColumnDefinition Width="42" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{x:Bind PrimaryLabel}" FontSize="11"
+                                   TextAlignment="Right"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   ToolTipService.ToolTip="{x:Bind PrimaryResetToolTip}" />
+                        <Ellipse Grid.Column="1" Width="6" Height="6" VerticalAlignment="Center"
+                                 Fill="{x:Bind PrimarySeverity, Converter={StaticResource SeverityToBrush}}"
+                                 ToolTipService.ToolTip="{x:Bind PrimaryResetToolTip}" />
+                        <TextBlock Grid.Column="2" Text="{x:Bind PrimaryAvailableText}" FontSize="12" FontWeight="SemiBold"
+                                   TextAlignment="Right"
+                                   ToolTipService.ToolTip="{x:Bind PrimaryResetToolTip}" />
+                    </Grid>
+                    <Grid
+                        x:Name="SecondaryWindowGroup"
+                        ColumnSpacing="4"
+                        Visibility="{x:Bind HasSecondaryWindow, Converter={StaticResource BoolToVis}}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" MinWidth="48" />
+                            <ColumnDefinition Width="6" />
+                            <ColumnDefinition Width="42" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="{x:Bind SecondaryLabel}" FontSize="11"
+                                   TextAlignment="Right"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   ToolTipService.ToolTip="{x:Bind SecondaryResetToolTip}" />
+                        <Ellipse Grid.Column="1" Width="6" Height="6" VerticalAlignment="Center"
+                                 Fill="{x:Bind SecondarySeverity, Converter={StaticResource SeverityToBrush}}"
+                                 ToolTipService.ToolTip="{x:Bind SecondaryResetToolTip}" />
+                        <TextBlock Grid.Column="2" Text="{x:Bind SecondaryAvailableText}" FontSize="12" FontWeight="SemiBold"
+                                   TextAlignment="Right"
+                                   ToolTipService.ToolTip="{x:Bind SecondaryResetToolTip}" />
+                    </Grid>
+                </StackPanel>
+                <StackPanel Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="4"
+                            Visibility="{x:Bind HasSinglePercent, Converter={StaticResource BoolToVis}}">
+                    <Ellipse Width="7" Height="7"
+                             Fill="{x:Bind Severity, Converter={StaticResource SeverityToBrush}}" />
+                    <TextBlock Text="{x:Bind AvailableText}" FontSize="12" FontWeight="SemiBold" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+
+        <!-- ============ SKELETON ============ -->
+        <DataTemplate x:Key="SkeletonCardTemplate" x:DataType="vm:ProviderItemViewModel">
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="10">
+                    <StackPanel Spacing="2">
+                        <ContentControl HorizontalContentAlignment="Stretch"
+                                        Content="{x:Bind}"
+                                        ContentTemplate="{StaticResource HeaderTemplate}" />
+                        <TextBlock Text="{x:Bind ConnectingText}" Style="{StaticResource CaptionText}" />
+                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="1" Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                CornerRadius="4" Padding="6,2" VerticalAlignment="Top">
+                            <TextBlock Text="{x:Bind PendingText}" FontSize="10"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                        </Border>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- ============ NOT CONFIGURED ============ -->
+        <DataTemplate x:Key="NotConfiguredCardTemplate" x:DataType="vm:ProviderItemViewModel">
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="8">
+                    <ContentControl HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind}"
+                                    ContentTemplate="{StaticResource HeaderTemplate}" />
+                    <TextBlock Text="{x:Bind NotConfiguredTitle}" FontWeight="SemiBold"
+                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Text="{x:Bind NotConfiguredDetail}" TextWrapping="Wrap"
+                               Style="{StaticResource CaptionText}" />
+                    <Button Content="{x:Bind AddCredentialsText}"
+                            Command="{x:Bind EditCommand, Mode=OneWay}"
+                            Style="{StaticResource AccentButtonStyle}"
+                            HorizontalAlignment="Left" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- ============ ERROR ============ -->
+        <DataTemplate x:Key="ErrorCardTemplate" x:DataType="vm:ProviderItemViewModel">
+            <Border Style="{StaticResource CardStyle}"
+                    BorderBrush="{ThemeResource SystemFillColorCautionBrush}">
+                <StackPanel Spacing="8">
+                    <ContentControl HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind}"
+                                    ContentTemplate="{StaticResource HeaderTemplate}" />
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="{x:Bind NeedsAttentionText}" FontWeight="SemiBold"
+                                   Foreground="{ThemeResource SystemFillColorCautionBrush}" />
+                        <TextBlock Text="{x:Bind ErrorText, Mode=OneWay}" TextWrapping="Wrap"
+                                   Style="{StaticResource CaptionText}" />
+                        <Button Content="{x:Bind SignInText, Mode=OneWay}"
+                                Command="{x:Bind SignInCommand}"
+                                Style="{StaticResource AccentButtonStyle}"
+                                HorizontalAlignment="Left"
+                                Visibility="{x:Bind NeedsLogin, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
+                    </StackPanel>
+                    <ContentControl HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind}"
+                                    ContentTemplate="{StaticResource FooterTemplate}" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- ============ BALANCE ============ -->
+        <DataTemplate x:Key="BalanceCardTemplate" x:DataType="vm:ProviderItemViewModel">
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="8">
+                    <ContentControl HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind}"
+                                    ContentTemplate="{StaticResource HeaderTemplate}" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Bottom">
+                        <Grid Width="120" Height="32" VerticalAlignment="Bottom">
+                            <TextBlock Text="{x:Bind BalanceAmount, Mode=OneWay}" FontSize="26" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                       Visibility="{x:Bind IsSensitiveHidden, Converter={StaticResource BoolToVis}, ConverterParameter=invert, Mode=OneWay}" />
+                            <Border Width="96"
+                                    Height="22"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource PrivacyPlaceholderPill}"
+                                    Visibility="{x:Bind IsSensitiveHidden, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
+                        </Grid>
+                        <TextBlock Text="{x:Bind BalanceCurrency, Mode=OneWay}" FontSize="12" VerticalAlignment="Bottom"
+                                   Margin="0,0,0,5" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ContentControl Grid.Column="0" HorizontalContentAlignment="Stretch"
+                                        Content="{x:Bind}"
+                                        ContentTemplate="{StaticResource FooterTemplate}" />
+                        <Grid Grid.Column="1"
+                              Width="92"
+                              Height="18"
+                              VerticalAlignment="Bottom"
+                              Visibility="{x:Bind BalancePaid, Converter={StaticResource StringToVis}, Mode=OneWay}">
+                            <TextBlock Text="{x:Bind BalancePaid, Mode=OneWay}"
+                                       Style="{StaticResource CaptionText}"
+                                       Visibility="{x:Bind IsSensitiveHidden, Converter={StaticResource BoolToVis}, ConverterParameter=invert, Mode=OneWay}" />
+                            <Border Width="76"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource PrivacyPlaceholderPill}"
+                                    Visibility="{x:Bind IsSensitiveHidden, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
+                        </Grid>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <!-- ============ RATE ============ -->
+        <DataTemplate x:Key="RateCardTemplate" x:DataType="vm:ProviderItemViewModel">
+            <Border Style="{StaticResource CardStyle}">
+                <StackPanel Spacing="8">
+                    <ContentControl HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind}"
+                                    ContentTemplate="{StaticResource HeaderTemplate}" />
+
+                    <!-- Family groups (Antigravity) -->
+                    <ItemsControl ItemsSource="{x:Bind Families}"
+                                  ItemTemplate="{StaticResource FamilyTemplate}"
+                                  Visibility="{x:Bind HasFamilies, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
+
+                    <!-- Standard quota rows -->
+                    <ItemsControl ItemsSource="{x:Bind Rows}"
+                                  ItemTemplate="{StaticResource QuotaRowTemplate}"
+                                  Visibility="{x:Bind HasRows, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
+
+                    <!-- Account breakdown (codex-lb pooled accounts) -->
+                    <StackPanel Visibility="{x:Bind HasAccounts, Converter={StaticResource BoolToVis}, Mode=OneWay}">
+                        <Border Height="1" Background="{ThemeResource DividerStrokeColorDefaultBrush}" Margin="0,2,0,4" />
+                        <ItemsControl
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Stretch"
+                            ItemsSource="{x:Bind Accounts}"
+                            ItemTemplate="{StaticResource AccountTemplate}" />
+                    </StackPanel>
+
+                    <!-- Inline balance (CNY / credits) -->
+                    <StackPanel Spacing="2"
+                                Visibility="{x:Bind InlineBalance, Converter={StaticResource StringToVis}, Mode=OneWay}">
+                        <Grid Height="16">
+                            <TextBlock Text="{x:Bind InlineBalance, Mode=OneWay}" FontSize="12" FontWeight="SemiBold"
+                                       TextTrimming="CharacterEllipsis"
+                                       Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                       Visibility="{x:Bind IsSensitiveHidden, Converter={StaticResource BoolToVis}, ConverterParameter=invert, Mode=OneWay}" />
+                            <Border Width="116"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Style="{StaticResource PrivacyPlaceholderPill}"
+                                    Visibility="{x:Bind IsSensitiveHidden, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
+                        </Grid>
+                        <TextBlock Text="{x:Bind InlineBalanceDetail, Mode=OneWay}" FontSize="11"
+                                   TextWrapping="WrapWholeWords"
+                                   Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                   Visibility="{x:Bind InlineBalanceDetail, Converter={StaticResource StringToVis}, Mode=OneWay}" />
+                    </StackPanel>
+
+                    <ContentControl HorizontalContentAlignment="Stretch"
+                                    Content="{x:Bind}"
+                                    ContentTemplate="{StaticResource FooterTemplate}" />
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+
+        <local:CardTemplateSelector x:Key="CardSelector"
+            Skeleton="{StaticResource SkeletonCardTemplate}"
+            NotConfigured="{StaticResource NotConfiguredCardTemplate}"
+            Error="{StaticResource ErrorCardTemplate}"
+            Balance="{StaticResource BalanceCardTemplate}"
+            Rate="{StaticResource RateCardTemplate}" />
+    </UserControl.Resources>
+
+    <Grid x:Name="CardRoot"
+          AutomationProperties.AutomationId="{x:Bind ViewModel.CardAutomationId, Mode=OneWay}">
+        <Border x:Name="CardShadowReceiver"
+                Background="Transparent"
+                IsHitTestVisible="False"
+                Margin="-18" />
+        <Grid x:Name="AttentionSurface">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="AttentionSurfaceLiftTransform" />
+            </Grid.RenderTransform>
+            <ContentControl x:Name="CardHost"
+                            HorizontalContentAlignment="Stretch"
+                            Content="{x:Bind ViewModel, Mode=OneWay}"
+                            ContentTemplateSelector="{StaticResource CardSelector}" />
+            <Border x:Name="TimelineAttentionContour"
+                    Canvas.ZIndex="2"
+                    IsHitTestVisible="False"
+                    CornerRadius="{StaticResource OverlayCornerRadius}"
+                    BorderBrush="{ThemeResource ControlStrokeColorSecondaryBrush}"
+                    BorderThickness="1"
+                    Background="#10FFFFFF"
+                    Opacity="0"
+                    Visibility="Collapsed" />
+            <Grid x:Name="ShimmerOverlay"
+                  Canvas.ZIndex="3"
+                  IsHitTestVisible="False"
+                  Opacity="0"
+                  Visibility="Collapsed">
+                <Border CornerRadius="{StaticResource OverlayCornerRadius}"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        Opacity="0.70" />
+                <Path x:Name="ShimmerSurface"
+                      Stretch="Fill"
+                      HorizontalAlignment="Left"
+                      VerticalAlignment="Top"
+                      Opacity="0.46">
+                    <Path.Fill>
+                        <LinearGradientBrush x:Name="ShimmerBrush"
+                                             StartPoint="-0.65,0"
+                                             EndPoint="-0.05,0">
+                            <GradientStop Color="Transparent" Offset="0" />
+                            <GradientStop Color="#22FFFFFF" Offset="0.35" />
+                            <GradientStop Color="#AAFFFFFF" Offset="0.50" />
+                            <GradientStop Color="#22FFFFFF" Offset="0.65" />
+                            <GradientStop Color="Transparent" Offset="1" />
+                        </LinearGradientBrush>
+                    </Path.Fill>
+                </Path>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

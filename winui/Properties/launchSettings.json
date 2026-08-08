@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "QuotaLens (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "QuotaLens (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}
