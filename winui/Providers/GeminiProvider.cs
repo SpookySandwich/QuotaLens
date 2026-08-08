@@ -14,6 +14,7 @@ namespace QuotaLens.Providers;
 /// </summary>
 public sealed partial class GeminiProvider : IProvider
 {
+    private const int GeminiRefreshTimeoutSeconds = 30;
     private const string QuotaEndpoint = "https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota";
     private const string LoadCodeAssistEndpoint = "https://cloudcode-pa.googleapis.com/v1internal:loadCodeAssist";
     private const string ProjectsEndpoint = "https://cloudresourcemanager.googleapis.com/v1/projects";
@@ -38,6 +39,21 @@ public sealed partial class GeminiProvider : IProvider
         var accessToken = credentials.AccessToken;
         var needsReauthentication = string.IsNullOrWhiteSpace(accessToken)
             || credentials.Expiry is not null && credentials.Expiry <= DateTimeOffset.UtcNow.AddMinutes(1);
+        if (needsReauthentication && credentials.HasStoredSession)
+        {
+            // The CLI refreshes its own token on startup. Measured: `gemini
+            // --list-extensions` rotates an expired access token even though the command
+            // then fails for a personal account, so the refresh must be judged by the
+            // credential changing, never by the exit code.
+            if (await RefreshViaCliAsync(instanceId, config, geminiDir, ct).ConfigureAwait(false))
+            {
+                credentials = await LoadCredentialsAsync(geminiDir, ct).ConfigureAwait(false);
+                accessToken = credentials.AccessToken;
+                needsReauthentication = string.IsNullOrWhiteSpace(accessToken)
+                    || credentials.Expiry is not null && credentials.Expiry <= DateTimeOffset.UtcNow.AddMinutes(1);
+            }
+        }
+
         if (needsReauthentication)
             throw new ProviderException("Login required: Gemini CLI OAuth credentials are expired. Run `gemini` to sign in again.");
 
@@ -267,6 +283,54 @@ public sealed partial class GeminiProvider : IProvider
         return null;
     }
 
+    /// <summary>
+    /// Asks the Gemini CLI to refresh its own credential file. `--list-extensions` sends
+    /// no prompt and exits, so it costs no quota; NO_BROWSER stops it opening a browser
+    /// if it decides interaction is needed.
+    /// </summary>
+    private static async Task<bool> RefreshViaCliAsync(
+        string instanceId,
+        IConfig config,
+        string geminiDir,
+        CancellationToken ct)
+    {
+        var configured = config.GetScoped(instanceId, "gemini_path");
+        var binary = string.IsNullOrWhiteSpace(configured)
+            ? "gemini"
+            : Environment.ExpandEnvironmentVariables(configured);
+
+        var request = new CliTokenRefresher.Request
+        {
+            Binary = binary,
+            Arguments = CliRefreshCommands.Gemini,
+            Timeout = TimeSpan.FromSeconds(GeminiRefreshTimeoutSeconds),
+            Environment = new Dictionary<string, string> { ["NO_BROWSER"] = "true" },
+        };
+
+        var outcome = await CliTokenRefresher
+            .RefreshAsync(request, () => ReadAccessTokenFingerprint(geminiDir), ct)
+            .ConfigureAwait(false);
+
+        return outcome == CliTokenRefresher.RefreshOutcome.Changed;
+    }
+
+    private static string? ReadAccessTokenFingerprint(string geminiDir)
+    {
+        try
+        {
+            var path = Path.Combine(geminiDir, "oauth_creds.json");
+            if (!File.Exists(path))
+                return null;
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return StringValue(doc.RootElement, "access_token");
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
     private static string ResolveGeminiDirectory(string instanceId, IConfig config)
     {
         var configured = ProviderConfig.ScopedOrEnvironment(instanceId, config, "gemini_home", "GEMINI_HOME");
@@ -295,7 +359,10 @@ public sealed partial class GeminiProvider : IProvider
             return new OAuthCredentials(
                 StringValue(root, "access_token"),
                 StringValue(root, "id_token"),
-                Expiry(root));
+                Expiry(root),
+                // Presence only — never the value, and never used to mint a token
+                // ourselves. Present means "signed in, token merely aged out".
+                !string.IsNullOrWhiteSpace(StringValue(root, "refresh_token")));
         }
         catch (JsonException e)
         {
@@ -465,7 +532,11 @@ public sealed partial class GeminiProvider : IProvider
 
     internal sealed record GeminiUsage(IReadOnlyList<GeminiModelQuota> Quotas, string? AccountEmail, string? AccountPlan);
     internal sealed record GeminiModelQuota(string ModelId, double PercentLeft, string? ResetsAt, string? ResetDescription);
-    private sealed record OAuthCredentials(string? AccessToken, string? IdToken, DateTimeOffset? Expiry);
+    private sealed record OAuthCredentials(
+        string? AccessToken,
+        string? IdToken,
+        DateTimeOffset? Expiry,
+        bool HasStoredSession = false);
     private sealed record TokenClaims(string? Email, string? HostedDomain);
     internal sealed record CodeAssistStatus(string? ProjectId, string? TierId, string? TierName)
     {

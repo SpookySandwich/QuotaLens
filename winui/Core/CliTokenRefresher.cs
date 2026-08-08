@@ -189,4 +189,12 @@ internal static class CliRefreshCommands
 
     /// <summary>Measured x5 on Kimi Code 0.28.1: refreshes silently, quota unchanged.</summary>
     internal static readonly string[] Kimi = ["login"];
+
+    /// <summary>
+    /// Measured on Gemini CLI 0.54.4: rotates an expired access token, then exits
+    /// non-zero for a personal account (Google retired consumer Code Assist OAuth on
+    /// 2026-06-18). The refresh still happens, which is why success is judged by the
+    /// credential changing rather than by the exit code.
+    /// </summary>
+    internal static readonly string[] Gemini = ["--list-extensions"];
 }
