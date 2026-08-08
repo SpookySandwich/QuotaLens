@@ -220,9 +220,12 @@ public sealed class ClaudeProvider : IProvider
         !oauth.HasStoredSession
             ? new ProviderException("Login required: Claude is signed out. Run 'claude auth login' first.")
             // Not prefixed "Login required": the card must not offer sign-in for a live session.
+            // Tagged rather than merely un-prefixed: a comment cannot stop the card
+            // offering sign-in, but the structural kind can.
             : new ProviderException(
                 "Not available: Claude's cached token is stale and could not be refreshed "
-                + "automatically — run any 'claude' command. If it persists, run 'claude auth login'.");
+                + "automatically — run any 'claude' command. If it persists, run 'claude auth login'.",
+                ProviderErrorKind.Unsupported);
 
     private async Task<HttpResponseMessage> SendUsageWithNetworkErrorsAsync(string token, CancellationToken ct)
     {

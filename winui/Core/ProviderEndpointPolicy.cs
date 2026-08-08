@@ -12,7 +12,8 @@ public static class ProviderEndpointPolicy
         if (!string.IsNullOrEmpty(uri.Query))
         {
             throw new ProviderException(
-                $"Not configured: {Catalog.ProviderName(providerType)} base URL cannot contain a query string.");
+                $"Not configured: {Catalog.ProviderName(providerType)} base URL cannot contain a query string.",
+                ProviderErrorKind.Misconfigured);
         }
 
         return uri;
@@ -25,7 +26,7 @@ public static class ProviderEndpointPolicy
             || !string.IsNullOrEmpty(uri.UserInfo)
             || !string.IsNullOrEmpty(uri.Fragment))
         {
-            throw new ProviderException($"Not configured: {Catalog.ProviderName(providerType)} endpoint is invalid.");
+            throw new ProviderException($"Not configured: {Catalog.ProviderName(providerType)} endpoint is invalid.", ProviderErrorKind.Misconfigured);
         }
 
         var contract = ProviderContracts.For(providerType);
@@ -37,14 +38,16 @@ public static class ProviderEndpointPolicy
         if (!hasSafeScheme)
         {
             throw new ProviderException(
-                $"Not configured: {Catalog.ProviderName(providerType)} credentials require HTTPS or an approved loopback HTTP endpoint.");
+                $"Not configured: {Catalog.ProviderName(providerType)} credentials require HTTPS or an approved loopback HTTP endpoint.",
+                ProviderErrorKind.Misconfigured);
         }
 
         if (!contract.AllowsCustomCredentialHost
             && !contract.ApprovedCredentialHosts.Any(pattern => HostMatches(uri.IdnHost, pattern)))
         {
             throw new ProviderException(
-                $"Not configured: {Catalog.ProviderName(providerType)} credentials cannot be sent to host '{uri.IdnHost}'.");
+                $"Not configured: {Catalog.ProviderName(providerType)} credentials cannot be sent to host '{uri.IdnHost}'.",
+                ProviderErrorKind.Misconfigured);
         }
 
         return uri;

@@ -4,6 +4,12 @@ public enum ProviderErrorKind
 {
     Unknown,
     RateLimited,
+
+    /// <summary>The user must fix a setting; no sign-in will help.</summary>
+    Misconfigured,
+
+    /// <summary>Not actionable at all — the card must not offer sign-in.</summary>
+    Unsupported,
 }
 
 /// <summary>Thrown by a provider when a fetch fails; the message becomes the snapshot error.</summary>

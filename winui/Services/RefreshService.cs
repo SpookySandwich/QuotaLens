@@ -149,7 +149,11 @@ public sealed class RefreshService : IProviderService
                     if (ShouldKeepExistingSnapshotOnRateLimit(ex, GetSnapshot(instanceId)))
                         return;
 
-                    Store(instanceId, ErrorSnapshotFor(inst, provider, ex.Message));
+                    Store(instanceId, ErrorSnapshotFor(
+                        inst,
+                        provider,
+                        ex.Message,
+                        ex is ProviderException providerError ? providerError.Kind : ProviderErrorKind.Unknown));
                     return;
                 }
             }
@@ -262,7 +266,11 @@ public sealed class RefreshService : IProviderService
         _timer.Start();
     }
 
-    internal static ProviderSnapshot ErrorSnapshotFor(ProviderInstance instance, IProvider provider, string error)
+    internal static ProviderSnapshot ErrorSnapshotFor(
+        ProviderInstance instance,
+        IProvider provider,
+        string error,
+        ProviderErrorKind errorKind = ProviderErrorKind.Unknown)
     {
         var name = string.IsNullOrWhiteSpace(instance.Name)
             ? Catalog.ProviderName(instance.Type)
@@ -275,6 +283,7 @@ public sealed class RefreshService : IProviderService
                 provider.SourceLabel,
                 error));
         snapshot.Name = ProviderSnapshotIdentity.ComposeTitle(instance.Type, name, snapshot);
+        snapshot.ErrorKind = errorKind;
         return snapshot;
     }
 

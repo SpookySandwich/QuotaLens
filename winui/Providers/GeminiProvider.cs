@@ -33,7 +33,9 @@ public sealed partial class GeminiProvider : IProvider
         if (authType.Equals("api-key", StringComparison.OrdinalIgnoreCase))
             throw new ProviderException("Not available: Gemini API-key auth does not expose CLI quota usage. Sign in to Gemini CLI with Google OAuth.");
         if (authType.Equals("vertex-ai", StringComparison.OrdinalIgnoreCase))
-            throw new ProviderException("Not available: Gemini Vertex AI auth is tracked separately from Gemini CLI quota.");
+            throw new ProviderException(
+                "Not available: Gemini Vertex AI auth is tracked separately from Gemini CLI quota.",
+                ProviderErrorKind.Unsupported);
 
         var credentials = await LoadCredentialsAsync(geminiDir, ct).ConfigureAwait(false);
         var accessToken = credentials.AccessToken;
@@ -67,7 +69,8 @@ public sealed partial class GeminiProvider : IProvider
             throw new ProviderException(
                 "Not available: Gemini CLI consumer OAuth for Individual, Google AI Pro, and Google AI Ultra " +
                 "ended on June 18, 2026. Use Antigravity for a personal account; Workspace Standard and " +
-                "Enterprise remain supported.");
+                "Enterprise remain supported.",
+                ProviderErrorKind.Unsupported);
         }
 
         var projectId = codeAssist.ProjectId ?? await DiscoverProjectIdAsync(accessToken!, ct).ConfigureAwait(false);

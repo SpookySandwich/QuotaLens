@@ -166,6 +166,14 @@ public sealed class ProviderSnapshot
     /// Non-null when the fetch failed; the UI renders this as the error/needs-attention state.
     public string? Error { get; set; }
 
+    /// <summary>
+    /// Structural classification of <see cref="Error"/>, carried from
+    /// <see cref="ProviderException.Kind"/>. The card decides its action from THIS,
+    /// never from the wording of the message — matching prose is how a reworded
+    /// message silently removed a button.
+    /// </summary>
+    public ProviderErrorKind ErrorKind { get; set; } = ProviderErrorKind.Unknown;
+
     /// <summary>Build an error snapshot for a provider (mirrors fetch_all error mapping).</summary>
     public static ProviderSnapshot ForError(string providerId, string name, string sourceLabel, string error) => new()
     {

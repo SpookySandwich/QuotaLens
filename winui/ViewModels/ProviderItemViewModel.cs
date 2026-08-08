@@ -295,10 +295,8 @@ public sealed partial class ProviderItemViewModel : ObservableObject
                 ? SensitiveDisplay.MaskEmails(snap.Error!)
                 : snap.Error!;
             ErrorText = err.Length > 80 ? err[..77] + "..." : err;
-            NeedsLogin = HasLoginAction(ProviderType) && err.Contains("Login required", StringComparison.OrdinalIgnoreCase);
-            SignInText = NeedsLogin
-                ? I18n.T("login.withProvider", "name", Catalog.ProviderName(ProviderType))
-                : I18n.T("card.addCredentials");
+            NeedsLogin = ShouldOfferSignIn(ProviderType, snap.ErrorKind);
+            SignInText = I18n.T("login.withProvider", "name", Catalog.ProviderName(ProviderType));
             FooterReset = null;
             ClearCollections();
             return;
@@ -410,6 +408,35 @@ public sealed partial class ProviderItemViewModel : ObservableObject
 
     private static bool HasLoginAction(string providerType) =>
         WebLoginService.IsSupported(providerType) || ProviderLoginLauncher.IsSupported(providerType);
+
+    /// <summary>
+    /// Decides the sign-in button STRUCTURALLY, from the error's kind rather than its
+    /// wording. Matching prose is what let the Gemini dead end survive: a provider whose
+    /// message said "Not configured:" instead of "Login required" silently lost its
+    /// button even though a perfectly good login action existed.
+    /// </summary>
+    internal static bool ShouldOfferSignIn(string providerType, ProviderErrorKind errorKind)
+    {
+        // Nothing to click if there is no sign-in mechanism at all.
+        if (!HasLoginAction(providerType))
+            return false;
+
+        return errorKind switch
+        {
+            // Retry-and-wait states. Offering sign-in here would nag a healthy account —
+            // notably Claude's live-session-but-stale-token case.
+            ProviderErrorKind.RateLimited => false,
+            ProviderErrorKind.Unsupported => false,
+
+            // The fix is a settings value, not a credential.
+            ProviderErrorKind.Misconfigured => false,
+
+            // Anything else that failed is plausibly an auth problem, and the provider
+            // has a login action, so let the user act. Failing OPEN here is deliberate:
+            // an unnecessary button is recoverable, a missing one is a dead end.
+            _ => true,
+        };
+    }
 
     private void BuildAccountsAndInlineBalance(ProviderSnapshot snap)
     {

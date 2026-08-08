@@ -573,6 +573,37 @@ public sealed class ProviderItemViewModelTests
         Assert.AreEqual("Account 2", viewModel.Accounts[1].Name);
     }
 
+    [TestMethod]
+    public void ShouldOfferSignIn_DoesNotDependOnErrorWording()
+    {
+        // The Gemini dead end: its message says "Login required..." for some states and
+        // "Not configured:" for others. The button must not depend on which.
+        foreach (var providerType in new[] { "gemini", "claude", "codex", "kiro", "grok", "bedrock" })
+        {
+            Assert.IsTrue(
+                ProviderItemViewModel.ShouldOfferSignIn(providerType, ProviderErrorKind.Unknown),
+                $"{providerType} has a login action, so an unclassified failure must still be actionable.");
+        }
+    }
+
+    [TestMethod]
+    public void ShouldOfferSignIn_NeverNagsAHealthyOrUnfixableAccount()
+    {
+        // Claude's live-session-but-stale-token case is tagged Unsupported precisely so
+        // a signed-in user is never told to sign in again.
+        Assert.IsFalse(ProviderItemViewModel.ShouldOfferSignIn("claude", ProviderErrorKind.Unsupported));
+        Assert.IsFalse(ProviderItemViewModel.ShouldOfferSignIn("claude", ProviderErrorKind.RateLimited));
+        // A missing setting is fixed in Settings, not by signing in again.
+        Assert.IsFalse(ProviderItemViewModel.ShouldOfferSignIn("bedrock", ProviderErrorKind.Misconfigured));
+    }
+
+    [TestMethod]
+    public void ShouldOfferSignIn_IsFalseWithoutAnyLoginMechanism()
+    {
+        foreach (var providerType in new[] { "antigravity", "codex-lb", "jetbrains", "deepseek" })
+            Assert.IsFalse(ProviderItemViewModel.ShouldOfferSignIn(providerType, ProviderErrorKind.Unknown), providerType);
+    }
+
     private static string TempExecutablePath() =>
         Path.Combine(Path.GetTempPath(), $"QuotaLensTest-{Guid.NewGuid():N}.exe");
 
