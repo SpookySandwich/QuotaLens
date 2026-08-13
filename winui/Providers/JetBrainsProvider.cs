@@ -3,6 +3,8 @@ using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using QuotaLens.Core;
+using static QuotaLens.Core.JsonUtil;
+using static QuotaLens.Core.TextUtil;
 
 namespace QuotaLens.Providers;
 
@@ -236,19 +238,6 @@ public sealed partial class JetBrainsProvider : IProvider
         return expanded;
     }
 
-    private static double? FirstDouble(JsonElement obj, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (obj.ValueKind == JsonValueKind.Object
-                && obj.TryGetProperty(key, out var value)
-                && ElementDouble(value) is { } number)
-            {
-                return number;
-            }
-        }
-        return null;
-    }
 
     private static double? NestedDouble(JsonElement obj, string parent, string child) =>
         obj.ValueKind == JsonValueKind.Object
@@ -257,21 +246,6 @@ public sealed partial class JetBrainsProvider : IProvider
             ? FirstDouble(nested, child)
             : null;
 
-    private static string? FirstString(JsonElement obj, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (obj.ValueKind == JsonValueKind.Object
-                && obj.TryGetProperty(key, out var value)
-                && value.ValueKind == JsonValueKind.String)
-            {
-                var text = Clean(value.GetString());
-                if (text is not null)
-                    return text;
-            }
-        }
-        return null;
-    }
 
     private static string? NestedString(JsonElement obj, string parent, string child) =>
         obj.ValueKind == JsonValueKind.Object
@@ -293,15 +267,7 @@ public sealed partial class JetBrainsProvider : IProvider
         return null;
     }
 
-    private static double? ElementDouble(JsonElement value) => value.ValueKind switch
-    {
-        JsonValueKind.Number when value.TryGetDouble(out var number) => number,
-        JsonValueKind.String when double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => number,
-        _ => null,
-    };
 
-    private static string? Clean(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static string Fmt(double value) =>
         value.ToString(value >= 1000 ? "F0" : "0.##", CultureInfo.InvariantCulture);

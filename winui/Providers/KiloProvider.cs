@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using QuotaLens.Core;
+using static QuotaLens.Core.JsonUtil;
 
 namespace QuotaLens.Providers;
 
@@ -317,13 +318,13 @@ public sealed class KiloProvider : IProvider
             var sawRemaining = false;
             foreach (var block in creditBlocks.Value.EnumerateArray())
             {
-                if (DoubleProperty(block, "amount_mUsd") is { } amount)
+                if (OptionalDouble(block, "amount_mUsd") is { } amount)
                 {
                     total += amount / 1_000_000;
                     sawTotal = true;
                 }
 
-                if (DoubleProperty(block, "balance_mUsd") is { } balanceMicroUsd)
+                if (OptionalDouble(block, "balance_mUsd") is { } balanceMicroUsd)
                 {
                     remaining += balanceMicroUsd / 1_000_000;
                     sawRemaining = true;
@@ -373,9 +374,9 @@ public sealed class KiloProvider : IProvider
 
         if (SubscriptionData(payload) is { } subscription)
         {
-            var used = DoubleProperty(subscription, "currentPeriodUsageUsd");
-            var baseCredits = DoubleProperty(subscription, "currentPeriodBaseCreditsUsd");
-            var bonus = Math.Max(0, DoubleProperty(subscription, "currentPeriodBonusCreditsUsd") ?? 0);
+            var used = OptionalDouble(subscription, "currentPeriodUsageUsd");
+            var baseCredits = OptionalDouble(subscription, "currentPeriodBaseCreditsUsd");
+            var bonus = Math.Max(0, OptionalDouble(subscription, "currentPeriodBonusCreditsUsd") ?? 0);
             var total = baseCredits is not null ? baseCredits + bonus : null;
             var remaining = total is not null && used is not null ? Math.Max(0, total.Value - used.Value) : (double?)null;
             var reset = FirstDateIso(new[] { subscription }, "nextBillingAt", "nextRenewalAt", "renewsAt", "renewAt");
@@ -422,7 +423,7 @@ public sealed class KiloProvider : IProvider
 
         if (SubscriptionData(payload) is { } subscription)
         {
-            var tier = StringProperty(subscription, "tier");
+            var tier = OptionalString(subscription, "tier");
             return tier is null ? "Kilo Pass" : PlanNameForTier(tier);
         }
 
@@ -514,23 +515,7 @@ public sealed class KiloProvider : IProvider
         return FirstDouble(contexts, plainKeys);
     }
 
-    private static double? FirstDouble(IEnumerable<JsonElement> contexts, params string[] keys)
-    {
-        foreach (var context in contexts)
-            foreach (var key in keys)
-                if (DoubleProperty(context, key) is { } value)
-                    return value;
-        return null;
-    }
 
-    private static string? FirstString(IEnumerable<JsonElement> contexts, params string[] keys)
-    {
-        foreach (var context in contexts)
-            foreach (var key in keys)
-                if (StringProperty(context, key) is { } value)
-                    return value;
-        return null;
-    }
 
     private static bool? FirstBool(IEnumerable<JsonElement> contexts, params string[] keys)
     {
@@ -541,44 +526,12 @@ public sealed class KiloProvider : IProvider
         return null;
     }
 
-    private static string? FirstDateIso(IEnumerable<JsonElement> contexts, params string[] keys)
-    {
-        foreach (var context in contexts)
-            foreach (var key in keys)
-                if (DateProperty(context, key) is { } value)
-                    return value;
-        return null;
-    }
 
-    private static double? DoubleProperty(JsonElement obj, string key)
-    {
-        if (obj.ValueKind != JsonValueKind.Object || !obj.TryGetProperty(key, out var value))
-            return null;
-        return value.ValueKind switch
-        {
-            JsonValueKind.Number when value.TryGetDouble(out var number) => number,
-            JsonValueKind.String when double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => number,
-            _ => null,
-        };
-    }
 
-    private static string? StringProperty(JsonElement obj, string key)
-    {
-        if (obj.ValueKind != JsonValueKind.Object || !obj.TryGetProperty(key, out var value))
-            return null;
-        return value.ValueKind switch
-        {
-            JsonValueKind.String => ProviderConfig.Clean(value.GetString()),
-            JsonValueKind.Number => value.GetRawText(),
-            JsonValueKind.True => "true",
-            JsonValueKind.False => "false",
-            _ => null,
-        };
-    }
 
     private static bool? BoolProperty(JsonElement obj, string key)
     {
-        var text = StringProperty(obj, key);
+        var text = OptionalString(obj, key);
         if (text is null)
             return null;
         return bool.TryParse(text, out var parsed)
@@ -586,21 +539,6 @@ public sealed class KiloProvider : IProvider
             : BoolFromStatus(text);
     }
 
-    private static string? DateProperty(JsonElement obj, string key)
-    {
-        if (obj.ValueKind != JsonValueKind.Object || !obj.TryGetProperty(key, out var value))
-            return null;
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var epoch))
-            return EpochToIso(epoch);
-        var text = value.ValueKind == JsonValueKind.String ? ProviderConfig.Clean(value.GetString()) : null;
-        if (text is null)
-            return null;
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var numeric))
-            return EpochToIso(numeric);
-        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
-            ? parsed.ToString("O", CultureInfo.InvariantCulture)
-            : null;
-    }
 
     private static string? StringPath(JsonElement root, params string[] path)
     {
@@ -633,13 +571,6 @@ public sealed class KiloProvider : IProvider
         };
     }
 
-    private static string? EpochToIso(double value)
-    {
-        if (value <= 0 || !double.IsFinite(value))
-            return null;
-        var seconds = Math.Abs(value) > 10_000_000_000 ? value / 1000 : value;
-        return DateTimeOffset.FromUnixTimeSeconds((long)Math.Round(seconds)).ToString("O", CultureInfo.InvariantCulture);
-    }
 
     private static string PlanNameForTier(string tier) =>
         tier switch

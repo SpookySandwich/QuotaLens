@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Microsoft.UI.Dispatching;
 using Microsoft.Web.WebView2.Core;
 using QuotaLens.Core;
+using static QuotaLens.Core.TextUtil;
 using QuotaLens.Providers;
 using QuotaLens.Views;
 
@@ -4719,9 +4720,7 @@ public sealed class WebLoginService
         return null;
     }
 
-    // Rust {:.0}/{:.1}/{:.2} → invariant-culture fixed formats (matches other providers).
-    private static string Fmt0(double v) => v.ToString("F0", System.Globalization.CultureInfo.InvariantCulture);
-    private static string Fmt1(double v) => v.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+
     private static string Fmt2(double v) => v.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
 
     private static JsonDocument ParseDocument(string json)
@@ -5110,14 +5109,6 @@ public sealed class WebLoginService
             return null;
         var seconds = milliseconds.Value > 10_000_000_000 ? milliseconds.Value / 1000.0 : milliseconds.Value;
         return DateTimeOffset.FromUnixTimeSeconds((long)Math.Round(seconds)).ToString("O", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private static string? DisplayName(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        var spaced = value.Trim().Replace("_", " ", StringComparison.Ordinal).Replace("-", " ", StringComparison.Ordinal);
-        return System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(spaced.ToLowerInvariant());
     }
 
     private static JsonElement? FindT3CustomerData(string text)

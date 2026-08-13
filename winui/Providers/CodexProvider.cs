@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using QuotaLens.Core;
 using static QuotaLens.Core.StringValues;
+using static QuotaLens.Core.JsonUtil;
 
 namespace QuotaLens.Providers;
 
@@ -65,7 +66,7 @@ public sealed class CodexProvider : IProvider
 
     internal static ProviderSnapshot ParseUsage(JsonElement root, CodexCredentials credentials, DateTimeOffset updatedAt)
     {
-        var plan = StringProperty(root, "plan_type") ?? PlanFromIdToken(credentials.IdToken);
+        var plan = OptionalString(root, "plan_type") ?? PlanFromIdToken(credentials.IdToken);
         var displayPlan = PlanDisplay(plan);
         var rateLimit = ObjectProperty(root, "rate_limit");
         var primary = WindowFromProperty(rateLimit, "primary_window");
@@ -148,23 +149,23 @@ public sealed class CodexProvider : IProvider
         {
             using var document = JsonDocument.Parse(File.ReadAllText(path));
             var root = document.RootElement;
-            var apiKey = StringProperty(root, "OPENAI_API_KEY");
+            var apiKey = OptionalString(root, "OPENAI_API_KEY");
             if (!string.IsNullOrWhiteSpace(apiKey))
                 return new CodexCredentials(apiKey!, null, null);
 
             var tokens = ObjectProperty(root, "tokens");
             var accessToken = FirstNonEmpty(
-                StringProperty(tokens, "access_token"),
-                StringProperty(tokens, "accessToken"));
+                OptionalString(tokens, "access_token"),
+                OptionalString(tokens, "accessToken"));
             if (string.IsNullOrWhiteSpace(accessToken))
                 return null;
 
             var idToken = FirstNonEmpty(
-                StringProperty(tokens, "id_token"),
-                StringProperty(tokens, "idToken"));
+                OptionalString(tokens, "id_token"),
+                OptionalString(tokens, "idToken"));
             var accountId = FirstNonEmpty(
-                StringProperty(tokens, "account_id"),
-                StringProperty(tokens, "accountId"));
+                OptionalString(tokens, "account_id"),
+                OptionalString(tokens, "accountId"));
             return new CodexCredentials(accessToken!, idToken, accountId);
         }
         catch
@@ -326,8 +327,8 @@ public sealed class CodexProvider : IProvider
         }
 
         var label = FirstNonEmpty(
-            StringProperty(limit, "limit_name"),
-            StringProperty(limit, "metered_feature"))
+            OptionalString(limit, "limit_name"),
+            OptionalString(limit, "metered_feature"))
             ?? "Codex extra limit";
         var window = WindowFromProperty(rateLimit, "primary_window", label)
             ?? WindowFromProperty(rateLimit, "secondary_window", label);
@@ -339,8 +340,8 @@ public sealed class CodexProvider : IProvider
     {
         return new[]
             {
-                StringProperty(limit, "limit_name"),
-                StringProperty(limit, "metered_feature"),
+                OptionalString(limit, "limit_name"),
+                OptionalString(limit, "metered_feature"),
             }
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Any(value => value!.Contains("spark", StringComparison.OrdinalIgnoreCase));
@@ -403,14 +404,14 @@ public sealed class CodexProvider : IProvider
     private static string? JwtStringClaim(string? idToken, string key)
     {
         var payload = JwtPayload(idToken);
-        return payload is null ? null : StringProperty(payload.Value, key);
+        return payload is null ? null : OptionalString(payload.Value, key);
     }
 
     private static string? JwtStringClaim(string? idToken, string objectKey, string key)
     {
         var payload = JwtPayload(idToken);
         var obj = payload is null ? null : ObjectProperty(payload.Value, objectKey);
-        return obj is null ? null : StringProperty(obj.Value, key);
+        return obj is null ? null : OptionalString(obj.Value, key);
     }
 
     private static JsonElement? JwtPayload(string? idToken)
@@ -437,59 +438,9 @@ public sealed class CodexProvider : IProvider
         }
     }
 
-    private static JsonElement? ObjectProperty(JsonElement? parent, string key)
-    {
-        if (parent is { ValueKind: JsonValueKind.Object } obj
-            && obj.TryGetProperty(key, out var value)
-            && value.ValueKind == JsonValueKind.Object)
-        {
-            return value;
-        }
 
-        return null;
-    }
 
-    private static string? StringProperty(JsonElement? parent, string key)
-    {
-        if (parent is not { ValueKind: JsonValueKind.Object } obj
-            || !obj.TryGetProperty(key, out var value))
-        {
-            return null;
-        }
 
-        return value.ValueKind switch
-        {
-            JsonValueKind.String => value.GetString(),
-            JsonValueKind.Number => value.GetRawText(),
-            _ => null,
-        };
-    }
-
-    private static double? OptionalDouble(JsonElement obj, string key)
-    {
-        if (!obj.TryGetProperty(key, out var value))
-            return null;
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.Number when value.TryGetDouble(out var number) => number,
-            JsonValueKind.String when double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => number,
-            _ => null,
-        };
-    }
-
-    private static long? OptionalLong(JsonElement obj, string key)
-    {
-        if (!obj.TryGetProperty(key, out var value))
-            return null;
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.Number when value.TryGetInt64(out var number) => number,
-            JsonValueKind.String when long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) => number,
-            _ => null,
-        };
-    }
 
 
 

@@ -5,6 +5,8 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using QuotaLens.Core;
 using static QuotaLens.Core.StringValues;
+using static QuotaLens.Core.JsonUtil;
+using static QuotaLens.Core.TextUtil;
 
 namespace QuotaLens.Providers;
 
@@ -1876,14 +1878,6 @@ public sealed class SimpleApiProvider : IProvider
         }
     }
 
-    private static double? ElementDouble(JsonElement value) => value.ValueKind switch
-    {
-        JsonValueKind.Number when value.TryGetDouble(out var number) => number,
-        JsonValueKind.String when double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => number,
-        JsonValueKind.True => 1,
-        JsonValueKind.False => 0,
-        _ => null,
-    };
 
     private static string ResolveElevenLabsUrl(string instanceId, IConfig config) =>
         ResolveUrlWithOptionalBase(instanceId, config, "elevenlabs_base_url", "https://api.elevenlabs.io", "v1/user/subscription");
@@ -1992,181 +1986,6 @@ public sealed class SimpleApiProvider : IProvider
         request.Headers.TryAddWithoutValidation("x-warp-os-version", "10");
     }
 
-    private static double RequiredDouble(JsonElement obj, string property)
-    {
-        var value = OptionalDouble(obj, property);
-        if (value is null)
-            throw new ProviderException($"Parse error: Missing numeric field {property}");
-        return value.Value;
-    }
-
-    private static double? OptionalDouble(JsonElement? obj, string property)
-    {
-        if (obj is not { ValueKind: JsonValueKind.Object } element
-            || !element.TryGetProperty(property, out var value))
-        {
-            return null;
-        }
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.Number when value.TryGetDouble(out var number) => number,
-            JsonValueKind.String when double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => number,
-            JsonValueKind.True => 1,
-            JsonValueKind.False => 0,
-            _ => null,
-        };
-    }
-
-    private static long? OptionalLong(JsonElement obj, string property)
-    {
-        if (!obj.TryGetProperty(property, out var value))
-            return null;
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.Number when value.TryGetInt64(out var number) => number,
-            JsonValueKind.Number when value.TryGetDouble(out var number) => (long)number,
-            JsonValueKind.String when long.TryParse(value.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) => number,
-            JsonValueKind.String when double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => (long)number,
-            _ => null,
-        };
-    }
-
-    private static bool? OptionalBool(JsonElement obj, string property)
-    {
-        if (!obj.TryGetProperty(property, out var value))
-            return null;
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Number when value.TryGetDouble(out var number) => Math.Abs(number) > 0.001,
-            JsonValueKind.String when bool.TryParse(value.GetString(), out var parsed) => parsed,
-            JsonValueKind.String when double.TryParse(value.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var number) => Math.Abs(number) > 0.001,
-            _ => null,
-        };
-    }
-
-    private static string? OptionalString(JsonElement? obj, string property)
-    {
-        if (obj is not { ValueKind: JsonValueKind.Object } element
-            || !element.TryGetProperty(property, out var value))
-        {
-            return null;
-        }
-
-        return value.ValueKind switch
-        {
-            JsonValueKind.String => Clean(value.GetString()),
-            JsonValueKind.Number => value.GetRawText(),
-            JsonValueKind.True => "true",
-            JsonValueKind.False => "false",
-            _ => null,
-        };
-    }
-
-    private static JsonElement? ObjectProperty(JsonElement? parent, string key)
-    {
-        if (parent is { ValueKind: JsonValueKind.Object } obj
-            && obj.TryGetProperty(key, out var value)
-            && value.ValueKind == JsonValueKind.Object)
-        {
-            return value;
-        }
-
-        return null;
-    }
-
-    private static JsonElement? ArrayProperty(JsonElement? parent, string key)
-    {
-        if (parent is { ValueKind: JsonValueKind.Object } obj
-            && obj.TryGetProperty(key, out var value)
-            && value.ValueKind == JsonValueKind.Array)
-        {
-            return value;
-        }
-
-        return null;
-    }
-
-    private static IEnumerable<JsonElement> ArrayItems(JsonElement? element)
-    {
-        if (element is not { ValueKind: JsonValueKind.Array } array)
-            yield break;
-
-        foreach (var item in array.EnumerateArray())
-            yield return item;
-    }
-
-    private static double? FirstDouble(JsonElement obj, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (OptionalDouble(obj, key) is { } value)
-                return value;
-        }
-
-        return null;
-    }
-
-    private static string? FirstString(JsonElement obj, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (OptionalString(obj, key) is { } value)
-                return value;
-        }
-
-        return null;
-    }
-
-    private static string? FirstDateIso(JsonElement obj, params string[] keys)
-    {
-        foreach (var key in keys)
-        {
-            if (OptionalDateIso(obj, key) is { } value)
-                return value;
-        }
-
-        return null;
-    }
-
-    private static string? OptionalDateIso(JsonElement obj, string key)
-    {
-        if (!obj.TryGetProperty(key, out var value))
-            return null;
-
-        if (value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var number))
-            return NumericEpochToIso(number);
-        if (value.ValueKind != JsonValueKind.String)
-            return null;
-
-        var text = Clean(value.GetString());
-        if (string.IsNullOrWhiteSpace(text))
-            return null;
-        if (double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out var numeric))
-            return NumericEpochToIso(numeric);
-        return DateTimeOffset.TryParse(text, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
-            ? parsed.ToString("O", CultureInfo.InvariantCulture)
-            : null;
-    }
-
-    private static string? NumericEpochToIso(double value)
-    {
-        if (value <= 0 || !double.IsFinite(value))
-            return null;
-
-        var seconds = Math.Abs(value) > 10_000_000_000 ? value / 1000 : value;
-        return DateTimeOffset.FromUnixTimeSeconds((long)Math.Round(seconds)).ToString("O", CultureInfo.InvariantCulture);
-    }
-
-    private static string? UnixSecondsToIso(long? seconds) =>
-        seconds is > 0 ? DateTimeOffset.FromUnixTimeSeconds(seconds.Value).ToString("O", CultureInfo.InvariantCulture) : null;
-
-    private static string? UnixMillisecondsToIso(long? milliseconds) =>
-        milliseconds is > 0 ? DateTimeOffset.FromUnixTimeMilliseconds(milliseconds.Value).ToString("O", CultureInfo.InvariantCulture) : null;
 
     internal static string NextCrofRequestReset(DateTimeOffset updatedAt)
     {
@@ -2214,21 +2033,6 @@ public sealed class SimpleApiProvider : IProvider
         ("days", 24 * 60), ("day", 24 * 60), ("d", 24 * 60),
     };
 
-    private static string? Clean(string? value) => ProviderConfig.Clean(value);
-
-    private static string? Env(string key) => ProviderConfig.Environment(key);
-
-
-
-    private static string? DisplayName(string? value)
-    {
-        var clean = Clean(value);
-        if (clean is null)
-            return null;
-
-        var spaced = clean.Replace("_", " ", StringComparison.Ordinal).Replace("-", " ", StringComparison.Ordinal);
-        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(spaced.ToLowerInvariant());
-    }
 
     private static EntitlementStatus CodebuffEntitlementStatus(string? status, bool? hasSubscription) =>
         Clean(status)?.ToLowerInvariant() switch
@@ -2239,7 +2043,5 @@ public sealed class SimpleApiProvider : IProvider
             _ => EntitlementStatus.Unknown,
         };
 
-    private static string Fmt0(double value) => value.ToString("F0", CultureInfo.InvariantCulture);
-    private static string Fmt2(double value) => value.ToString("F2", CultureInfo.InvariantCulture);
-    private static string FmtCount(double value) => value.ToString("N0", CultureInfo.InvariantCulture);
+
 }

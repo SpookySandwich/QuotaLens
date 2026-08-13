@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
+using static QuotaLens.Core.JsonUtil;
 
 namespace QuotaLens.Providers;
 
@@ -595,20 +596,7 @@ public sealed class GrokProvider : IProvider
             : $"${dollars.ToString("F0", CultureInfo.InvariantCulture)}";
     }
 
-    private static string? OptionalString(JsonElement parent, string key) =>
-        parent.ValueKind == JsonValueKind.Object
-        && parent.TryGetProperty(key, out var value)
-        && value.ValueKind == JsonValueKind.String
-            ? value.GetString()
-            : null;
 
-    private static double? OptionalDouble(JsonElement parent, string key) =>
-        parent.ValueKind == JsonValueKind.Object
-        && parent.TryGetProperty(key, out var value)
-        && value.ValueKind == JsonValueKind.Number
-        && value.TryGetDouble(out var number)
-            ? number
-            : null;
 
     private static long? OptionalCents(JsonElement parent, string key)
     {
@@ -623,13 +611,6 @@ public sealed class GrokProvider : IProvider
 
         return val;
     }
-
-    private static bool? OptionalBool(JsonElement parent, string key) =>
-        parent.ValueKind == JsonValueKind.Object
-        && parent.TryGetProperty(key, out var value)
-        && (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
-            ? value.GetBoolean()
-            : null;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

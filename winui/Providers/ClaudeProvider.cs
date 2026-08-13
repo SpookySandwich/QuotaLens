@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
+using static QuotaLens.Core.JsonUtil;
 
 namespace QuotaLens.Providers;
 
@@ -408,7 +409,7 @@ public sealed class ClaudeProvider : IProvider
         if (!limit.TryGetProperty("percent", out var value))
             return false;
 
-        var parsed = DoubleValue(value);
+        var parsed = ElementDouble(value);
         if (parsed is null || !double.IsFinite(parsed.Value) || parsed.Value < 0 || parsed.Value > 100)
             return false;
 
@@ -615,46 +616,6 @@ public sealed class ClaudeProvider : IProvider
         return false;
     }
 
-    private static double? FirstDouble(JsonElement obj, params string[] keys)
-    {
-        if (obj.ValueKind != JsonValueKind.Object)
-            return null;
 
-        foreach (var key in keys)
-        {
-            if (!obj.TryGetProperty(key, out var value))
-                continue;
 
-            var parsed = DoubleValue(value);
-            if (parsed.HasValue)
-                return parsed.Value;
-        }
-
-        return null;
-    }
-
-    private static double? DoubleValue(JsonElement value) => value.ValueKind switch
-    {
-        JsonValueKind.Number when value.TryGetDouble(out var number) => number,
-        JsonValueKind.String when double.TryParse(
-            value.GetString(),
-            NumberStyles.Float,
-            CultureInfo.InvariantCulture,
-            out var number) => number,
-        _ => null,
-    };
-
-    private static string? FirstString(JsonElement obj, params string[] keys)
-    {
-        if (obj.ValueKind != JsonValueKind.Object)
-            return null;
-
-        foreach (var key in keys)
-        {
-            if (obj.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
-                return value.GetString();
-        }
-
-        return null;
-    }
 }

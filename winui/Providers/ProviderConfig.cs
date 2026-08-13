@@ -38,17 +38,7 @@ internal static partial class ProviderConfig
             : System.Environment.ExpandEnvironmentVariables(configured);
     }
 
-    public static string? Clean(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-
-        var trimmed = value.Trim();
-        if ((trimmed.StartsWith('"') && trimmed.EndsWith('"')) || (trimmed.StartsWith('\'') && trimmed.EndsWith('\'')))
-            trimmed = trimmed[1..^1].Trim();
-
-        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
-    }
+    public static string? Clean(string? value) => TextUtil.Clean(value);
 
     public static string ResponseSummary(string? body, int maxLength = 240)
     {

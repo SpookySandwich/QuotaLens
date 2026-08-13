@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using QuotaLens.Core;
+using static QuotaLens.Core.JsonUtil;
 using static QuotaLens.Core.StringValues;
 
 namespace QuotaLens.Providers;
@@ -592,12 +593,6 @@ public sealed class VertexAIProvider : IProvider
     private static string FormUrlEncoded(IReadOnlyDictionary<string, string> values) =>
         string.Join("&", values.Select(item => $"{Uri.EscapeDataString(item.Key)}={Uri.EscapeDataString(item.Value)}"));
 
-    private static string? OptionalString(JsonElement obj, string property) =>
-        obj.ValueKind == JsonValueKind.Object
-        && obj.TryGetProperty(property, out var value)
-        && value.ValueKind == JsonValueKind.String
-            ? ProviderConfig.Clean(value.GetString())
-            : null;
 
 
 
