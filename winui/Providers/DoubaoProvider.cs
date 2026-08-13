@@ -141,7 +141,7 @@ public sealed class DoubaoProvider : IProvider
     }
 
     private static string ResolveArkcliPath(string instanceId, IConfig config) =>
-        ProviderConfig.ResolveCliPath(instanceId, config, "doubao_cli_path", "arkcli", "ARKCLI_PATH", "DOUBAO_ARKCLI_PATH");
+        ProviderConfig.ResolveCliPath(instanceId, config, "doubao_cli_path", "arkcli");
 
     private static async Task<string> RunArkcliAsync(
         string binary,

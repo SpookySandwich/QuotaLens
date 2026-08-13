@@ -15,8 +15,7 @@ public sealed record CliTokenKeepAliveDescriptor(
     IReadOnlyList<string> Arguments,
     TimeSpan Interval,
     TimeSpan Timeout,
-    string? CliPathFieldKey = null,
-    IReadOnlyList<string>? EnvironmentKeys = null);
+    string? CliPathFieldKey = null);
 
 /// <summary>
 /// The closed set of proactive keep-alive schedules. Adding a provider here is
@@ -38,8 +37,7 @@ public static class CliTokenKeepAliveCatalog
                 CliRefreshCommands.Grok,
                 Interval: TimeSpan.FromDays(1),
                 Timeout: TimeSpan.FromSeconds(45),
-                CliPathFieldKey: "grok_path",
-                EnvironmentKeys: ["GROK_CLI_PATH"]),
+                CliPathFieldKey: "grok_path"),
         };
 }
 
@@ -181,8 +179,7 @@ public sealed class CliTokenKeepAliveService
                     instance.Id,
                     _config,
                     descriptor.CliPathFieldKey,
-                    descriptor.CliCommand,
-                    descriptor.EnvironmentKeys?.ToArray() ?? []);
+                    descriptor.CliCommand);
             }
         }
 

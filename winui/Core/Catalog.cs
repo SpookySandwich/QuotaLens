@@ -1210,6 +1210,66 @@ public static class Catalog
                 .ToArray(),
             StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// The environment variables that map onto each provider's config field. This is
+    /// the single source of truth for the "import from environment" step in the edit
+    /// dialog: runtime resolution reads config only, and these entries tell the importer
+    /// which env var(s) to copy into each (empty) field. SimpleApi-backed providers are
+    /// covered by <see cref="SimpleApiProvider.EnvironmentKeysFor"/> instead.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string[]>> FieldEnvironment =
+        new Dictionary<string, IReadOnlyDictionary<string, string[]>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["azureopenai"] = FieldEnv(
+                ("azureopenai_subscription_id", ["AZURE_SUBSCRIPTION_ID"]),
+                ("azureopenai_location", ["AZURE_LOCATION", "AZURE_OPENAI_LOCATION"]),
+                ("azureopenai_arm_token", ["AZURE_ACCESS_TOKEN"]),
+                ("azureopenai_az_path", ["AZURE_CLI_PATH"])),
+            ["alibabacloud"] = FieldEnv(
+                ("alibabacloud_key_id", ["ALIBABA_ACCESS_KEY_ID"]),
+                ("alibabacloud_key_secret", ["ALIBABA_ACCESS_KEY_SECRET"])),
+            ["bedrock"] = FieldEnv(
+                ("bedrock_budget", ["CODEXBAR_BEDROCK_BUDGET", "QUOTALENS_BEDROCK_BUDGET"]),
+                ("bedrock_cost_explorer_url", ["CODEXBAR_BEDROCK_API_URL", "QUOTALENS_BEDROCK_API_URL"]),
+                ("bedrock_auth_mode", ["CODEXBAR_BEDROCK_AUTH_MODE", "QUOTALENS_BEDROCK_AUTH_MODE"]),
+                ("bedrock_profile", ["AWS_PROFILE"]),
+                ("bedrock_aws_cli_path", ["AWS_CLI_PATH"]),
+                ("bedrock_access_key_id", ["AWS_ACCESS_KEY_ID"]),
+                ("bedrock_secret_access_key", ["AWS_SECRET_ACCESS_KEY"]),
+                ("bedrock_session_token", ["AWS_SESSION_TOKEN"]),
+                ("bedrock_region", ["AWS_REGION", "AWS_DEFAULT_REGION"])),
+            ["deepseek"] = FieldEnv(
+                ("deepseek_key", ["DEEPSEEK_API_KEY"]),
+                ("deepseek_user_token", ["DEEPSEEK_PLATFORM_TOKEN", "DEEPSEEK_USER_TOKEN"])),
+            ["deepgram"] = FieldEnv(
+                ("deepgram_key", ["DEEPGRAM_API_KEY"]),
+                ("deepgram_project_id", ["DEEPGRAM_PROJECT_ID"]),
+                ("deepgram_base_url", ["DEEPGRAM_API_URL"])),
+            ["gemini"] = FieldEnv(("gemini_home", ["GEMINI_HOME"])),
+            ["codex"] = FieldEnv(("codex_home", ["CODEX_HOME"])),
+            ["kilo"] = FieldEnv(
+                ("kilo_key", ["KILO_API_KEY"]),
+                ("kilo_base_url", ["KILO_API_URL"])),
+            ["groq"] = FieldEnv(
+                ("groq_key", ["GROQ_API_KEY"]),
+                ("groq_base_url", ["GROQ_API_URL"])),
+            ["kiro"] = FieldEnv(("kiro_cli_path", ["KIRO_CLI_PATH"])),
+            ["opencodego"] = FieldEnv(("opencodego_cli_path", ["OPENCODE_CLI_PATH"])),
+            ["vertexai"] = FieldEnv(
+                ("vertexai_project_id", ["GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT"]),
+                ("vertexai_gcloud_path", ["GCLOUD_PATH", "GCLOUD_BIN"]),
+                ("vertexai_credentials_path", ["GOOGLE_APPLICATION_CREDENTIALS"]),
+                ("vertexai_gcloud_config_dir", ["CLOUDSDK_CONFIG"])),
+            ["grok"] = FieldEnv(("grok_path", ["GROK_CLI_PATH"])),
+            ["doubao"] = FieldEnv(("doubao_cli_path", ["ARKCLI_PATH", "DOUBAO_ARKCLI_PATH"])),
+            ["qoder"] = FieldEnv(("qoder_cli_path", ["QODER_CLI_PATH"])),
+            ["openrouter"] = FieldEnv(("openrouter_management_key", ["OPENROUTER_MANAGEMENT_KEY"])),
+            ["openai"] = FieldEnv(("openai_project_ids", ["OPENAI_PROJECT_IDS", "OPENAI_PROJECT_ID"])),
+        };
+
+    private static IReadOnlyDictionary<string, string[]> FieldEnv(params (string Key, string[] Env)[] entries) =>
+        entries.ToDictionary(entry => entry.Key, entry => entry.Env, StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Providers that get a Launch button for their desktop GUI app.</summary>
     public static readonly IReadOnlyDictionary<string, ProviderLaunchTarget> LaunchTargets = new Dictionary<string, ProviderLaunchTarget>
     {

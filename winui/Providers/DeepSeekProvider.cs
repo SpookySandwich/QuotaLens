@@ -56,7 +56,7 @@ public sealed class DeepSeekProvider : IProvider
     private static string? GetKey(string instanceId, IConfig config)
     {
         // Env fallback is disabled when this explicit instance has a blank scoped key.
-        return ProviderConfig.ScopedOrEnvironment(instanceId, config, "deepseek_key", "DEEPSEEK_API_KEY");
+        return ProviderConfig.Scoped(instanceId, config, "deepseek_key");
     }
 
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
@@ -168,12 +168,7 @@ public sealed class DeepSeekProvider : IProvider
             UpdatedAt = DateTimeOffset.UtcNow,
         };
 
-        var platformToken = ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            "deepseek_user_token",
-            "DEEPSEEK_PLATFORM_TOKEN",
-            "DEEPSEEK_USER_TOKEN");
+        var platformToken = ProviderConfig.Scoped(instanceId, config, "deepseek_user_token");
         if (platformToken is not null
             && await TryAttachOptionalUsageSummaryAsync(snapshot, platformToken, ct).ConfigureAwait(false))
         {

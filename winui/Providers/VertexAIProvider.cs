@@ -187,7 +187,7 @@ public sealed class VertexAIProvider : IProvider
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         var projectId = FirstNonEmpty(
-            ProviderConfig.ScopedOrEnvironment(instanceId, config, "vertexai_project_id", "GOOGLE_CLOUD_PROJECT", "GCLOUD_PROJECT", "CLOUDSDK_CORE_PROJECT"),
+            ProviderConfig.Scoped(instanceId, config, "vertexai_project_id"),
             OptionalString(root, "project_id"),
             LoadGcloudProjectId(instanceId, config));
 
@@ -355,7 +355,7 @@ public sealed class VertexAIProvider : IProvider
 
     private static async Task<string> PrintAccessTokenAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var gcloud = ProviderConfig.ScopedOrEnvironment(instanceId, config, "vertexai_gcloud_path", "GCLOUD_PATH", "GCLOUD_BIN") ?? "gcloud";
+        var gcloud = ProviderConfig.Scoped(instanceId, config, "vertexai_gcloud_path") ?? "gcloud";
         var output = await RunProcessAsync(gcloud, new[] { "auth", "application-default", "print-access-token" }, ct).ConfigureAwait(false);
         return ProviderConfig.Clean(output)
             ?? throw new ProviderException("Login required: gcloud returned an empty access token.");
@@ -391,7 +391,7 @@ public sealed class VertexAIProvider : IProvider
 
     private static string? ResolveCredentialsPath(string instanceId, IConfig config)
     {
-        var configured = ProviderConfig.ScopedOrEnvironment(instanceId, config, "vertexai_credentials_path", "GOOGLE_APPLICATION_CREDENTIALS");
+        var configured = ProviderConfig.Scoped(instanceId, config, "vertexai_credentials_path");
         if (!string.IsNullOrWhiteSpace(configured))
             return Expand(configured!);
 
@@ -402,7 +402,7 @@ public sealed class VertexAIProvider : IProvider
 
     private static string? LoadGcloudProjectId(string instanceId, IConfig config)
     {
-        var configuredConfig = ProviderConfig.ScopedOrEnvironment(instanceId, config, "vertexai_gcloud_config_dir", "CLOUDSDK_CONFIG");
+        var configuredConfig = ProviderConfig.Scoped(instanceId, config, "vertexai_gcloud_config_dir");
         var dirs = !string.IsNullOrWhiteSpace(configuredConfig)
             ? new[] { Expand(configuredConfig!) }
             : CandidateGcloudConfigDirs();

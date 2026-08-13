@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using QuotaLens.Core;
+using QuotaLens.Providers;
 
 namespace QuotaLens.Services;
 
@@ -110,6 +111,38 @@ public sealed class ConfigService : IConfigService
     public void Remove(string key)
     {
         _config.Remove(key);
+    }
+
+    public int ImportEnvironment(string instanceId)
+    {
+        var instance = _instances.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, instanceId, StringComparison.OrdinalIgnoreCase));
+        if (instance is null || !Catalog.Fields.TryGetValue(instance.Type, out var fields))
+            return 0;
+
+        var imported = 0;
+        foreach (var field in fields)
+        {
+            var current = GetScoped(instanceId, field.Key);
+            if (!string.IsNullOrWhiteSpace(current))
+                continue; // never clobber a value the user already set
+
+            foreach (var envKey in ProviderConfig.EnvironmentKeysFor(instance.Type, field.Key))
+            {
+                var value = ProviderConfig.Environment(envKey);
+                if (string.IsNullOrWhiteSpace(value))
+                    continue;
+
+                Set(ScopedKey(instanceId, field.Key), value);
+                imported++;
+                break;
+            }
+        }
+
+        if (imported > 0)
+            Persist();
+
+        return imported;
     }
 
     public async Task SaveAsync()

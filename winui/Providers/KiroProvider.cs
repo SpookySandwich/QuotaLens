@@ -66,7 +66,7 @@ public sealed class KiroProvider : IProvider
     {
         // Binary resolution, mirroring the Rust:
         //   config "kiro_cli_path" (non-empty) -> env KIRO_CLI_PATH -> default path.
-        var binary = ProviderConfig.ScopedOrEnvironment(instanceId, config, "kiro_cli_path", "KIRO_CLI_PATH")
+        var binary = ProviderConfig.Scoped(instanceId, config, "kiro_cli_path")
             ?? DefaultKiroCliPath();
 
         var usage = await RunCommandAsync(binary, "/usage", TimeSpan.FromSeconds(25), ct).ConfigureAwait(false);

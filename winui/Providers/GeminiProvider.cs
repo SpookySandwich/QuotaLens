@@ -330,7 +330,7 @@ public sealed partial class GeminiProvider : IProvider
 
     private static string ResolveGeminiDirectory(string instanceId, IConfig config)
     {
-        var configured = ProviderConfig.ScopedOrEnvironment(instanceId, config, "gemini_home", "GEMINI_HOME");
+        var configured = ProviderConfig.Scoped(instanceId, config, "gemini_home");
         if (!string.IsNullOrWhiteSpace(configured))
         {
             var expanded = Environment.ExpandEnvironmentVariables(configured!);

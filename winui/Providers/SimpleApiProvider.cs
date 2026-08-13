@@ -225,6 +225,19 @@ public sealed class SimpleApiProvider : IProvider
             ? definition.EnvironmentKeys
             : throw new ArgumentException($"Unknown simple API provider type: {type}");
 
+    internal static bool TryGetEnvironmentKeys(string type, string fieldKey, out IReadOnlyList<string> keys)
+    {
+        if (Definitions.TryGetValue(type, out var definition)
+            && string.Equals(definition.ConfigKey, fieldKey, StringComparison.OrdinalIgnoreCase))
+        {
+            keys = definition.EnvironmentKeys;
+            return true;
+        }
+
+        keys = Array.Empty<string>();
+        return false;
+    }
+
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
         var token = ResolveToken(instanceId, config)
@@ -332,11 +345,7 @@ public sealed class SimpleApiProvider : IProvider
         if (!Definitions.TryGetValue(type, out var definition))
             throw new ArgumentException($"Unknown simple API provider type: {type}");
 
-        return ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            definition.ConfigKey,
-            definition.EnvironmentKeys);
+        return ProviderConfig.Scoped(instanceId, config, definition.ConfigKey);
     }
 
     private static async Task<ProviderSnapshot> FetchOpenRouterAsync(
@@ -373,11 +382,7 @@ public sealed class SimpleApiProvider : IProvider
     }
 
     internal static string? ResolveOpenRouterManagementKey(string instanceId, IConfig config) =>
-        ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            "openrouter_management_key",
-            "OPENROUTER_MANAGEMENT_KEY");
+        ProviderConfig.Scoped(instanceId, config, "openrouter_management_key");
 
     private static async Task<ProviderSnapshot> FetchCodebuffAsync(
         SimpleApiProvider provider,
@@ -541,12 +546,7 @@ public sealed class SimpleApiProvider : IProvider
     }
 
     internal static IReadOnlyList<string> ResolveOpenAiProjectIds(string instanceId, IConfig config) =>
-        ParseOpenAiProjectIds(ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            "openai_project_ids",
-            "OPENAI_PROJECT_IDS",
-            "OPENAI_PROJECT_ID"));
+        ParseOpenAiProjectIds(ProviderConfig.Scoped(instanceId, config, "openai_project_ids"));
 
     internal static IReadOnlyList<string> ParseOpenAiProjectIds(string? value)
     {

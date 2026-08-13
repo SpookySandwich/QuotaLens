@@ -24,9 +24,9 @@ public sealed class GroqProvider : IProvider
 
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var apiKey = ProviderConfig.ScopedOrEnvironment(instanceId, config, "groq_key", "GROQ_API_KEY")
+        var apiKey = ProviderConfig.Scoped(instanceId, config, "groq_key")
             ?? throw new ProviderException("Not configured: Groq API key not set. Add it in Settings.");
-        var configuredBaseUrl = ProviderConfig.ScopedOrEnvironment(instanceId, config, "groq_base_url", "GROQ_API_URL")
+        var configuredBaseUrl = ProviderConfig.Scoped(instanceId, config, "groq_base_url")
             ?? DefaultBaseUrl;
         var baseUrl = ProviderEndpointPolicy.RequireCredentialBase(Type, configuredBaseUrl);
 

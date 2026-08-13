@@ -24,25 +24,12 @@ public sealed class AzureOpenAIProvider : IProvider
 
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var subscriptionId = ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            "azureopenai_subscription_id",
-            "AZURE_SUBSCRIPTION_ID");
-        var location = ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            "azureopenai_location",
-            "AZURE_LOCATION",
-            "AZURE_OPENAI_LOCATION");
+        var subscriptionId = ProviderConfig.Scoped(instanceId, config, "azureopenai_subscription_id");
+        var location = ProviderConfig.Scoped(instanceId, config, "azureopenai_location");
         if (string.IsNullOrWhiteSpace(subscriptionId) || string.IsNullOrWhiteSpace(location))
             throw new ProviderException(QuotaMonitoringConfigurationError, ProviderErrorKind.Misconfigured);
 
-        var accessToken = ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            "azureopenai_arm_token",
-            "AZURE_ACCESS_TOKEN");
+        var accessToken = ProviderConfig.Scoped(instanceId, config, "azureopenai_arm_token");
         if (string.IsNullOrWhiteSpace(accessToken))
             accessToken = await AzureCliAccessTokenAsync(instanceId, config, ct).ConfigureAwait(false);
 
@@ -162,11 +149,7 @@ public sealed class AzureOpenAIProvider : IProvider
         IConfig config,
         CancellationToken ct)
     {
-        var binary = ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            "azureopenai_az_path",
-            "AZURE_CLI_PATH") ?? "az";
+        var binary = ProviderConfig.Scoped(instanceId, config, "azureopenai_az_path") ?? "az";
         using var process = new Process { StartInfo = CreateAzureCliStartInfo(binary) };
         try
         {

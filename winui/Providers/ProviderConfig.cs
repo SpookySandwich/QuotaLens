@@ -6,27 +6,14 @@ namespace QuotaLens.Providers;
 
 internal static partial class ProviderConfig
 {
-    public static string? ScopedOrEnvironment(
-        string instanceId,
-        IConfig config,
-        string configKey,
-        params string[] environmentKeys)
-    {
-        var configured = Clean(config.GetScoped(instanceId, configKey));
-        if (configured is not null)
-            return configured;
-        if (config.HasScoped(instanceId, configKey))
-            return null;
-
-        foreach (var key in environmentKeys)
-        {
-            var value = Environment(key);
-            if (value is not null)
-                return value;
-        }
-
-        return null;
-    }
+    /// <summary>
+    /// Reads a per-instance config value and nothing else. Config is the single source
+    /// of truth: an empty value IS empty. Environment variables are copied into config
+    /// by the import step (see <see cref="Catalog.FieldEnvironment"/>) rather than
+    /// consulted here at runtime.
+    /// </summary>
+    public static string? Scoped(string instanceId, IConfig config, string configKey) =>
+        Clean(config.GetScoped(instanceId, configKey));
 
     public static string? Environment(string key) =>
         Clean(System.Environment.GetEnvironmentVariable(key))
@@ -43,10 +30,9 @@ internal static partial class ProviderConfig
         string instanceId,
         IConfig config,
         string configKey,
-        string fallbackCommand,
-        params string[] environmentKeys)
+        string fallbackCommand)
     {
-        var configured = ScopedOrEnvironment(instanceId, config, configKey, environmentKeys);
+        var configured = Scoped(instanceId, config, configKey);
         return string.IsNullOrWhiteSpace(configured)
             ? fallbackCommand
             : System.Environment.ExpandEnvironmentVariables(configured);
@@ -77,6 +63,24 @@ internal static partial class ProviderConfig
         return string.Create(
             CultureInfo.InvariantCulture,
             $"{redacted[..maxLength]}... [truncated]");
+    }
+
+    /// <summary>
+    /// The env var(s) that import into a provider's config field. Backed by
+    /// <see cref="Catalog.FieldEnvironment"/> plus <see cref="SimpleApiProvider"/>'s
+    /// own per-type definitions.
+    /// </summary>
+    public static IReadOnlyList<string> EnvironmentKeysFor(string providerType, string fieldKey)
+    {
+        if (Catalog.FieldEnvironment.TryGetValue(providerType, out var fields)
+            && fields.TryGetValue(fieldKey, out var keys))
+        {
+            return keys;
+        }
+
+        return SimpleApiProvider.TryGetEnvironmentKeys(providerType, fieldKey, out var simpleKeys)
+            ? simpleKeys
+            : Array.Empty<string>();
     }
 
     public static string AppendPath(string baseUrl, string path)

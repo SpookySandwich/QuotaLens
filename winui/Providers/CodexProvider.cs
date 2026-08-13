@@ -175,7 +175,7 @@ public sealed class CodexProvider : IProvider
 
     private static string ResolveCodexHome(string instanceId, IConfig config)
     {
-        var configured = ProviderConfig.ScopedOrEnvironment(instanceId, config, "codex_home", "CODEX_HOME");
+        var configured = ProviderConfig.Scoped(instanceId, config, "codex_home");
         if (!string.IsNullOrWhiteSpace(configured))
             return Environment.ExpandEnvironmentVariables(configured);
 

@@ -44,7 +44,19 @@ public sealed partial class EditProviderDialog : ContentDialog
 
     private void BuildFields()
     {
+        FieldsPanel.Children.Clear();
+        _editors.Clear();
+
         if (!Catalog.Fields.TryGetValue(_type, out var fields) || fields.Length == 0) return;
+
+        var importButton = new Button
+        {
+            Content = "Import from environment",
+        };
+        AutomationProperties.SetAutomationId(importButton, $"ImportEnv_{_instanceId}");
+        AutomationProperties.SetName(importButton, "Import empty fields from environment variables");
+        importButton.Click += OnImportEnvironment;
+        FieldsPanel.Children.Add(importButton);
 
         AddSectionHeader("Connection", "Provider-specific account, CLI, or sign-in settings.");
 
@@ -128,6 +140,14 @@ public sealed partial class EditProviderDialog : ContentDialog
                 _editors.Add((field, () => box.Text));
             }
         }
+    }
+
+    private void OnImportEnvironment(object sender, RoutedEventArgs e)
+    {
+        var imported = _svc.Config.ImportEnvironment(_instanceId);
+        BuildFields();
+        if (imported > 0)
+            AppLog.Info($"edit: imported {imported} field(s) from environment for {_instanceId}");
     }
 
     private void AddSectionHeader(string title, string description)

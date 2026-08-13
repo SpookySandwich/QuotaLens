@@ -63,11 +63,7 @@ internal static class OpenCodeGoLocalUsageProvider
         IConfig config,
         CancellationToken ct)
     {
-        var binary = ProviderConfig.ScopedOrEnvironment(
-            instanceId,
-            config,
-            "opencodego_cli_path",
-            "OPENCODE_CLI_PATH") ?? "opencode";
+        var binary = ProviderConfig.Scoped(instanceId, config, "opencodego_cli_path") ?? "opencode";
         try
         {
             var tableResult = await RunQueryAsync(binary, HasPartTableSql, ct).ConfigureAwait(false);
