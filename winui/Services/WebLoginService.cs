@@ -895,6 +895,7 @@ public sealed class WebLoginService
     {
         if (TryReadCaptureError(json) is { } error)
         {
+            AppLog.Warn($"webcapture: {request.InstanceId} ({request.ProviderType}) error: {error}");
             StoreResult(
                 request.InstanceId,
                 ProviderSnapshot.ForError(
@@ -921,6 +922,9 @@ public sealed class WebLoginService
         }
 
         StoreResult(request.InstanceId, snapshot);
+        AppLog.Info(
+            $"webcapture: {request.InstanceId} ({request.ProviderType}) captured " +
+            $"used={snapshot.Primary.UsedPercent:F1}% balance={snapshot.Balance?.Total ?? 0:0.##}");
         SignalCapture(request.InstanceId);
         if (closeWindow)
             CloseWindow(request.InstanceId);

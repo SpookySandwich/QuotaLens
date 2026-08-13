@@ -302,19 +302,13 @@ public sealed partial class GeminiProvider : IProvider
             ? "gemini"
             : Environment.ExpandEnvironmentVariables(configured);
 
-        var request = new CliTokenRefresher.Request
-        {
-            Binary = binary,
-            Arguments = CliRefreshCommands.Gemini,
-            Timeout = TimeSpan.FromSeconds(GeminiRefreshTimeoutSeconds),
-            Environment = new Dictionary<string, string> { ["NO_BROWSER"] = "true" },
-        };
-
-        var outcome = await CliTokenRefresher
-            .RefreshAsync(request, () => ReadAccessTokenFingerprint(geminiDir), ct)
-            .ConfigureAwait(false);
-
-        return outcome == CliTokenRefresher.RefreshOutcome.Changed;
+        return await CliTokenRefresher.TryRefreshAsync(
+            binary,
+            CliRefreshCommands.Gemini,
+            TimeSpan.FromSeconds(GeminiRefreshTimeoutSeconds),
+            () => ReadAccessTokenFingerprint(geminiDir),
+            ct,
+            environment: new Dictionary<string, string> { ["NO_BROWSER"] = "true" }).ConfigureAwait(false);
     }
 
     private static string? ReadAccessTokenFingerprint(string geminiDir)

@@ -36,7 +36,7 @@ public sealed class AzureOpenAIProvider : IProvider
             "AZURE_LOCATION",
             "AZURE_OPENAI_LOCATION");
         if (string.IsNullOrWhiteSpace(subscriptionId) || string.IsNullOrWhiteSpace(location))
-            throw new ProviderException(QuotaMonitoringConfigurationError);
+            throw new ProviderException(QuotaMonitoringConfigurationError, ProviderErrorKind.Misconfigured);
 
         var accessToken = ProviderConfig.ScopedOrEnvironment(
             instanceId,

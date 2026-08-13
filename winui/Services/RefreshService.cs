@@ -22,6 +22,7 @@ public sealed class RefreshService : IProviderService
     private readonly ConcurrentDictionary<string, bool> _refreshing = new();
     // Web-login providers share one WebView2 profile → never run them concurrently.
     private static readonly SemaphoreSlim _webviewGate = new(1, 1);
+    private readonly CliTokenKeepAliveService _keepAlive;
     private DispatcherQueueTimer? _timer;
 
     public IConfigService Config { get; }
@@ -30,6 +31,7 @@ public sealed class RefreshService : IProviderService
     {
         Config = config;
         _ui = ui;
+        _keepAlive = new CliTokenKeepAliveService(config);
         foreach (var t in Catalog.Types)
             _byType[t.Id] = ProviderRegistry.Create(t.Id);
         foreach (var inst in Config.Instances)
@@ -113,6 +115,7 @@ public sealed class RefreshService : IProviderService
             return;
 
         var refreshStartedAt = Stopwatch.GetTimestamp();
+        AppLog.Info($"refresh: {instanceId} ({inst.Type}) start");
         try
         {
             int attempt = 0;
@@ -133,6 +136,10 @@ public sealed class RefreshService : IProviderService
                     }
                     ProviderSnapshotMetadata.Apply(provider, snap);
                     Store(instanceId, snap);
+                    AppLog.Info(
+                        $"refresh: {instanceId} ({inst.Type}) ok " +
+                        $"used={snap.Primary.UsedPercent:F1}% balance={snap.Balance?.Total ?? 0:0.##} " +
+                        $"source='{snap.SourceLabel}'");
                     return;
                 }
                 catch (Exception ex)
@@ -149,6 +156,7 @@ public sealed class RefreshService : IProviderService
                     if (ShouldKeepExistingSnapshotOnRateLimit(ex, GetSnapshot(instanceId)))
                         return;
 
+                    AppLog.Warn($"refresh: {instanceId} ({inst.Type}) failed: {ex.GetType().Name}: {ex.Message}");
                     Store(instanceId, ErrorSnapshotFor(
                         inst,
                         provider,
@@ -262,8 +270,17 @@ public sealed class RefreshService : IProviderService
         _timer?.Stop();
         _timer = _ui.CreateTimer();
         _timer.Interval = TimeSpan.FromMilliseconds(Math.Max(30_000, Config.RefreshMs));
-        _timer.Tick += (_, _) => _ = RefreshAllAsync();
+        _timer.Tick += (_, _) =>
+        {
+            // Silent per-provider CLI token keep-alive, checked every tick and run
+            // at most once per the provider's interval (see CliTokenKeepAliveCatalog).
+            _ = _keepAlive.RunDueAsync();
+            _ = RefreshAllAsync();
+        };
         _timer.Start();
+
+        // First keep-alive check runs immediately at startup, not after one interval.
+        _ = _keepAlive.RunDueAsync();
     }
 
     internal static ProviderSnapshot ErrorSnapshotFor(

@@ -33,10 +33,14 @@ public static class TerminalLauncher
             return TerminalLaunchOutcome.CliMissing;
 
         if (!TryResolveCli(descriptor, instanceId, config, out var binary))
+        {
+            AppLog.Warn($"login: {providerType} CLI not resolved (command '{descriptor.CliCommand}'); offering install page");
             return TerminalLaunchOutcome.CliMissing;
+        }
 
         var arguments = LoginArguments(descriptor, instanceId, config);
         var encoded = EncodeLoginScript(binary, arguments, descriptor.ProviderType);
+        AppLog.Info($"login: launching {binary} {string.Join(" ", arguments)} for {providerType}");
 
         // Windows Terminal first, console host as fallback. An app-execution alias can
         // exist yet fail to launch (stale alias after the Store app is removed), so a
@@ -48,7 +52,10 @@ public static class TerminalLauncher
                 // Never WaitForExit: wt.exe hands off to the Windows Terminal process and
                 // exits immediately, so its exit code says nothing about the sign-in.
                 if (Process.Start(startInfo) is not null)
+                {
+                    AppLog.Info($"login: {providerType} terminal started ({Path.GetFileName(startInfo.FileName)})");
                     return TerminalLaunchOutcome.Started;
+                }
             }
             catch (Win32Exception)
             {
@@ -60,6 +67,7 @@ public static class TerminalLauncher
             }
         }
 
+        AppLog.Error($"login: {providerType} terminal launch failed for binary {binary}");
         return TerminalLaunchOutcome.LaunchFailed;
     }
 

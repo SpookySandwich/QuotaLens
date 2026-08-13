@@ -171,7 +171,7 @@ public sealed class VertexAIProvider : IProvider
     {
         var path = ResolveCredentialsPath(instanceId, config);
         if (path is null || !File.Exists(path))
-            throw new ProviderException("Not configured: gcloud Application Default Credentials not found. Run gcloud auth application-default login.");
+            throw new ProviderException("Login required: gcloud Application Default Credentials not found. Run 'gcloud auth application-default login'.");
 
         string json;
         try
@@ -355,26 +355,20 @@ public sealed class VertexAIProvider : IProvider
     private static async Task<string> PrintAccessTokenAsync(string instanceId, IConfig config, CancellationToken ct)
     {
         var gcloud = ProviderConfig.ScopedOrEnvironment(instanceId, config, "vertexai_gcloud_path", "GCLOUD_PATH", "GCLOUD_BIN") ?? "gcloud";
-        var output = await RunProcessAsync(gcloud, "auth application-default print-access-token", ct).ConfigureAwait(false);
+        var output = await RunProcessAsync(gcloud, new[] { "auth", "application-default", "print-access-token" }, ct).ConfigureAwait(false);
         return ProviderConfig.Clean(output)
             ?? throw new ProviderException("Login required: gcloud returned an empty access token.");
     }
 
-    private static async Task<string> RunProcessAsync(string fileName, string arguments, CancellationToken ct)
+    private static async Task<string> RunProcessAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ct)
     {
         try
         {
             using var process = new Process
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                },
+                // Shared launch path: resolves .cmd/.ps1 shims (gcloud on Windows has
+                // no gcloud.exe) instead of a bare CreateProcess that only finds .exe.
+                StartInfo = HiddenCliProcess.CreateStartInfo(fileName, arguments),
             };
             process.Start();
             var stdout = await process.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);

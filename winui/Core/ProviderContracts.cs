@@ -187,7 +187,11 @@ public static class ProviderContracts
             lastVerifiedAt: "2026-08-02");
         Add(contracts, "grok", ProviderAuthKind.LocalCli | ProviderAuthKind.BrowserSession,
             ProviderSourceKind.PrivateDashboard, ProviderContractStability.PrivateContract,
-            ProviderCapability.Balance | ProviderCapability.CostActivity, Array.Empty<string>());
+            ProviderCapability.Balance | ProviderCapability.CostActivity,
+            new[] { "cli-chat-proxy.grok.com" },
+            // The CLI's own billing backend is overridable via GROK_CLI_CHAT_PROXY_BASE_URL
+            // (enterprise proxies), so a user-chosen HTTPS host is permitted.
+            allowsCustomCredentialHost: true);
         Add(contracts, "kilo", ProviderAuthKind.ApiKey, ProviderSourceKind.OfficialApi,
             ProviderContractStability.UpstreamCompatibility,
             ProviderCapability.QuotaWindows | ProviderCapability.DynamicWindows | ProviderCapability.Balance,

@@ -62,7 +62,7 @@ public sealed class DoubaoProvider : IProvider
 
         var authMethod = ProviderConfig.Clean(response.Viewer?.AuthMethod);
         if (string.Equals(authMethod, "none", StringComparison.OrdinalIgnoreCase))
-            throw new ProviderException("Not available: arkcli is not authenticated. Sign in with arkcli, then refresh.");
+            throw new ProviderException("Login required: arkcli is not authenticated. Sign in with arkcli, then refresh.");
 
         var windows = new List<RateWindow>();
         DateTimeOffset? updatedAt = null;
@@ -132,18 +132,11 @@ public sealed class DoubaoProvider : IProvider
 
     internal static ProcessStartInfo CreateArkcliStartInfo(string binary, IReadOnlyList<string> arguments)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = binary,
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        foreach (var argument in arguments)
-            startInfo.ArgumentList.Add(argument);
+        // Shared launch path: resolves .cmd/.ps1 shims (arkcli is an npm CLI, so its
+        // PATH entry is arkcli.cmd) instead of a bare CreateProcess that only finds .exe.
+        var startInfo = HiddenCliProcess.CreateStartInfo(binary, arguments);
+        startInfo.StandardOutputEncoding = Encoding.UTF8;
+        startInfo.StandardErrorEncoding = Encoding.UTF8;
         return startInfo;
     }
 
@@ -191,7 +184,7 @@ public sealed class DoubaoProvider : IProvider
             {
                 var detail = CompactText(output[1]) ?? CompactText(output[0]) ?? "unknown error";
                 if (IsAuthenticationError(detail))
-                    throw new ProviderException("Not available: arkcli is not authenticated. Sign in with arkcli, then refresh.");
+                    throw new ProviderException("Login required: arkcli is not authenticated. Sign in with arkcli, then refresh.");
 
                 throw new ProviderException($"Not available: arkcli usage failed ({process.ExitCode}): {detail}");
             }

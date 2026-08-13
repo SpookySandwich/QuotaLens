@@ -29,16 +29,12 @@ public sealed class ClaudeProvider : IProvider
     /// <summary>
     /// A CLI command that initializes the auth stack (refreshing an expired token as a
     /// side effect) while sending no prompt. Verified against the live CLI; `--version`
-    /// and `auth status` do NOT refresh, so this specific command matters.
+    /// and `auth status` do NOT refresh, so this specific command matters. The argv
+    /// itself lives in <see cref="CliRefreshCommands.Claude"/>.
     /// </summary>
-    private static readonly string[] RefreshCommandArguments = ["mcp", "list"];
-
-    internal static IReadOnlyList<string> RefreshCommandArgumentsForTesting => RefreshCommandArguments;
+    internal static IReadOnlyList<string> RefreshCommandArgumentsForTesting => CliRefreshCommands.Claude;
 
     private const int RefreshTimeoutSeconds = 45;
-
-    /// <summary>Serializes refreshes so parallel fetches spawn only one CLI process.</summary>
-    private static readonly SemaphoreSlim RefreshGate = new(1, 1);
 
     private readonly Func<ClaudeOAuth?> _readToken;
     private readonly Func<string, CancellationToken, Task<HttpResponseMessage>> _sendUsageAsync;
@@ -136,7 +132,7 @@ public sealed class ClaudeProvider : IProvider
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
         var oauth = _readToken()
-            ?? throw new ProviderException("Not configured: Claude not logged in. Run 'claude auth login' first.");
+            ?? throw new ProviderException("Login required: Claude not logged in. Run 'claude auth login' first.");
 
         using var resp = await SendUsageWithNetworkErrorsAsync(oauth.AccessToken, ct).ConfigureAwait(false);
         if ((int)resp.StatusCode is not (401 or 403))
@@ -160,7 +156,6 @@ public sealed class ClaudeProvider : IProvider
 
     private async Task<bool> RefreshTokenViaCliAsync(IConfig config, CancellationToken ct)
     {
-        await RefreshGate.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             return await _refreshViaCliAsync(config, ct).ConfigureAwait(false);
@@ -171,16 +166,13 @@ public sealed class ClaudeProvider : IProvider
             // caller still reports the underlying stale-token state.
             return false;
         }
-        finally
-        {
-            RefreshGate.Release();
-        }
     }
 
     /// <summary>
     /// Runs the CLI so it refreshes its own cached token. Sends no prompt, so it costs
     /// no quota. Success is decided by whether the stored token actually changed, not by
-    /// the exit code.
+    /// the exit code. Runs in a neutral directory so 'claude mcp list' cannot spawn MCP
+    /// servers declared by a project-local .mcp.json.
     /// </summary>
     private static async Task<bool> RefreshViaCliAsync(IConfig config, CancellationToken ct)
     {
@@ -189,22 +181,13 @@ public sealed class ClaudeProvider : IProvider
             ? "claude"
             : Environment.ExpandEnvironmentVariables(configured);
 
-        var request = new CliTokenRefresher.Request
-        {
-            Binary = binary,
-            Arguments = CliRefreshCommands.Claude,
-            Timeout = TimeSpan.FromSeconds(RefreshTimeoutSeconds),
-            // `claude mcp list` health-checks and SPAWNS stdio servers declared in a
-            // .mcp.json found in the working directory. A quota refresh must never
-            // start the user's MCP servers, so run somewhere with no project config.
-            UseNeutralWorkingDirectory = true,
-        };
-
-        var outcome = await CliTokenRefresher
-            .RefreshAsync(request, () => ReadToken()?.AccessToken, ct)
-            .ConfigureAwait(false);
-
-        return outcome == CliTokenRefresher.RefreshOutcome.Changed;
+        return await CliTokenRefresher.TryRefreshAsync(
+            binary,
+            CliRefreshCommands.Claude,
+            TimeSpan.FromSeconds(RefreshTimeoutSeconds),
+            () => ReadToken()?.AccessToken,
+            ct,
+            useNeutralWorkingDirectory: true).ConfigureAwait(false);
     }
 
     /// <summary>

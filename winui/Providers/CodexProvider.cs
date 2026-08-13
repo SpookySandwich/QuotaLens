@@ -37,12 +37,12 @@ public sealed class CodexProvider : IProvider
     {
         var home = ResolveCodexHome(instanceId, config);
         var credentials = LoadCredentials(home)
-            ?? throw new ProviderException("Not configured: Codex auth.json not found. Run Codex to log in first.");
+            ?? throw new ProviderException("Login required: Codex auth.json not found. Run 'codex login' first.");
 
         var usageUrl = ResolveUsageUrl(instanceId, config, home);
         using var response = await SendUsageWithNetworkErrorsAsync(usageUrl, credentials, ct).ConfigureAwait(false);
         if ((int)response.StatusCode is 401 or 403)
-            throw new ProviderException("Not available: Codex OAuth token expired or invalid. Run Codex to re-authenticate.");
+            throw new ProviderException("Login required: Codex OAuth token expired or invalid. Run 'codex login' to re-authenticate.");
         if (!response.IsSuccessStatusCode)
             throw new ProviderException($"Network error: HTTP {(int)response.StatusCode}");
 

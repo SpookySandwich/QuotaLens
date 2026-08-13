@@ -288,7 +288,7 @@ public sealed class BedrockProvider : IProvider
         if (authMode == "profile" || (!hasStaticKeys && profile is not null))
         {
             if (string.IsNullOrWhiteSpace(profile))
-                throw new ProviderException("Not configured: AWS profile not set.");
+                throw new ProviderException("Not configured: AWS profile not set.", ProviderErrorKind.Misconfigured);
 
             var awsPath = ProviderConfig.ScopedOrEnvironment(instanceId, config, "bedrock_aws_cli_path", "AWS_CLI_PATH") ?? "aws";
             var credentials = await ExportProfileCredentialsAsync(awsPath, profile, ct).ConfigureAwait(false);
@@ -301,7 +301,7 @@ public sealed class BedrockProvider : IProvider
         if (staticCredentials is not null)
             return new ResolvedAwsCredentials(staticCredentials, Region(instanceId, config) ?? DefaultRegion);
 
-        throw new ProviderException("Not configured: AWS credentials not set. Add access keys or an AWS profile in Settings.");
+        throw new ProviderException("Not configured: AWS credentials not set. Add access keys or an AWS profile in Settings.", ProviderErrorKind.Misconfigured);
     }
 
     private static AwsCredentials? StaticCredentials(string instanceId, IConfig config)
@@ -334,7 +334,7 @@ public sealed class BedrockProvider : IProvider
     {
         var output = await RunAwsAsync(
             awsPath,
-            $"configure export-credentials --profile {Quote(profile)} --format process",
+            new[] { "configure", "export-credentials", "--profile", profile, "--format", "process" },
             ct).ConfigureAwait(false);
 
         try
@@ -365,7 +365,7 @@ public sealed class BedrockProvider : IProvider
         {
             var output = await RunAwsAsync(
                 awsPath,
-                $"configure get region --profile {Quote(profile)}",
+                new[] { "configure", "get", "region", "--profile", profile },
                 ct,
                 allowFailure: true).ConfigureAwait(false);
             return ProviderConfig.Clean(output.Stdout);
@@ -376,21 +376,14 @@ public sealed class BedrockProvider : IProvider
         }
     }
 
-    private static async Task<ProcessOutput> RunAwsAsync(string fileName, string arguments, CancellationToken ct, bool allowFailure = false)
+    private static async Task<ProcessOutput> RunAwsAsync(string fileName, IReadOnlyList<string> arguments, CancellationToken ct, bool allowFailure = false)
     {
         try
         {
             using var process = new Process
             {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = fileName,
-                    Arguments = arguments,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true,
-                },
+                // Shared launch path: resolves .cmd/.ps1 shims (AWS CLI v1/pip installs).
+                StartInfo = HiddenCliProcess.CreateStartInfo(fileName, arguments),
                 EnableRaisingEvents = true,
             };
             process.Start();
@@ -513,8 +506,6 @@ public sealed class BedrockProvider : IProvider
         double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
             ? parsed
             : null;
-
-    private static string Quote(string value) => "\"" + value.Replace("\"", "\\\"", StringComparison.Ordinal) + "\"";
 
     public sealed record AwsCredentials(string AccessKeyId, string SecretAccessKey, string? SessionToken);
     public sealed record BedrockUsage(double MonthlySpend, double? MonthlyBudget, string Region, DateTimeOffset UpdatedAt);

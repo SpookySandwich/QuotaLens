@@ -84,7 +84,7 @@ public sealed class KimiProvider : IProvider
             catch (ProviderException)
             {
                 throw new ProviderException(
-                    $"Login required - Kimi Code CLI session is not usable ({authError.Message}). " +
+                    $"Login required: Kimi Code CLI session is not usable ({authError.Message}). " +
                     "Run any 'kimi' command to refresh it, or click to open Kimi in browser.");
             }
         }
@@ -221,18 +221,12 @@ public sealed class KimiProvider : IProvider
             ? "kimi"
             : Environment.ExpandEnvironmentVariables(configured);
 
-        var request = new CliTokenRefresher.Request
-        {
-            Binary = binary,
-            Arguments = CliRefreshCommands.Kimi,
-            Timeout = TimeSpan.FromSeconds(CliRefreshTimeoutSeconds),
-        };
-
-        var outcome = await CliTokenRefresher
-            .RefreshAsync(request, () => StringField(ReadCredentials() ?? new JsonObject(), "access_token"), ct)
-            .ConfigureAwait(false);
-
-        return outcome == CliTokenRefresher.RefreshOutcome.Changed;
+        return await CliTokenRefresher.TryRefreshAsync(
+            binary,
+            CliRefreshCommands.Kimi,
+            TimeSpan.FromSeconds(CliRefreshTimeoutSeconds),
+            () => StringField(ReadCredentials() ?? new JsonObject(), "access_token"),
+            ct).ConfigureAwait(false);
     }
 
     private static async Task<HttpResponseMessage> SendUsageAsync(string token, CancellationToken ct)

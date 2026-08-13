@@ -30,20 +30,11 @@ public sealed class QoderProvider : IProvider
             Environment.GetEnvironmentVariable(TokenEnvName, EnvironmentVariableTarget.User),
             Environment.GetEnvironmentVariable(TokenEnvName, EnvironmentVariableTarget.Machine));
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = binary,
-            UseShellExecute = false,
-            RedirectStandardInput = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-
-        foreach (var arg in new[] { "--output-format", "stream-json", "--input-format", "stream-json" })
-            psi.ArgumentList.Add(arg);
+        // Shared launch path: resolves .cmd/.ps1 shims instead of a bare CreateProcess.
+        var psi = HiddenCliProcess.CreateStartInfo(binary, new[] { "--output-format", "stream-json", "--input-format", "stream-json" });
+        psi.RedirectStandardInput = true;
+        psi.StandardOutputEncoding = Encoding.UTF8;
+        psi.StandardErrorEncoding = Encoding.UTF8;
 
         psi.Environment["QODER_ENTRYPOINT"] = "sdk-ts";
         psi.Environment["QODERCLI_INTEGRATION_MODE"] = "qoder_work";

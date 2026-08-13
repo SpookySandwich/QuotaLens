@@ -22,6 +22,14 @@ namespace QuotaLens.Core;
 /// </summary>
 internal static class CliTokenRefresher
 {
+    /// <summary>
+    /// One gate for the whole process: refresh commands are rare and short-lived, and
+    /// serializing them keeps two providers from hammering separate CLIs at once. This
+    /// replaces the per-provider SemaphoreSlim each caller used to hand-roll.
+    /// </summary>
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+    private static readonly TimeSpan GateTimeout = TimeSpan.FromSeconds(15);
+
     internal enum RefreshOutcome
     {
         /// <summary>Credential changed — re-read it and retry the request once.</summary>
@@ -96,6 +104,44 @@ internal static class CliTokenRefresher
         {
             // Mid-rename read: treat as unknown rather than as a change.
             return null;
+        }
+    }
+
+    /// <summary>
+    /// The single gate + request-build + success-check every provider needs. Callers
+    /// supply only their binary, measured command, timeout, credential fingerprint,
+    /// and any child-environment overrides. Returns true when the CLI actually rewrote
+    /// the credential (so the caller should re-read it and retry once).
+    /// </summary>
+    internal static async Task<bool> TryRefreshAsync(
+        string binary,
+        IReadOnlyList<string> arguments,
+        TimeSpan timeout,
+        Func<string?> readFingerprint,
+        CancellationToken ct,
+        IReadOnlyDictionary<string, string>? environment = null,
+        bool useNeutralWorkingDirectory = false)
+    {
+        if (!await Gate.WaitAsync(GateTimeout, ct).ConfigureAwait(false))
+            return false;
+
+        try
+        {
+            var request = new Request
+            {
+                Binary = binary,
+                Arguments = arguments,
+                Timeout = timeout,
+                Environment = environment,
+                UseNeutralWorkingDirectory = useNeutralWorkingDirectory,
+            };
+
+            var outcome = await RefreshAsync(request, readFingerprint, ct).ConfigureAwait(false);
+            return outcome == RefreshOutcome.Changed;
+        }
+        finally
+        {
+            Gate.Release();
         }
     }
 
@@ -197,4 +243,12 @@ internal static class CliRefreshCommands
     /// credential changing rather than by the exit code.
     /// </summary>
     internal static readonly string[] Gemini = ["--list-extensions"];
+
+    /// <summary>
+    /// Measured on grok 0.2.106: 'grok sessions list' performs a silent, non-interactive
+    /// auth refresh on start (upstream try_ensure_fresh_auth: cached-valid creds, else
+    /// OIDC silent refresh when a refresh_token exists, never a browser), then lists
+    /// sessions and exits. No prompt is ever sent, so it spends no quota.
+    /// </summary>
+    internal static readonly string[] Grok = ["sessions", "list"];
 }

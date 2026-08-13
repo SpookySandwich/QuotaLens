@@ -17,10 +17,15 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        UnhandledException += (_, e) => AppLog.Error("Unhandled exception", e.Exception);
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        // Truncate-on-start session log, so the most recent run can always be inspected.
+        AppLog.Initialize();
+        AppLog.Info($"QuotaLens starting (args: {string.Join(" ", Environment.GetCommandLineArgs().Skip(1))})");
+
         // Headless self-test: fetch the API providers and write results to a file.
         var cmd = Environment.GetCommandLineArgs();
         var launchPolicy = AppLaunchPolicy.FromArguments(cmd);
@@ -105,7 +110,7 @@ public partial class App : Application
         try
         {
             var config = new ConfigService();
-            string[] fallbackTypes = { "codex-lb", "deepseek", "alibabacloud", "claude", "antigravity", "kiro", "qoder" };
+            string[] fallbackTypes = { "codex-lb", "deepseek", "alibabacloud", "claude", "antigravity", "kiro", "qoder", "grok" };
             var targets = config.Instances
                 .Select(instance => (InstanceId: instance.Id, Type: instance.Type))
                 .ToList();

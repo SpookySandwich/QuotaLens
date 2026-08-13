@@ -66,11 +66,8 @@ public sealed class KiroProvider : IProvider
     {
         // Binary resolution, mirroring the Rust:
         //   config "kiro_cli_path" (non-empty) -> env KIRO_CLI_PATH -> default path.
-        var binary = config.GetScoped(instanceId, "kiro_cli_path");
-        if (string.IsNullOrEmpty(binary))
-            binary = Environment.GetEnvironmentVariable("KIRO_CLI_PATH") ?? "";
-        if (string.IsNullOrEmpty(binary))
-            binary = DefaultKiroCliPath();
+        var binary = ProviderConfig.ScopedOrEnvironment(instanceId, config, "kiro_cli_path", "KIRO_CLI_PATH")
+            ?? DefaultKiroCliPath();
 
         var usage = await RunCommandAsync(binary, "/usage", TimeSpan.FromSeconds(25), ct).ConfigureAwait(false);
         var combined = $"{usage.Stdout}\n{usage.Stderr}";
@@ -100,20 +97,10 @@ public sealed class KiroProvider : IProvider
 
     internal static ProcessStartInfo CreateStartInfo(string binary, string command)
     {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = binary,
-            UseShellExecute = false,
-            RedirectStandardInput = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8,
-        };
-        startInfo.ArgumentList.Add("chat");
-        startInfo.ArgumentList.Add("--no-interactive");
-        startInfo.ArgumentList.Add(command);
+        // Shared launch path: resolves .cmd/.ps1 shims instead of a bare CreateProcess.
+        var startInfo = HiddenCliProcess.CreateStartInfo(binary, new[] { "chat", "--no-interactive", command });
+        startInfo.StandardOutputEncoding = Encoding.UTF8;
+        startInfo.StandardErrorEncoding = Encoding.UTF8;
         return startInfo;
     }
 
@@ -149,9 +136,11 @@ public sealed class KiroProvider : IProvider
             || lower.Contains("managed by organization", StringComparison.Ordinal);
         if (percent is null && credits is null)
         {
-            throw new ProviderException(managed
-                ? $"Not available: {planName} usage is managed by the organization and the CLI did not expose credit totals."
-                : "Parse error: No recognizable usage values were found in kiro-cli /usage output.");
+            throw managed
+                ? new ProviderException(
+                    $"Not available: {planName} usage is managed by the organization and the CLI did not expose credit totals.",
+                    ProviderErrorKind.Unsupported)
+                : new ProviderException("Parse error: No recognizable usage values were found in kiro-cli /usage output.");
         }
 
         var resetMatch = ResetRe.Match(stripped);
