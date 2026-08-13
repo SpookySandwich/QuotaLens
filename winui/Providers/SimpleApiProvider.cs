@@ -1886,26 +1886,24 @@ public sealed class SimpleApiProvider : IProvider
     };
 
     private static string ResolveElevenLabsUrl(string instanceId, IConfig config) =>
-        ResolveUrlWithOptionalBase(instanceId, config, "elevenlabs_base_url", new[] { "ELEVENLABS_API_URL" }, "https://api.elevenlabs.io", "v1/user/subscription");
+        ResolveUrlWithOptionalBase(instanceId, config, "elevenlabs_base_url", "https://api.elevenlabs.io", "v1/user/subscription");
 
     internal static string ResolveMoonshotUrl(string instanceId, IConfig config) =>
-        ResolveUrlWithOptionalBase(instanceId, config, "moonshot_base_url", new[] { "MOONSHOT_API_URL" }, "https://api.moonshot.ai", "v1/users/me/balance");
+        ResolveUrlWithOptionalBase(instanceId, config, "moonshot_base_url", "https://api.moonshot.ai", "v1/users/me/balance");
 
     private static string ResolveCodebuffUrl(string instanceId, IConfig config) =>
-        ResolveUrlWithOptionalBase(instanceId, config, "codebuff_base_url", new[] { "CODEBUFF_API_URL" }, "https://www.codebuff.com", "api/v1/usage");
+        ResolveUrlWithOptionalBase(instanceId, config, "codebuff_base_url", "https://www.codebuff.com", "api/v1/usage");
 
     private static string ResolveCodebuffSubscriptionUrl(string instanceId, IConfig config) =>
-        ResolveUrlWithOptionalBase(instanceId, config, "codebuff_base_url", new[] { "CODEBUFF_API_URL" }, "https://www.codebuff.com", "api/user/subscription");
+        ResolveUrlWithOptionalBase(instanceId, config, "codebuff_base_url", "https://www.codebuff.com", "api/user/subscription");
 
     private static string ResolveSyntheticUrl(string instanceId, IConfig config) =>
-        FirstNonEmpty(
-            config.GetScoped(instanceId, "synthetic_url"),
-            Env("SYNTHETIC_API_URL"),
-            "https://api.synthetic.new/v2/quotas")!;
+        ProviderConfig.Scoped(instanceId, config, "synthetic_url")
+        ?? "https://api.synthetic.new/v2/quotas";
 
     private static string ResolveZaiUrl(string instanceId, IConfig config)
     {
-        var quotaUrl = FirstNonEmpty(config.GetScoped(instanceId, "zai_quota_url"), Env("Z_AI_QUOTA_URL"), Env("ZAI_QUOTA_URL"));
+        var quotaUrl = ProviderConfig.Scoped(instanceId, config, "zai_quota_url");
         if (!string.IsNullOrWhiteSpace(quotaUrl))
             return quotaUrl!;
 
@@ -1913,17 +1911,13 @@ public sealed class SimpleApiProvider : IProvider
             instanceId,
             config,
             "zai_base_url",
-            new[] { "Z_AI_API_HOST", "ZAI_API_HOST" },
             "https://api.z.ai",
             "api/monitor/usage/quota/limit");
     }
 
     internal static string ResolveLlmProxyUrl(string instanceId, IConfig config)
     {
-        var baseUrl = FirstNonEmpty(
-            config.GetScoped(instanceId, "llmproxy_base_url"),
-            Env("LLM_PROXY_BASE_URL"),
-            Env("LLMPROXY_BASE_URL"));
+        var baseUrl = ProviderConfig.Scoped(instanceId, config, "llmproxy_base_url");
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ProviderException("Not configured: LLM Proxy base URL not set. Add it in Settings.");
 
@@ -1936,7 +1930,7 @@ public sealed class SimpleApiProvider : IProvider
 
     private static string ResolveCopilotUrl(string instanceId, IConfig config)
     {
-        var host = FirstNonEmpty(config.GetScoped(instanceId, "copilot_enterprise_host"), Env("COPILOT_ENTERPRISE_HOST"), "github.com")!;
+        var host = ProviderConfig.Scoped(instanceId, config, "copilot_enterprise_host") ?? "github.com";
         host = host.Trim()
             .Replace("https://", "", StringComparison.OrdinalIgnoreCase)
             .Replace("http://", "", StringComparison.OrdinalIgnoreCase)
@@ -1953,15 +1947,11 @@ public sealed class SimpleApiProvider : IProvider
         string instanceId,
         IConfig config,
         string configKey,
-        string[] environmentKeys,
         string defaultBaseUrl,
         string path)
     {
-        var candidates = new List<string?> { config.GetScoped(instanceId, configKey) };
-        candidates.AddRange(environmentKeys.Select(Env));
-        candidates.Add(defaultBaseUrl);
-        var baseUrl = FirstNonEmpty(candidates.ToArray());
-        return AppendPath(baseUrl!, path);
+        var baseUrl = ProviderConfig.Scoped(instanceId, config, configKey) ?? defaultBaseUrl;
+        return AppendPath(baseUrl, path);
     }
 
     private static string AppendPath(string baseUrl, string path) => ProviderConfig.AppendPath(baseUrl, path);

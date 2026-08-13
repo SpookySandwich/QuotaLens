@@ -25,11 +25,8 @@ public sealed class QoderProvider : IProvider
 
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var binary = ResolveQoderCliPath(config.GetScoped(instanceId, "qoder_cli_path"));
-        var token = FirstNonEmpty(
-            Environment.GetEnvironmentVariable(TokenEnvName),
-            Environment.GetEnvironmentVariable(TokenEnvName, EnvironmentVariableTarget.User),
-            Environment.GetEnvironmentVariable(TokenEnvName, EnvironmentVariableTarget.Machine));
+        var binary = ResolveQoderCliPath(instanceId, config);
+        var token = ProviderConfig.Scoped(instanceId, config, "qoder_token");
 
         // Shared launch path: resolves .cmd/.ps1 shims instead of a bare CreateProcess.
         var psi = HiddenCliProcess.CreateStartInfo(binary, new[] { "--output-format", "stream-json", "--input-format", "stream-json" });
@@ -377,25 +374,16 @@ public sealed class QoderProvider : IProvider
         };
     }
 
-    private static string ResolveQoderCliPath(string configured)
+    private static string ResolveQoderCliPath(string instanceId, IConfig config)
     {
+        var configured = ProviderConfig.Scoped(instanceId, config, "qoder_cli_path");
         if (!string.IsNullOrWhiteSpace(configured))
-            return ExpandEnvironmentVariables(configured);
-
-        var envPath = FirstNonEmpty(
-            Environment.GetEnvironmentVariable("QODER_CLI_PATH"),
-            Environment.GetEnvironmentVariable("QODER_CLI_PATH", EnvironmentVariableTarget.User),
-            Environment.GetEnvironmentVariable("QODER_CLI_PATH", EnvironmentVariableTarget.Machine));
-        if (!string.IsNullOrWhiteSpace(envPath))
-            return ExpandEnvironmentVariables(envPath);
+            return Environment.ExpandEnvironmentVariables(configured);
 
         var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
         var defaultPath = Path.Combine(programFiles, "QoderWork", "QoderWork", "resources", "bin", "qodercli.exe");
         return File.Exists(defaultPath) ? defaultPath : "qodercli";
     }
-
-    private static string ExpandEnvironmentVariables(string value)
-        => Environment.ExpandEnvironmentVariables(value.Trim().Trim('"'));
 
     private static string? UserTypeToPlan(string? userType)
     {

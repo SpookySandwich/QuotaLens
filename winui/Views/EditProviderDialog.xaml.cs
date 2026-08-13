@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using QuotaLens.Core;
 using QuotaLens.Helpers;
+using QuotaLens.Providers;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 
@@ -11,20 +12,24 @@ namespace QuotaLens.Views;
 /// <summary>
 /// Provider edit dialog. Fields are built dynamically from
 /// <see cref="Catalog.Fields"/> for the instance's type (TextBox / PasswordBox /
-/// file-pick / ToggleSwitch), read+written with scoped to base config keys, then
-/// persisted and the provider refreshed.
+/// file-pick / ToggleSwitch), read+written with scoped config keys, then persisted
+/// and the provider refreshed.
+///
+/// Fields that have an environment-variable mapping show a trailing import glyph; it
+/// copies that ONE field's value from the environment (never overwriting an existing
+/// value) — a per-field affordance instead of a single catch-all button.
 /// </summary>
 public sealed partial class EditProviderDialog : ContentDialog
 {
-    // Segoe Fluent / MDL2 glyph for the "open file" / browse button.
-    private const string BrowseGlyph = "";
-    private const string RemoveGlyph = "";
+    // Segoe Fluent / MDL2 glyphs.
+    private const string BrowseGlyph = "\uE8E5";
+    private const string ImportGlyph = "\uE8B5";
 
     private readonly IProviderService _svc;
     private readonly string _instanceId;
     private readonly string _type;
     private readonly nint _hwnd;
-    private readonly List<(ProviderField Field, Func<string> Read)> _editors = new();
+    private readonly List<(ProviderField Field, Func<string> Read, Action<string> Write)> _editors = new();
 
     public EditProviderDialog(IProviderService svc, string instanceId, string providerType, string displayName, nint hwnd)
     {
@@ -49,21 +54,12 @@ public sealed partial class EditProviderDialog : ContentDialog
 
         if (!Catalog.Fields.TryGetValue(_type, out var fields) || fields.Length == 0) return;
 
-        var importButton = new Button
-        {
-            Content = "Import from environment",
-        };
-        AutomationProperties.SetAutomationId(importButton, $"ImportEnv_{_instanceId}");
-        AutomationProperties.SetName(importButton, "Import empty fields from environment variables");
-        importButton.Click += OnImportEnvironment;
-        FieldsPanel.Children.Add(importButton);
-
         AddSectionHeader("Connection", "Provider-specific account, CLI, or sign-in settings.");
 
         foreach (var field in fields)
         {
             var current = ReadValue(field.Key);
-            var fieldAutomationId = $"Field_{_instanceId}_{field.Key}";
+            var automationId = $"Field_{_instanceId}_{field.Key}";
 
             if (field.IsToggle)
             {
@@ -72,14 +68,24 @@ public sealed partial class EditProviderDialog : ContentDialog
                     Header = field.Label,
                     IsOn = IsTruthy(current),
                 };
-                AutomationProperties.SetAutomationId(toggle, fieldAutomationId);
+                AutomationProperties.SetAutomationId(toggle, automationId);
                 var panel = new StackPanel { Spacing = 2 };
                 panel.Children.Add(toggle);
                 AddDescription(panel, field.Description);
                 FieldsPanel.Children.Add(panel);
-                _editors.Add((field, () => toggle.IsOn ? "true" : "false"));
+                _editors.Add((field, () => toggle.IsOn ? "true" : "false", value => toggle.IsOn = IsTruthy(value)));
+                continue;
             }
-            else if (field.IsPassword)
+
+            // Text-like field: input on the left, trailing glyph buttons on the right.
+            var grid = new Grid { ColumnSpacing = 6 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            Func<string> read;
+            Action<string> write;
+            Control input;
+            if (field.IsPassword)
             {
                 var box = new PasswordBox
                 {
@@ -87,45 +93,9 @@ public sealed partial class EditProviderDialog : ContentDialog
                     Password = current,
                     PlaceholderText = field.Placeholder,
                 };
-                AutomationProperties.SetAutomationId(box, fieldAutomationId);
-                FieldsPanel.Children.Add(WrapWithDescription(box, field.Description));
-                _editors.Add((field, () => box.Password));
-            }
-            else if (field.IsFilePath)
-            {
-                var box = new TextBox
-                {
-                    Header = field.Label,
-                    Text = current,
-                    PlaceholderText = field.Placeholder,
-                };
-                AutomationProperties.SetAutomationId(box, fieldAutomationId);
-                var browse = new Button
-                {
-                    Content = new FontIcon { Glyph = BrowseGlyph, FontSize = 14 },
-                    VerticalAlignment = VerticalAlignment.Bottom,
-                };
-                AutomationProperties.SetAutomationId(browse, $"Browse_{_instanceId}_{field.Key}");
-                AutomationProperties.SetName(browse, $"Browse {field.Label}");
-                browse.Click += async (_, _) =>
-                {
-                    var path = await PickFileAsync();
-                    if (!string.IsNullOrEmpty(path)) box.Text = path;
-                };
-
-                var grid = new Grid { ColumnSpacing = 6 };
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                Grid.SetColumn(box, 0);
-                Grid.SetColumn(browse, 1);
-                grid.Children.Add(box);
-                grid.Children.Add(browse);
-
-                var wrap = new StackPanel { Spacing = 4 };
-                wrap.Children.Add(grid);
-                AddDescription(wrap, field.Description);
-                FieldsPanel.Children.Add(wrap);
-                _editors.Add((field, () => box.Text));
+                read = () => box.Password;
+                write = value => box.Password = value;
+                input = box;
             }
             else
             {
@@ -135,19 +105,82 @@ public sealed partial class EditProviderDialog : ContentDialog
                     Text = current,
                     PlaceholderText = field.Placeholder,
                 };
-                AutomationProperties.SetAutomationId(box, fieldAutomationId);
-                FieldsPanel.Children.Add(WrapWithDescription(box, field.Description));
-                _editors.Add((field, () => box.Text));
+                read = () => box.Text;
+                write = value => box.Text = value;
+                input = box;
             }
+
+            AutomationProperties.SetAutomationId(input, automationId);
+            Grid.SetColumn(input, 0);
+            grid.Children.Add(input);
+
+            var trailing = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 6,
+                VerticalAlignment = VerticalAlignment.Bottom,
+            };
+
+            if (field.IsFilePath)
+                trailing.Children.Add(BuildBrowseButton(field, write));
+
+            if (TryBuildImportButton(field, write) is { } importButton)
+                trailing.Children.Add(importButton);
+
+            if (trailing.Children.Count > 0)
+            {
+                Grid.SetColumn(trailing, 1);
+                grid.Children.Add(trailing);
+            }
+
+            var wrap = new StackPanel { Spacing = 4 };
+            wrap.Children.Add(grid);
+            AddDescription(wrap, field.Description);
+            FieldsPanel.Children.Add(wrap);
+            _editors.Add((field, read, write));
         }
     }
 
-    private void OnImportEnvironment(object sender, RoutedEventArgs e)
+    private Button BuildBrowseButton(ProviderField field, Action<string> write)
     {
-        var imported = _svc.Config.ImportEnvironment(_instanceId);
-        BuildFields();
-        if (imported > 0)
-            AppLog.Info($"edit: imported {imported} field(s) from environment for {_instanceId}");
+        var browse = new Button
+        {
+            Content = new FontIcon { Glyph = BrowseGlyph, FontSize = 14 },
+            VerticalAlignment = VerticalAlignment.Bottom,
+        };
+        AutomationProperties.SetAutomationId(browse, $"Browse_{_instanceId}_{field.Key}");
+        AutomationProperties.SetName(browse, $"Browse {field.Label}");
+        browse.Click += async (_, _) =>
+        {
+            var path = await PickFileAsync();
+            if (!string.IsNullOrEmpty(path))
+                write(path);
+        };
+        return browse;
+    }
+
+    private Button? TryBuildImportButton(ProviderField field, Action<string> write)
+    {
+        var envKeys = ProviderConfig.EnvironmentKeysFor(_type, field.Key);
+        if (envKeys.Count == 0)
+            return null;
+
+        var button = new Button
+        {
+            Content = new FontIcon { Glyph = ImportGlyph, FontSize = 14 },
+            VerticalAlignment = VerticalAlignment.Bottom,
+        };
+        var name = "Import from " + string.Join(" / ", envKeys);
+        ToolTipService.SetToolTip(button, name);
+        AutomationProperties.SetAutomationId(button, $"ImportEnv_{_instanceId}_{field.Key}");
+        AutomationProperties.SetName(button, name);
+        button.Click += (_, _) =>
+        {
+            var imported = _svc.Config.ImportEnvironmentField(_instanceId, field.Key);
+            if (imported is not null)
+                write(imported);
+        };
+        return button;
     }
 
     private void AddSectionHeader(string title, string description)
@@ -165,14 +198,6 @@ public sealed partial class EditProviderDialog : ContentDialog
             TextWrapping = TextWrapping.Wrap,
         });
         FieldsPanel.Children.Add(panel);
-    }
-
-    private static StackPanel WrapWithDescription(Control control, string? description)
-    {
-        var panel = new StackPanel { Spacing = 4 };
-        panel.Children.Add(control);
-        AddDescription(panel, description);
-        return panel;
     }
 
     private static void AddDescription(Panel panel, string? description)
@@ -203,7 +228,7 @@ public sealed partial class EditProviderDialog : ContentDialog
         var deferral = args.GetDeferral();
         try
         {
-            foreach (var (field, read) in _editors)
+            foreach (var (field, read, _) in _editors)
                 _svc.Config.Set(ScopedKey(field.Key), read());
 
             await _svc.Config.SaveAsync();

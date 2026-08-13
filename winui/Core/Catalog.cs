@@ -485,7 +485,9 @@ public static class Catalog
             new ProviderField("qoder_app_path", "Qoder app location", @"%ProgramFiles%\QoderWork\QoderWork\QoderWork.exe", IsFilePath: true,
                 Description: "Optional GUI app path. This does not affect qodercli credit tracking."),
             new ProviderField("qoder_cli_path", "Qoder CLI location", @"%ProgramFiles%\QoderWork\QoderWork\resources\bin\qodercli.exe", IsFilePath: true,
-                Description: "Leave empty to use QODER_CLI_PATH, then the default QoderWork install path."),
+                Description: "Leave empty to use the default QoderWork install path."),
+            new ProviderField("qoder_token", "Personal access token", "...", IsPassword: true,
+                Description: "Optional qodercli token. Import it from QODER_PERSONAL_ACCESS_TOKEN, or paste it here."),
         },
         ["kimi"] = new[]
         {
@@ -633,7 +635,7 @@ public static class Catalog
         ["kilo"] = new[]
         {
             new ProviderField("kilo_key", "API Key", "...", IsPassword: true,
-                Description: "Optional. Leave empty to use KILO_API_KEY or the Kilo CLI auth file."),
+                Description: "Optional. Leave empty to use the Kilo CLI auth file."),
             new ProviderField("kilo_auth_path", "CLI auth file", @"%USERPROFILE%\.local\share\kilo\auth.json", IsFilePath: true,
                 Description: "Optional Kilo CLI auth file created by kilo login."),
             new ProviderField("kilo_organization_id", "Organization ID", "...",
@@ -1249,6 +1251,7 @@ public static class Catalog
             ["codex"] = FieldEnv(("codex_home", ["CODEX_HOME"])),
             ["kilo"] = FieldEnv(
                 ("kilo_key", ["KILO_API_KEY"]),
+                ("kilo_auth_path", ["KILO_AUTH_PATH"]),
                 ("kilo_base_url", ["KILO_API_URL"])),
             ["groq"] = FieldEnv(
                 ("groq_key", ["GROQ_API_KEY"]),
@@ -1262,9 +1265,20 @@ public static class Catalog
                 ("vertexai_gcloud_config_dir", ["CLOUDSDK_CONFIG"])),
             ["grok"] = FieldEnv(("grok_path", ["GROK_CLI_PATH"])),
             ["doubao"] = FieldEnv(("doubao_cli_path", ["ARKCLI_PATH", "DOUBAO_ARKCLI_PATH"])),
-            ["qoder"] = FieldEnv(("qoder_cli_path", ["QODER_CLI_PATH"])),
+            ["qoder"] = FieldEnv(
+                ("qoder_cli_path", ["QODER_CLI_PATH"]),
+                ("qoder_token", ["QODER_PERSONAL_ACCESS_TOKEN"])),
             ["openrouter"] = FieldEnv(("openrouter_management_key", ["OPENROUTER_MANAGEMENT_KEY"])),
             ["openai"] = FieldEnv(("openai_project_ids", ["OPENAI_PROJECT_IDS", "OPENAI_PROJECT_ID"])),
+            ["elevenlabs"] = FieldEnv(("elevenlabs_base_url", ["ELEVENLABS_API_URL"])),
+            ["moonshot"] = FieldEnv(("moonshot_base_url", ["MOONSHOT_API_URL"])),
+            ["codebuff"] = FieldEnv(("codebuff_base_url", ["CODEBUFF_API_URL"])),
+            ["synthetic"] = FieldEnv(("synthetic_url", ["SYNTHETIC_API_URL"])),
+            ["zai"] = FieldEnv(
+                ("zai_base_url", ["Z_AI_API_HOST", "ZAI_API_HOST"]),
+                ("zai_quota_url", ["Z_AI_QUOTA_URL", "ZAI_QUOTA_URL"])),
+            ["llmproxy"] = FieldEnv(("llmproxy_base_url", ["LLM_PROXY_BASE_URL", "LLMPROXY_BASE_URL"])),
+            ["copilot"] = FieldEnv(("copilot_enterprise_host", ["COPILOT_ENTERPRISE_HOST"])),
         };
 
     private static IReadOnlyDictionary<string, string[]> FieldEnv(params (string Key, string[] Env)[] entries) =>

@@ -169,6 +169,7 @@ public sealed class CliTokenKeepAliveServiceTests
         }
 
         public int ImportEnvironment(string instanceId) => 0;
+        public string? ImportEnvironmentField(string instanceId, string fieldKey) => null;
 
         public ProviderInstance AddInstance(string providerType) =>
             throw new NotSupportedException();

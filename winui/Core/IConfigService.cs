@@ -20,6 +20,12 @@ public interface IConfigService : IConfig
     /// </summary>
     int ImportEnvironment(string instanceId);
 
+    /// <summary>
+    /// Imports ONE field from its environment variable (only when the field is empty),
+    /// persists, and returns the imported value — or null when there was nothing to import.
+    /// </summary>
+    string? ImportEnvironmentField(string instanceId, string fieldKey);
+
     /// Explicit provider instances selected by the user.
     IReadOnlyList<ProviderInstance> Instances { get; }
     ProviderInstance AddInstance(string providerType);

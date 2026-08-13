@@ -123,26 +123,36 @@ public sealed class ConfigService : IConfigService
         var imported = 0;
         foreach (var field in fields)
         {
-            var current = GetScoped(instanceId, field.Key);
-            if (!string.IsNullOrWhiteSpace(current))
-                continue; // never clobber a value the user already set
-
-            foreach (var envKey in ProviderConfig.EnvironmentKeysFor(instance.Type, field.Key))
-            {
-                var value = ProviderConfig.Environment(envKey);
-                if (string.IsNullOrWhiteSpace(value))
-                    continue;
-
-                Set(ScopedKey(instanceId, field.Key), value);
+            if (ImportEnvironmentField(instanceId, field.Key) is not null)
                 imported++;
-                break;
-            }
         }
 
-        if (imported > 0)
-            Persist();
-
         return imported;
+    }
+
+    public string? ImportEnvironmentField(string instanceId, string fieldKey)
+    {
+        var current = GetScoped(instanceId, fieldKey);
+        if (!string.IsNullOrWhiteSpace(current))
+            return null; // never clobber a value the user already set
+
+        var instance = _instances.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, instanceId, StringComparison.OrdinalIgnoreCase));
+        if (instance is null)
+            return null;
+
+        foreach (var envKey in ProviderConfig.EnvironmentKeysFor(instance.Type, fieldKey))
+        {
+            var value = ProviderConfig.Environment(envKey);
+            if (string.IsNullOrWhiteSpace(value))
+                continue;
+
+            Set(ScopedKey(instanceId, fieldKey), value);
+            Persist();
+            return value;
+        }
+
+        return null;
     }
 
     public async Task SaveAsync()

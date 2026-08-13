@@ -148,8 +148,7 @@ public sealed class KiloProvider : IProvider
         if (configured is not null)
             return configured;
 
-        var authPath = ProviderConfig.Clean(config.GetScoped(instanceId, "kilo_auth_path"))
-            ?? ProviderConfig.Environment("KILO_AUTH_PATH")
+        var authPath = ProviderConfig.Scoped(instanceId, config, "kilo_auth_path")
             ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".local",

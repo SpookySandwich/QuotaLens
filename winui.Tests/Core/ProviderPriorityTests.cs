@@ -670,6 +670,7 @@ public sealed class ProviderPriorityTests
         public void Remove(string key) { }
         public Task SaveAsync() => Task.CompletedTask;
         public int ImportEnvironment(string instanceId) => 0;
+        public string? ImportEnvironmentField(string instanceId, string fieldKey) => null;
         public ProviderInstance AddInstance(string providerType) => instance;
         public void RemoveInstance(string id) { }
     }
