@@ -168,6 +168,8 @@ public sealed class CliTokenKeepAliveServiceTests
             return Task.CompletedTask;
         }
 
+        public int ImportEnvironment(string instanceId) => 0;
+
         public ProviderInstance AddInstance(string providerType) =>
             throw new NotSupportedException();
 

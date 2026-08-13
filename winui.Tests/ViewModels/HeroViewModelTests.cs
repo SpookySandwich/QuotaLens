@@ -335,6 +335,7 @@ public sealed class HeroViewModelTests
         public void SetMany(IReadOnlyDictionary<string, string> values) { }
         public void Remove(string key) => _values.Remove(key);
         public Task SaveAsync() => Task.CompletedTask;
+        public int ImportEnvironment(string instanceId) => 0;
         public ProviderInstance AddInstance(string providerType) => new(providerType, providerType, providerType);
         public void RemoveInstance(string id) { }
     }

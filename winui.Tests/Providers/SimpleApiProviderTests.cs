@@ -1295,24 +1295,24 @@ public sealed class SimpleApiProviderTests
     }
 
     [TestMethod]
-    public void ScopedOrEnvironment_WithExplicitBlankScopedValue_DoesNotUseEnvironmentFallback()
+    public void Scoped_IsConfigOnlyAndNeverConsultsTheEnvironment()
     {
         var previous = Environment.GetEnvironmentVariable("QUOTALENS_TEST_API_KEY");
         try
         {
             Environment.SetEnvironmentVariable("QUOTALENS_TEST_API_KEY", "env-token");
-            var config = new FakeConfig(new Dictionary<string, string>
+
+            var blank = new FakeConfig(new Dictionary<string, string>
             {
                 ["deepseek-new.deepseek_key"] = "",
             });
+            Assert.IsNull(ProviderConfig.Scoped("deepseek-new", blank, "deepseek_key"));
 
-            var value = ProviderConfig.ScopedOrEnvironment(
-                "deepseek-new",
-                config,
-                "deepseek_key",
-                "QUOTALENS_TEST_API_KEY");
-
-            Assert.IsNull(value);
+            var set = new FakeConfig(new Dictionary<string, string>
+            {
+                ["deepseek-new.deepseek_key"] = "from-config",
+            });
+            Assert.AreEqual("from-config", ProviderConfig.Scoped("deepseek-new", set, "deepseek_key"));
         }
         finally
         {
