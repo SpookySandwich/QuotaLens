@@ -38,7 +38,7 @@ public sealed class ClaudeProvider : IProvider
 
     private readonly Func<ClaudeOAuth?> _readToken;
     private readonly Func<string, CancellationToken, Task<HttpResponseMessage>> _sendUsageAsync;
-    private readonly Func<IConfig, CancellationToken, Task<bool>> _refreshViaCliAsync;
+    private readonly Func<string, IConfig, CancellationToken, Task<bool>> _refreshViaCliAsync;
 
     public ClaudeProvider()
         : this(ReadToken, SendUsageAsync, RefreshViaCliAsync)
@@ -48,11 +48,11 @@ public sealed class ClaudeProvider : IProvider
     internal ClaudeProvider(
         Func<ClaudeOAuth?> readToken,
         Func<string, CancellationToken, Task<HttpResponseMessage>> sendUsageAsync,
-        Func<IConfig, CancellationToken, Task<bool>>? refreshViaCliAsync = null)
+        Func<string, IConfig, CancellationToken, Task<bool>>? refreshViaCliAsync = null)
     {
         _readToken = readToken;
         _sendUsageAsync = sendUsageAsync;
-        _refreshViaCliAsync = refreshViaCliAsync ?? ((_, _) => Task.FromResult(false));
+        _refreshViaCliAsync = refreshViaCliAsync ?? ((_, _, _) => Task.FromResult(false));
     }
 
     public string Type => "claude";
@@ -140,7 +140,7 @@ public sealed class ClaudeProvider : IProvider
 
         // Only a live session is worth refreshing; without a stored session the user is
         // genuinely signed out and no CLI command will help.
-        if (!oauth.HasStoredSession || !await RefreshTokenViaCliAsync(config, ct).ConfigureAwait(false))
+        if (!oauth.HasStoredSession || !await RefreshTokenViaCliAsync(instanceId, config, ct).ConfigureAwait(false))
             throw AuthFailure(oauth);
 
         var refreshed = _readToken();
@@ -154,11 +154,11 @@ public sealed class ClaudeProvider : IProvider
         return await ParseSnapshotAsync(refreshed, retry, ct).ConfigureAwait(false);
     }
 
-    private async Task<bool> RefreshTokenViaCliAsync(IConfig config, CancellationToken ct)
+    private async Task<bool> RefreshTokenViaCliAsync(string instanceId, IConfig config, CancellationToken ct)
     {
         try
         {
-            return await _refreshViaCliAsync(config, ct).ConfigureAwait(false);
+            return await _refreshViaCliAsync(instanceId, config, ct).ConfigureAwait(false);
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
@@ -174,12 +174,9 @@ public sealed class ClaudeProvider : IProvider
     /// the exit code. Runs in a neutral directory so 'claude mcp list' cannot spawn MCP
     /// servers declared by a project-local .mcp.json.
     /// </summary>
-    private static async Task<bool> RefreshViaCliAsync(IConfig config, CancellationToken ct)
+    private static async Task<bool> RefreshViaCliAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var configured = config.Get("claude_path");
-        var binary = string.IsNullOrWhiteSpace(configured)
-            ? "claude"
-            : Environment.ExpandEnvironmentVariables(configured);
+        var binary = ProviderConfig.ResolveCliPath(instanceId, config, "claude_path", "claude");
 
         return await CliTokenRefresher.TryRefreshAsync(
             binary,

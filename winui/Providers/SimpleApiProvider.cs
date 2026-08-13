@@ -1963,14 +1963,7 @@ public sealed class SimpleApiProvider : IProvider
         return AppendPath(baseUrl!, path);
     }
 
-    private static string AppendPath(string baseUrl, string path)
-    {
-        var trimmed = baseUrl.Trim().TrimEnd('/');
-        var normalizedPath = path.TrimStart('/');
-        if (trimmed.EndsWith(normalizedPath, StringComparison.OrdinalIgnoreCase))
-            return trimmed;
-        return $"{trimmed}/{normalizedPath}";
-    }
+    private static string AppendPath(string baseUrl, string path) => ProviderConfig.AppendPath(baseUrl, path);
 
     private static void ApplyBearerAuth(HttpRequestMessage request, string token)
     {
@@ -2230,20 +2223,9 @@ public sealed class SimpleApiProvider : IProvider
         ("days", 24 * 60), ("day", 24 * 60), ("d", 24 * 60),
     };
 
-    private static string? Clean(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return null;
-        var trimmed = value.Trim();
-        if ((trimmed.StartsWith('"') && trimmed.EndsWith('"')) || (trimmed.StartsWith('\'') && trimmed.EndsWith('\'')))
-            trimmed = trimmed[1..^1].Trim();
-        return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
-    }
+    private static string? Clean(string? value) => ProviderConfig.Clean(value);
 
-    private static string? Env(string key) =>
-        Clean(Environment.GetEnvironmentVariable(key))
-        ?? Clean(Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User))
-        ?? Clean(Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Machine));
+    private static string? Env(string key) => ProviderConfig.Environment(key);
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();

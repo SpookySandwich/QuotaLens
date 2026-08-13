@@ -33,6 +33,25 @@ internal static partial class ProviderConfig
         ?? Clean(System.Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User))
         ?? Clean(System.Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Machine));
 
+    /// <summary>
+    /// Resolves a CLI binary the same way every CLI-backed provider does: per-instance
+    /// config value, then environment variable(s), then a bare command name left for
+    /// <see cref="HiddenCliProcess"/> to resolve on PATH. Configured values are
+    /// environment-expanded (so %VAR% in a user-set path works).
+    /// </summary>
+    public static string ResolveCliPath(
+        string instanceId,
+        IConfig config,
+        string configKey,
+        string fallbackCommand,
+        params string[] environmentKeys)
+    {
+        var configured = ScopedOrEnvironment(instanceId, config, configKey, environmentKeys);
+        return string.IsNullOrWhiteSpace(configured)
+            ? fallbackCommand
+            : System.Environment.ExpandEnvironmentVariables(configured);
+    }
+
     public static string? Clean(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))

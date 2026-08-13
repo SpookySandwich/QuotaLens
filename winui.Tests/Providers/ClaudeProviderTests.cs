@@ -384,7 +384,7 @@ public sealed class ClaudeProviderTests
                     ? UsageResponse(0.25)
                     : Response(HttpStatusCode.Unauthorized));
             },
-            (_, _) => { refreshes++; return Task.FromResult(true); });
+            (_, _, _) => { refreshes++; return Task.FromResult(true); });
 
         var snapshot = await provider.FetchAsync("claude", new EmptyConfig(), CancellationToken.None);
 
@@ -400,7 +400,7 @@ public sealed class ClaudeProviderTests
         var provider = new ClaudeProvider(
             () => LiveSessionOAuth("stale-token"),
             (_, _) => Task.FromResult(Response(HttpStatusCode.Unauthorized)),
-            (_, _) => { refreshes++; return Task.FromResult(false); });
+            (_, _, _) => { refreshes++; return Task.FromResult(false); });
 
         var exception = await Assert.ThrowsExactlyAsync<ProviderException>(() =>
             provider.FetchAsync("claude", new EmptyConfig(), CancellationToken.None));
@@ -418,7 +418,7 @@ public sealed class ClaudeProviderTests
         var provider = new ClaudeProvider(
             () => OAuth("rejected-token", "max"),
             (_, _) => Task.FromResult(Response(HttpStatusCode.Unauthorized)),
-            (_, _) => { refreshes++; return Task.FromResult(true); });
+            (_, _, _) => { refreshes++; return Task.FromResult(true); });
 
         var exception = await Assert.ThrowsExactlyAsync<ProviderException>(() =>
             provider.FetchAsync("claude", new EmptyConfig(), CancellationToken.None));
@@ -435,7 +435,7 @@ public sealed class ClaudeProviderTests
         var provider = new ClaudeProvider(
             () => LiveSessionOAuth("stale-token"),
             (_, _) => { usageRequests++; return Task.FromResult(Response(HttpStatusCode.Unauthorized)); },
-            (_, _) => Task.FromResult(true));
+            (_, _, _) => Task.FromResult(true));
 
         await Assert.ThrowsExactlyAsync<ProviderException>(() =>
             provider.FetchAsync("claude", new EmptyConfig(), CancellationToken.None));

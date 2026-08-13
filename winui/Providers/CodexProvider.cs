@@ -174,13 +174,9 @@ public sealed class CodexProvider : IProvider
 
     private static string ResolveCodexHome(string instanceId, IConfig config)
     {
-        var configured = FirstNonEmpty(
-            config.GetScoped(instanceId, "codex_home"),
-            Environment.GetEnvironmentVariable("CODEX_HOME"),
-            Environment.GetEnvironmentVariable("CODEX_HOME", EnvironmentVariableTarget.User),
-            Environment.GetEnvironmentVariable("CODEX_HOME", EnvironmentVariableTarget.Machine));
+        var configured = ProviderConfig.ScopedOrEnvironment(instanceId, config, "codex_home", "CODEX_HOME");
         if (!string.IsNullOrWhiteSpace(configured))
-            return Environment.ExpandEnvironmentVariables(configured!.Trim().Trim('"'));
+            return Environment.ExpandEnvironmentVariables(configured);
 
         var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         return string.IsNullOrWhiteSpace(profile) ? ".codex" : Path.Combine(profile, ".codex");

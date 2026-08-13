@@ -38,7 +38,7 @@ public sealed class GrokProvider : IProvider
 
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var binary = ResolveGrokPath(config.GetScoped(instanceId, "grok_path"));
+        var binary = ResolveGrokPath(instanceId, config);
         AppLog.Info($"grok: fetch for {instanceId}, CLI='{binary}'");
 
         var home = GrokHome();
@@ -529,15 +529,8 @@ public sealed class GrokProvider : IProvider
         };
     }
 
-    internal static string ResolveGrokPath(string? configured)
-    {
-        var explicitPath = ProviderConfig.Clean(configured)
-            ?? ProviderConfig.Environment("GROK_CLI_PATH");
-        if (explicitPath is not null)
-            return Environment.ExpandEnvironmentVariables(explicitPath);
-
-        return "grok";
-    }
+    internal static string ResolveGrokPath(string instanceId, IConfig config) =>
+        ProviderConfig.ResolveCliPath(instanceId, config, "grok_path", "grok", "GROK_CLI_PATH");
 
     // ---- silent CLI token refresh -------------------------------------------
 

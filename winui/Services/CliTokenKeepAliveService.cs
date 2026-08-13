@@ -1,5 +1,6 @@
 using System.Globalization;
 using QuotaLens.Core;
+using QuotaLens.Providers;
 
 namespace QuotaLens.Services;
 
@@ -14,7 +15,8 @@ public sealed record CliTokenKeepAliveDescriptor(
     IReadOnlyList<string> Arguments,
     TimeSpan Interval,
     TimeSpan Timeout,
-    string? CliPathFieldKey = null);
+    string? CliPathFieldKey = null,
+    IReadOnlyList<string>? EnvironmentKeys = null);
 
 /// <summary>
 /// The closed set of proactive keep-alive schedules. Adding a provider here is
@@ -36,7 +38,8 @@ public static class CliTokenKeepAliveCatalog
                 CliRefreshCommands.Grok,
                 Interval: TimeSpan.FromDays(1),
                 Timeout: TimeSpan.FromSeconds(45),
-                CliPathFieldKey: "grok_path"),
+                CliPathFieldKey: "grok_path",
+                EnvironmentKeys: ["GROK_CLI_PATH"]),
         };
 }
 
@@ -161,7 +164,10 @@ public sealed class CliTokenKeepAliveService
         AppLog.Info($"keepalive: {descriptor.ProviderType} outcome={outcome}");
     }
 
-    /// <summary>Per-instance scoped path first, then the bare command (PATH resolution).</summary>
+    /// <summary>
+    /// Resolves the binary the same way the provider does (scoped config, then its
+    /// environment keys, then the bare command left for PATH resolution).
+    /// </summary>
     private string ResolveBinary(CliTokenKeepAliveDescriptor descriptor)
     {
         if (descriptor.CliPathFieldKey is not null)
@@ -171,9 +177,12 @@ public sealed class CliTokenKeepAliveService
                 if (!string.Equals(instance.Type, descriptor.ProviderType, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                var scoped = _config.GetScoped(instance.Id, descriptor.CliPathFieldKey);
-                if (!string.IsNullOrWhiteSpace(scoped))
-                    return Environment.ExpandEnvironmentVariables(scoped);
+                return ProviderConfig.ResolveCliPath(
+                    instance.Id,
+                    _config,
+                    descriptor.CliPathFieldKey,
+                    descriptor.CliCommand,
+                    descriptor.EnvironmentKeys?.ToArray() ?? []);
             }
         }
 
