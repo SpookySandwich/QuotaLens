@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using QuotaLens.Core;
+using static QuotaLens.Core.StringValues;
 
 namespace QuotaLens.Providers;
 
@@ -2227,8 +2228,7 @@ public sealed class SimpleApiProvider : IProvider
 
     private static string? Env(string key) => ProviderConfig.Environment(key);
 
-    private static string? FirstNonEmpty(params string?[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
 
     private static string? DisplayName(string? value)
     {

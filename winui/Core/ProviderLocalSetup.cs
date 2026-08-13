@@ -1,3 +1,5 @@
+using static QuotaLens.Core.StringValues;
+
 namespace QuotaLens.Core;
 
 /// <summary>
@@ -231,8 +233,7 @@ public static class ProviderLocalSetup
             Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.User),
             Environment.GetEnvironmentVariable(key, EnvironmentVariableTarget.Machine));
 
-    private static string? FirstNonEmpty(params string?[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
 
     private static bool ContainsWildcard(string path) =>
         path.Contains('*') || path.Contains('?');

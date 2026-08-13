@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using QuotaLens.Core;
+using static QuotaLens.Core.StringValues;
 
 namespace QuotaLens.Providers;
 
@@ -598,8 +599,7 @@ public sealed class VertexAIProvider : IProvider
             ? ProviderConfig.Clean(value.GetString())
             : null;
 
-    private static string? FirstNonEmpty(params string?[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
 
     private static string Expand(string path)
     {

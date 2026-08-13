@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using QuotaLens.Core;
+using static QuotaLens.Core.StringValues;
 
 namespace QuotaLens.Providers;
 
@@ -490,8 +491,7 @@ public sealed class CodexProvider : IProvider
         };
     }
 
-    private static string? FirstNonEmpty(params string?[] values) =>
-        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim();
+
 
     private static string? PlanDisplay(string? plan)
     {

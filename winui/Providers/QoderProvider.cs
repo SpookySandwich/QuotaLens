@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
+using static QuotaLens.Core.StringValues;
 
 namespace QuotaLens.Providers;
 
@@ -411,8 +412,7 @@ public sealed class QoderProvider : IProvider
             };
     }
 
-    private static string? FirstNonEmpty(params string?[] values)
-        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
 
     private static string Fmt0(double v) => v.ToString("F0", CultureInfo.InvariantCulture);
 
