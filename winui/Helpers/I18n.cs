@@ -211,6 +211,7 @@ public static class I18n
         ["quota.noVeniceBalance"] = "No Venice API balance available",
         ["quota.errorLabel"] = "Error",
         ["quota.refresh"] = "Refresh",
+        ["quota.resets"] = "resets",
         ["quota.noVertexQuota"] = "No Vertex AI quota data found for the current project.",
         ["quota.limitUnavailable"] = "Limit unavailable",
         ["timeline.usedCapacity"] = "Used capacity",
@@ -460,6 +461,7 @@ public static class I18n
         ["quota.noVeniceBalance"] = "无 Venice API 余额可用",
         ["quota.errorLabel"] = "错误",
         ["quota.refresh"] = "刷新",
+        ["quota.resets"] = "重置：",
         ["quota.noVertexQuota"] = "当前项目没有 Vertex AI 配额数据。",
         ["quota.limitUnavailable"] = "限额不可用",
         ["timeline.usedCapacity"] = "已使用容量",
@@ -581,6 +583,54 @@ public static class I18n
     /// <summary>Localized label for a provider field; English labels pass through.</summary>
     public static string FieldLabel(string label) =>
         Current == Lang.Zh && FieldLabelZh.TryGetValue(label, out var zh) ? zh : label;
+
+    /// <summary>
+    /// Localized rate-window label ("5h Pool", "Weekly", "Monthly credits" …).
+    /// Applied only at display time; raw labels keep their English form for logic.
+    /// </summary>
+    public static string WindowLabel(string label) =>
+        Current == Lang.Zh && WindowLabelZh.TryGetValue(label, out var zh) ? zh : label;
+
+    private static readonly Dictionary<string, string> WindowLabelZh = new()
+    {
+        ["5h"] = "5 小时",
+        ["5h Pool"] = "5 小时池",
+        ["5h Window"] = "5 小时窗口",
+        ["5h Rate Limit"] = "5 小时速率限制",
+        ["7d Pool"] = "7 天池",
+        ["Weekly"] = "每周",
+        ["Weekly Pool"] = "每周池",
+        ["Weekly included"] = "每周已包含",
+        ["Weekly usage"] = "每周用量",
+        ["Weekly Requests"] = "每周请求",
+        ["Monthly"] = "每月",
+        ["Monthly credits"] = "每月积分",
+        ["Monthly included"] = "每月已包含",
+        ["Monthly usage"] = "每月用量",
+        ["Monthly spend"] = "每月支出",
+        ["Effective Usage"] = "有效用量",
+        ["Credits"] = "积分",
+        ["Tokens"] = "Token",
+        ["Requests"] = "请求数",
+        ["Audio"] = "音频",
+        ["Tokens / TTS"] = "Token / TTS",
+        ["Cache hits"] = "缓存命中",
+        ["Balance"] = "余额",
+        ["Account Balance"] = "账户余额",
+        ["Today usage"] = "今日用量",
+        ["Month usage"] = "本月用量",
+        ["Top model"] = "主力模型",
+        ["Concurrency"] = "并发数",
+        ["Plan status"] = "套餐状态",
+        ["Plan expired"] = "套餐已过期",
+        ["Bonus credits"] = "赠送积分",
+        ["Kilo Pass"] = "Kilo Pass",
+        ["API key credit limit"] = "API 密钥额度",
+        ["Rate Limit"] = "速率限制",
+        ["On-demand"] = "按需",
+        ["Other"] = "其他",
+        ["Standard"] = "标准",
+    };
 
     private static readonly Dictionary<string, string> FieldLabelZh = new()
     {
