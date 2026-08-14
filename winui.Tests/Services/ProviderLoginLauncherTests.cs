@@ -114,31 +114,31 @@ public sealed class ProviderLoginLauncherTests
     }
 
     [TestMethod]
-    public void BuildStartInfo_UsesAVisibleShellAndKeepsTheWindowOpen()
+    public void BuildStartInfo_LaunchesAVisiblePowerShellThatClosesOnSuccess()
     {
-        var startInfo = TerminalLauncher.BuildStartInfo(null, "ZW5jb2RlZA==", "claude");
+        var startInfo = TerminalLauncher.BuildStartInfo("ZW5jb2RlZA==");
 
         // Visible: signing in is interactive, and UseShellExecute gives it its own console
         // instead of hiding inside whatever console launched QuotaLens.
         Assert.IsTrue(startInfo.UseShellExecute);
         Assert.IsFalse(startInfo.CreateNoWindow);
         StringAssert.Contains(startInfo.FileName, "powershell");
-        CollectionAssert.Contains(startInfo.ArgumentList.ToArray(), "-NoExit");
         CollectionAssert.Contains(startInfo.ArgumentList.ToArray(), "-EncodedCommand");
+        // -NoExit is gone: the script itself exits on success and Read-Hosts on failure.
+        CollectionAssert.DoesNotContain(startInfo.ArgumentList.ToArray(), "-NoExit");
         // -NonInteractive would break the very thing this window exists for.
         CollectionAssert.DoesNotContain(startInfo.ArgumentList.ToArray(), "-NonInteractive");
     }
 
     [TestMethod]
-    public void BuildStartInfo_ForWindowsTerminal_TerminatesItsOwnOptions()
+    public void EncodeLoginScript_AutoClosesOnSuccessAndKeepsOpenOnFailure()
     {
-        var startInfo = TerminalLauncher.BuildStartInfo(@"C:\wt.exe", "ZW5jb2RlZA==", "gemini");
-        var arguments = startInfo.ArgumentList.ToArray();
+        var encoded = TerminalLauncher.EncodeLoginScript("grok", ["login"], "grok");
+        var script = System.Text.Encoding.Unicode.GetString(System.Convert.FromBase64String(encoded));
 
-        // Without the -- terminator, wt parses -NoLogo as one of its own options.
-        var terminator = System.Array.IndexOf(arguments, "--");
-        Assert.IsTrue(terminator > 0, "wt invocation must terminate its options with --");
-        Assert.IsTrue(System.Array.IndexOf(arguments, "-EncodedCommand") > terminator);
+        StringAssert.Contains(script, "exit 0");               // auto-close on success
+        StringAssert.Contains(script, "Read-Host");            // keep open on failure
+        StringAssert.Contains(script, "Start-Sleep -Seconds 2");
     }
 
     [TestMethod]

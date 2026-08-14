@@ -12,6 +12,9 @@ public enum TerminalLaunchOutcome
     LaunchFailed,
 }
 
+/// <summary>Result of a login-terminal launch: the outcome plus the process to await.</summary>
+public sealed record TerminalLaunchResult(TerminalLaunchOutcome Outcome, Process? Process);
+
 /// <summary>
 /// Opens a VISIBLE terminal running a provider's sign-in command, so signing in is a
 /// button press instead of an instruction to go do it yourself.
@@ -24,51 +27,40 @@ public enum TerminalLaunchOutcome
 /// </summary>
 public static class TerminalLauncher
 {
-    public static TerminalLaunchOutcome TryLaunchLogin(
+    public static TerminalLaunchResult TryLaunchLogin(
         string providerType,
         string instanceId,
         IConfig config)
     {
         if (!ProviderLoginCatalog.TryGet(providerType, out var descriptor))
-            return TerminalLaunchOutcome.CliMissing;
+            return new(TerminalLaunchOutcome.CliMissing, null);
 
         if (!TryResolveCli(descriptor, instanceId, config, out var binary))
         {
             AppLog.Warn($"login: {providerType} CLI not resolved (command '{descriptor.CliCommand}'); offering install page");
-            return TerminalLaunchOutcome.CliMissing;
+            return new(TerminalLaunchOutcome.CliMissing, null);
         }
 
         var arguments = LoginArguments(descriptor, instanceId, config);
         var encoded = EncodeLoginScript(binary, arguments, descriptor.ProviderType);
         AppLog.Info($"login: launching {binary} {string.Join(" ", arguments)} for {providerType}");
 
-        // Windows Terminal first, console host as fallback. An app-execution alias can
-        // exist yet fail to launch (stale alias after the Store app is removed), so a
-        // wt failure must fall through rather than be reported as terminal failure.
-        foreach (var startInfo in CandidateStartInfos(encoded, descriptor.ProviderType))
+        var startInfo = BuildStartInfo(encoded);
+        try
         {
-            try
+            var process = Process.Start(startInfo);
+            if (process is not null)
             {
-                // Never WaitForExit: wt.exe hands off to the Windows Terminal process and
-                // exits immediately, so its exit code says nothing about the sign-in.
-                if (Process.Start(startInfo) is not null)
-                {
-                    AppLog.Info($"login: {providerType} terminal started ({Path.GetFileName(startInfo.FileName)})");
-                    return TerminalLaunchOutcome.Started;
-                }
-            }
-            catch (Win32Exception)
-            {
-                // Try the next host.
-            }
-            catch (Exception)
-            {
-                // Try the next host.
+                AppLog.Info($"login: {providerType} terminal started ({Path.GetFileName(startInfo.FileName)})");
+                return new(TerminalLaunchOutcome.Started, process);
             }
         }
+        catch (Exception e)
+        {
+            AppLog.Warn($"login: {providerType} terminal launch failed: {e.Message}");
+        }
 
-        AppLog.Error($"login: {providerType} terminal launch failed for binary {binary}");
-        return TerminalLaunchOutcome.LaunchFailed;
+        return new(TerminalLaunchOutcome.LaunchFailed, null);
     }
 
     /// <summary>
@@ -171,9 +163,12 @@ public static class TerminalLauncher
             "& $binary @cliArguments",
             "Write-Host ''",
             "if ($LASTEXITCODE -eq 0) {",
-            "    Write-Host 'Sign-in finished. You can close this window - QuotaLens will pick it up.' -ForegroundColor Green",
+            "    Write-Host 'Sign-in finished. QuotaLens will refresh automatically.' -ForegroundColor Green",
+            "    Start-Sleep -Seconds 2",
+            "    exit 0",
             "} else {",
-            "    Write-Host \"Sign-in exited with code $LASTEXITCODE. This window stays open so you can read the error.\" -ForegroundColor Yellow",
+            "    Write-Host \"Sign-in exited with code $LASTEXITCODE. Press Enter to close this window.\" -ForegroundColor Yellow",
+            "    Read-Host",
             "}",
         };
         var script = string.Join(Environment.NewLine, lines);
@@ -183,23 +178,14 @@ public static class TerminalLauncher
 
     private static string Quote(string value) => "'" + value.Replace("'", "''") + "'";
 
-    internal static IEnumerable<ProcessStartInfo> CandidateStartInfos(string encoded, string providerType)
-    {
-        var windowsTerminal = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Microsoft", "WindowsApps", "wt.exe");
-        if (File.Exists(windowsTerminal))
-            yield return BuildStartInfo(windowsTerminal, encoded, providerType);
-
-        yield return BuildStartInfo(null, encoded, providerType);
-    }
-
     /// <summary>
     /// Builds — never starts — the start info, so shape can be asserted in tests.
     /// UseShellExecute gives the child its own console; without it the sign-in prompt
-    /// would inherit (and hide inside) whatever console launched QuotaLens.
+    /// would inherit (and hide inside) whatever console launched QuotaLens. Launched
+    /// directly (not via Windows Terminal) so the caller holds the process handle and
+    /// can await its exit once sign-in finishes.
     /// </summary>
-    internal static ProcessStartInfo BuildStartInfo(string? windowsTerminalPath, string encoded, string providerType)
+    internal static ProcessStartInfo BuildStartInfo(string encoded)
     {
         var powershell = Path.Combine(
             Environment.SystemDirectory,
@@ -211,30 +197,15 @@ public static class TerminalLauncher
         {
             UseShellExecute = true,
             CreateNoWindow = false,
+            FileName = powershell,
         };
-
-        if (windowsTerminalPath is null)
-        {
-            startInfo.FileName = powershell;
-            foreach (var argument in PowerShellArguments(encoded))
-                startInfo.ArgumentList.Add(argument);
-            return startInfo;
-        }
-
-        startInfo.FileName = windowsTerminalPath;
-        startInfo.ArgumentList.Add("new-tab");
-        startInfo.ArgumentList.Add("--title");
-        startInfo.ArgumentList.Add($"QuotaLens · {providerType}");
-        // The -- terminator is required, or wt parses -NoLogo as one of its own options.
-        startInfo.ArgumentList.Add("--");
-        startInfo.ArgumentList.Add(powershell);
         foreach (var argument in PowerShellArguments(encoded))
             startInfo.ArgumentList.Add(argument);
         return startInfo;
     }
 
-    // -NoExit keeps the window open so the user can read a failure. Deliberately NOT
-    // -NonInteractive: signing in is interactive by definition.
+    // Deliberately NOT -NonInteractive: signing in is interactive by definition. The
+    // window closes itself on success (exit 0) and stays open on failure (Read-Host).
     private static IEnumerable<string> PowerShellArguments(string encoded) =>
-        ["-NoLogo", "-NoProfile", "-NoExit", "-EncodedCommand", encoded];
+        ["-NoLogo", "-NoProfile", "-EncodedCommand", encoded];
 }

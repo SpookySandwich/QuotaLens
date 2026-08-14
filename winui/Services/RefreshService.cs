@@ -224,11 +224,20 @@ public sealed class RefreshService : IProviderService
         var type = inst.Type;
         if (ProviderLoginLauncher.IsSupported(type))
         {
-            // Falls back to the CLI's install page when the binary is missing, so the
-            // button always does something the user can see rather than silently failing.
-            if (ProviderLoginLauncher.TryStartLoginOrInstall(type, instanceId, Config))
+            var launch = ProviderLoginLauncher.TryLaunch(type, instanceId, Config);
+            if (launch.Outcome == TerminalLaunchOutcome.Started)
             {
-                _ = RefreshAsync(instanceId);
+                // The login terminal closes itself once sign-in finishes; await that, then
+                // refresh so the card reflects the fresh login state without a manual click.
+                _ = RefreshAfterLoginAsync(launch.Process, instanceId);
+                return true;
+            }
+
+            if (launch.Outcome == TerminalLaunchOutcome.CliMissing)
+            {
+                // No CLI to sign in with — open the install page so the button always
+                // does something visible rather than silently failing.
+                ProviderLoginLauncher.TryOpenInstallPage(type);
                 return true;
             }
 
@@ -262,6 +271,28 @@ public sealed class RefreshService : IProviderService
 
         await RefreshAsync(instanceId);
         return captured;
+    }
+
+    private async Task RefreshAfterLoginAsync(Process? process, string instanceId)
+    {
+        if (process is not null)
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+            try
+            {
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                // Timed out waiting for the user to finish signing in; refresh anyway.
+            }
+            catch (Exception)
+            {
+                // Process handle already gone — refresh regardless.
+            }
+        }
+
+        await RefreshAsync(instanceId);
     }
 
     /// <summary>Start the periodic auto-refresh (uses Config.RefreshMs).</summary>

@@ -31,10 +31,10 @@ public static class ProviderLoginLauncher
         ProviderLoginCatalog.TryGet(providerType, out var descriptor)
         && TerminalLauncher.TryResolveCli(descriptor, instanceId, config, out _);
 
-    public static TerminalLaunchOutcome TryLaunch(string providerType, string instanceId, IConfig config) =>
+    public static TerminalLaunchResult TryLaunch(string providerType, string instanceId, IConfig config) =>
         IsSupported(providerType)
             ? TerminalLauncher.TryLaunchLogin(providerType, instanceId, config)
-            : TerminalLaunchOutcome.CliMissing;
+            : new TerminalLaunchResult(TerminalLaunchOutcome.CliMissing, null);
 
     /// <summary>
     /// Opens the page where the provider's CLI is obtained. This is what makes the
@@ -62,20 +62,4 @@ public static class ProviderLoginLauncher
         }
     }
 
-    /// <summary>
-    /// Starts sign-in, falling back to the install page when the CLI is missing, so a
-    /// click always produces a visible result. Returns false only when nothing could be done.
-    /// </summary>
-    public static bool TryStartLoginOrInstall(string providerType, string instanceId, IConfig config)
-    {
-        if (!IsSupported(providerType))
-            return false;
-
-        return TryLaunch(providerType, instanceId, config) switch
-        {
-            TerminalLaunchOutcome.Started => true,
-            TerminalLaunchOutcome.CliMissing => TryOpenInstallPage(providerType),
-            _ => false,
-        };
-    }
 }
