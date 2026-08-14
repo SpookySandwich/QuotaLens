@@ -1,4 +1,5 @@
 using QuotaLens.Core;
+using QuotaLens.Services;
 
 namespace QuotaLens.ViewModels;
 
@@ -11,6 +12,22 @@ internal static class ProviderAddFlow
         Func<ProviderInstance, Task<bool>>? loginAsync = null,
         Func<ProviderInstance, bool>? needsLocalSetup = null)
     {
+        // Multi-source providers (e.g. Kimi App + CLI) open the config dialog so the
+        // user can pick a source and see what was detected — never silently auto-add.
+        if (ProviderRegistry.HasMultipleSources(providerType.Id))
+        {
+            var multiInstance = service.AddInstance(providerType.Id, refreshImmediately: false);
+            var keep = await configureAsync(multiInstance).ConfigureAwait(true);
+            if (!keep)
+            {
+                service.RemoveInstance(multiInstance.Id);
+                return null;
+            }
+
+            await service.RefreshAsync(multiInstance.Id).ConfigureAwait(true);
+            return multiInstance;
+        }
+
         var setupKind = Catalog.SetupKindFor(providerType.Id);
         if (setupKind is ProviderSetupKind.Ready)
             return service.AddInstance(providerType.Id, refreshImmediately: true);

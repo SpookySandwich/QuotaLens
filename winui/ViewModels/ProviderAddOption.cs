@@ -248,7 +248,7 @@ internal static class ProviderAddOptions
     private const int MaxSuggested = 6;
 
     private static readonly string[] SuggestedIds =
-        { "claude", "codex", "copilot", "gemini", "cursor", "openrouter" };
+        { "codex", "claude", "cursor", "deepseek", "opencode" };
 
     private static bool StartsAtWordBoundary(string name, string query)
     {

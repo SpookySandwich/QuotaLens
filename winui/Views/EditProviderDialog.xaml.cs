@@ -240,9 +240,6 @@ public sealed partial class EditProviderDialog : ContentDialog
     /// </summary>
     private void AddSourceSelector()
     {
-        if (!Catalog.MultiSourceProviders.Contains(_type))
-            return;
-
         var sources = ProviderRegistry.Create(_type).Sources;
         if (sources.Count <= 1)
             return;

@@ -48,6 +48,10 @@ public static class ProviderRegistry
         throw new ArgumentException($"Unknown provider type: {type}");
     }
 
+    /// <summary>True when a provider exposes more than one data source (selected per instance).</summary>
+    public static bool HasMultipleSources(string type) =>
+        Factories.ContainsKey(type) && Create(type).Sources.Count > 1;
+
     private static IReadOnlyDictionary<string, Func<IProvider>> BuildFactories()
     {
         var factories = new Dictionary<string, Func<IProvider>>(CustomFactories, StringComparer.OrdinalIgnoreCase);

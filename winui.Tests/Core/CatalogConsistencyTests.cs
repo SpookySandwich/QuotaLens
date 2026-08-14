@@ -413,7 +413,7 @@ public sealed class CatalogConsistencyTests
     public void ProviderSetupKind_IsDerivedFromCatalogCapabilities()
     {
         Assert.AreEqual(ProviderSetupKind.ApiKey, Catalog.SetupKindFor("deepseek"));
-        Assert.AreEqual(ProviderSetupKind.Ready, Catalog.SetupKindFor("kimi")); // multi-source
+        Assert.AreEqual(ProviderSetupKind.BrowserLogin, Catalog.SetupKindFor("kimi"));
         Assert.AreEqual(ProviderSetupKind.LocalAppOrCli, Catalog.SetupKindFor("qoder"));
         Assert.AreEqual(ProviderSetupKind.Ready, Catalog.SetupKindFor("test-provider"));
     }
@@ -441,9 +441,6 @@ public sealed class CatalogConsistencyTests
     {
         foreach (var providerType in WebLoginService.SupportedTypes)
         {
-            if (Catalog.MultiSourceProviders.Contains(providerType))
-                continue; // multi-source providers are added ready + source-selectable
-
             Assert.AreEqual(
                 ProviderSetupKind.BrowserLogin,
                 Catalog.SetupKindFor(providerType),

@@ -154,9 +154,30 @@ public sealed class ProviderAddFlowTests
     public void RequiresSetup_IncludesApiKeyAndBrowserLoginProviders()
     {
         Assert.IsTrue(ProviderAddFlow.RequiresSetup("deepseek"));
-        Assert.IsTrue(ProviderAddFlow.RequiresSetup("cursor"));
-        Assert.IsFalse(ProviderAddFlow.RequiresSetup("kimi")); // multi-source → Ready
+        Assert.IsTrue(ProviderAddFlow.RequiresSetup("kimi"));
         Assert.IsFalse(ProviderAddFlow.RequiresSetup("qoder"));
+    }
+
+    [TestMethod]
+    public async Task AddAsync_ForMultiSourceProvider_OpensConfigBeforeKeepingInstance()
+    {
+        var service = new FakeProviderService();
+
+        var instance = await ProviderAddFlow.AddAsync(
+            service,
+            Catalog.FindType("kimi")!,
+            _ =>
+            {
+                service.Config.Set("configured", "true");
+                return Task.FromResult(true);
+            });
+
+        Assert.IsNotNull(instance);
+        Assert.AreEqual("kimi", service.AddedProviderType);
+        Assert.IsFalse(service.AddRefreshImmediately);
+        Assert.AreEqual(0, service.RemovedIds.Count);
+        CollectionAssert.AreEqual(new[] { instance!.Id }, service.RefreshedIds.ToArray());
+        Assert.AreEqual("true", service.Config.Get("configured"));
     }
 
     [TestMethod]
