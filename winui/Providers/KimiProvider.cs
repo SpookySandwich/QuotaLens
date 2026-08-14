@@ -89,7 +89,7 @@ public sealed class KimiProvider : IProvider
 
         public string Id => "app";
         public string Name => "App";
-        public IReadOnlyList<string> ConfigFieldKeys => Array.Empty<string>();
+        public IReadOnlyList<string> ConfigFieldKeys => new[] { "kimi_app_path" };
         public bool IsAvailable(string instanceId, IConfig config) => _isAvailable();
         public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) => _fetch(ct);
     }

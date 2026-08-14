@@ -14,22 +14,16 @@ namespace QuotaLens.Views;
 /// <summary>
 /// Provider edit dialog. Fields are built dynamically from
 /// <see cref="Catalog.Fields"/> for the instance's type (TextBox / PasswordBox /
-/// file-pick / ToggleSwitch), read+written with scoped config keys, then persisted
-/// and the provider refreshed.
-///
-/// Fields that have an environment-variable mapping show a trailing import glyph; it
-/// copies that ONE field's value from the environment (never overwriting an existing
-/// value) — a per-field affordance instead of a single catch-all button.
+/// file-pick / ToggleSwitch), read+written with scoped config keys (global for
+/// <see cref="ProviderField.IsGlobal"/> app-path fields), then persisted via a
+/// Verify → Done flow: the Verify button marks invalid fields red and Done is
+/// enabled only after a passing Verify.
 /// </summary>
 public sealed partial class EditProviderDialog : ContentDialog
 {
     // Segoe Fluent / MDL2 glyphs.
     private const string BrowseGlyph = "\uE8E5";
-    private const string CheckGlyph = "\uE73E";
-    private const string ErrorGlyph = "\uE711";
 
-    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush ValidBrush =
-        new(Windows.UI.Color.FromArgb(255, 34, 197, 94));
     private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush InvalidBrush =
         new(Windows.UI.Color.FromArgb(255, 239, 68, 68));
 
@@ -37,10 +31,11 @@ public sealed partial class EditProviderDialog : ContentDialog
     private readonly string _instanceId;
     private readonly string _type;
     private readonly nint _hwnd;
-    private readonly List<(ProviderField Field, Func<string> Read, Action<string> Write, Func<bool> IsValid)> _editors = new();
-    private readonly List<(Func<bool> IsValid, FontIcon Icon)> _validations = new();
+    private readonly List<(ProviderField Field, Func<string> Read, Action<string> Write)> _editors = new();
+    private readonly List<(Func<bool> IsValid, Func<string?> Error, TextBlock ErrorText)> _errorViews = new();
     private IReadOnlyList<IProviderSource> _sources = Array.Empty<IProviderSource>();
     private string? _selectedSourceId;
+    private bool _verified;
 
     public EditProviderDialog(IProviderService svc, string instanceId, string providerType, string displayName, nint hwnd)
     {
@@ -49,20 +44,26 @@ public sealed partial class EditProviderDialog : ContentDialog
         _instanceId = instanceId;
         _type = providerType;
         _hwnd = hwnd;
+        _selectedSourceId = _svc.Config.GetScoped(_instanceId, ProviderSourceRunner.SourceConfigKey);
 
         Title = displayName;
-        PrimaryButtonText = I18n.T("settings.save");
+        PrimaryButtonText = I18n.T("common.done");
+        SecondaryButtonText = I18n.T("common.verify");
         CloseButtonText = I18n.T("common.cancel");
+        IsPrimaryButtonEnabled = false;
 
         BuildFields();
         PrimaryButtonClick += OnSave;
+        SecondaryButtonClick += OnVerify;
     }
 
     private void BuildFields()
     {
         FieldsPanel.Children.Clear();
         _editors.Clear();
-        _validations.Clear();
+        _errorViews.Clear();
+        _verified = false;
+        IsPrimaryButtonEnabled = false;
 
         if (!Catalog.Fields.TryGetValue(_type, out var fields) || fields.Length == 0) return;
 
@@ -78,7 +79,7 @@ public sealed partial class EditProviderDialog : ContentDialog
             if (!visibleKeys.Contains(field.Key))
                 continue;
 
-            var current = ReadValue(field.Key);
+            var current = ReadValue(field);
             var automationId = $"Field_{_instanceId}_{field.Key}";
 
             if (field.IsToggle)
@@ -93,7 +94,7 @@ public sealed partial class EditProviderDialog : ContentDialog
                 panel.Children.Add(toggle);
                 AddDescription(panel, field.Description);
                 FieldsPanel.Children.Add(panel);
-                _editors.Add((field, () => toggle.IsOn ? "true" : "false", value => toggle.IsOn = IsTruthy(value), () => true));
+                _editors.Add((field, () => toggle.IsOn ? "true" : "false", value => toggle.IsOn = IsTruthy(value)));
                 continue;
             }
 
@@ -117,7 +118,7 @@ public sealed partial class EditProviderDialog : ContentDialog
                     Password = current,
                     PlaceholderText = placeholder,
                 };
-                box.PasswordChanged += (_, _) => ValidateAll();
+                box.PasswordChanged += (_, _) => OnFieldChanged();
                 read = () => box.Password;
                 write = value => box.Password = value;
                 input = box;
@@ -130,7 +131,7 @@ public sealed partial class EditProviderDialog : ContentDialog
                     Text = current,
                     PlaceholderText = placeholder,
                 };
-                box.TextChanged += (_, _) => ValidateAll();
+                box.TextChanged += (_, _) => OnFieldChanged();
                 read = () => box.Text;
                 write = value => box.Text = value;
                 input = box;
@@ -152,13 +153,6 @@ public sealed partial class EditProviderDialog : ContentDialog
             if (field.IsFilePath)
                 trailing.Children.Add(BuildBrowseButton(field, write));
 
-            if (field.IsRequired || field.IsFilePath)
-            {
-                var icon = new FontIcon { FontSize = 14, VerticalAlignment = VerticalAlignment.Bottom };
-                _validations.Add((isValid, icon));
-                trailing.Children.Add(icon);
-            }
-
             if (trailing.Children.Count > 0)
             {
                 Grid.SetColumn(trailing, 1);
@@ -168,11 +162,23 @@ public sealed partial class EditProviderDialog : ContentDialog
             var wrap = new StackPanel { Spacing = 4 };
             wrap.Children.Add(grid);
             AddDescription(wrap, field.Description);
-            FieldsPanel.Children.Add(wrap);
-            _editors.Add((field, read, write, isValid));
-        }
 
-        ValidateAll();
+            if (field.IsRequired || field.IsFilePath)
+            {
+                var errorText = new TextBlock
+                {
+                    Foreground = InvalidBrush,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                    Visibility = Visibility.Collapsed,
+                };
+                wrap.Children.Add(errorText);
+                _errorViews.Add((isValid, ErrorFor(field, read), errorText));
+            }
+
+            FieldsPanel.Children.Add(wrap);
+            _editors.Add((field, read, write));
+        }
     }
 
     private Button BuildBrowseButton(ProviderField field, Action<string> write)
@@ -207,24 +213,58 @@ public sealed partial class EditProviderDialog : ContentDialog
         return () => true;
     }
 
-    /// <summary>Refreshes per-field validation glyphs and gates the Done button.</summary>
-    private void ValidateAll()
+    /// <summary>Per-field error message, or null when the value is acceptable.</summary>
+    private static Func<string?> ErrorFor(ProviderField field, Func<string> read)
     {
-        foreach (var (isValid, icon) in _validations)
+        if (field.IsRequired)
+        {
+            if (field.IsFilePath)
+            {
+                return () => string.IsNullOrWhiteSpace(read())
+                    ? I18n.T("editProvider.required")
+                    : (!File.Exists(read()) ? I18n.T("editProvider.fileNotFound") : null);
+            }
+
+            return () => string.IsNullOrWhiteSpace(read()) ? I18n.T("editProvider.required") : null;
+        }
+
+        if (field.IsFilePath)
+            return () => string.IsNullOrWhiteSpace(read()) || File.Exists(read())
+                ? null
+                : I18n.T("editProvider.fileNotFound");
+
+        return () => null;
+    }
+
+    /// <summary>Verify click: mark invalid fields red; enable Done only when all pass.</summary>
+    private void OnVerify(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+    {
+        _verified = true;
+        foreach (var (isValid, error, errorText) in _errorViews)
         {
             if (isValid())
             {
-                icon.Glyph = CheckGlyph;
-                icon.Foreground = ValidBrush;
+                errorText.Text = "";
+                errorText.Visibility = Visibility.Collapsed;
             }
             else
             {
-                icon.Glyph = ErrorGlyph;
-                icon.Foreground = InvalidBrush;
+                errorText.Text = error();
+                errorText.Visibility = Visibility.Visible;
+                _verified = false;
             }
         }
 
-        IsPrimaryButtonEnabled = _editors.All(editor => editor.IsValid());
+        IsPrimaryButtonEnabled = _verified;
+    }
+
+    /// <summary>Any edit invalidates a prior Verify and re-gates Done.</summary>
+    private void OnFieldChanged()
+    {
+        _verified = false;
+        IsPrimaryButtonEnabled = false;
+        foreach (var (_, _, errorText) in _errorViews)
+            errorText.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>
@@ -234,6 +274,21 @@ public sealed partial class EditProviderDialog : ContentDialog
     /// </summary>
     private string EffectivePlaceholder(ProviderField field)
     {
+        // A global app-path field is symbolic: it shows the auto-detected executable
+        // as its placeholder, so the user sees what will launch without entering a path.
+        if (field.IsGlobal && field.IsFilePath)
+        {
+            var target = Catalog.LaunchTargetFor(_type, _svc.Config);
+            if (target is not null &&
+                string.Equals(target.ConfigKey, field.Key, StringComparison.OrdinalIgnoreCase))
+            {
+                if (IdeLauncher.TryResolveLaunchPath(_type, target, null, out var detected))
+                    return detected;
+                if (target.DefaultPaths.Length > 0)
+                    return target.DefaultPaths[0];
+            }
+        }
+
         foreach (var envKey in ProviderConfig.EnvironmentKeysFor(_type, field.Key))
         {
             var envValue = ProviderConfig.Environment(envKey);
@@ -278,8 +333,7 @@ public sealed partial class EditProviderDialog : ContentDialog
         _editors.Add((
             new ProviderField("provider_source", "Source"),
             () => (segmented.SelectedItem as SegmentedItem)?.Tag?.ToString() ?? "",
-            _ => { },
-            () => true));
+            _ => { }));
     }
 
     private IReadOnlySet<string> VisibleFieldKeys(ProviderField[] fields)
@@ -338,8 +392,13 @@ public sealed partial class EditProviderDialog : ContentDialog
         var deferral = args.GetDeferral();
         try
         {
-            foreach (var (field, read, _, _) in _editors)
-                _svc.Config.Set(ScopedKey(field.Key), read());
+            foreach (var (field, read, _) in _editors)
+            {
+                if (field.IsGlobal)
+                    _svc.Config.Set(field.Key, read());
+                else
+                    _svc.Config.Set(ScopedKey(field.Key), read());
+            }
 
             await _svc.Config.SaveAsync();
         }
@@ -349,7 +408,10 @@ public sealed partial class EditProviderDialog : ContentDialog
         }
     }
 
-    private string ReadValue(string key) => _svc.Config.GetScoped(_instanceId, key);
+    private string ReadValue(ProviderField field) =>
+        field.IsGlobal
+            ? _svc.Config.Get(field.Key)
+            : _svc.Config.GetScoped(_instanceId, field.Key);
 
     private string ScopedKey(string key) => $"{_instanceId}.{key}";
 

@@ -104,27 +104,10 @@
         <!-- The setup kind, said once per section instead of once per row — which
              finally leaves room to say what that setup actually costs you. -->
         <DataTemplate x:Key="ProviderGroupHeaderTemplate" x:DataType="vm:ProviderAddGroup">
-            <Border BorderThickness="0,0,0,1"
-                    BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                    Padding="8,14,8,4"
+            <Border Padding="8,14,8,4"
                     AutomationProperties.Name="{x:Bind AccessibleLabel}">
-                <Grid ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Text="{x:Bind Label}"
-                               Style="{StaticResource BodyStrongTextBlockStyle}" />
-                    <TextBlock Grid.Column="1" Text="{x:Bind CountText}"
-                               Style="{StaticResource CaptionTextBlockStyle}"
-                               Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                               VerticalAlignment="Bottom" Margin="0,0,0,2" />
-                    <TextBlock Grid.Column="2" Text="{x:Bind Hint}"
-                               Style="{StaticResource CaptionText}"
-                               HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                               Margin="0,0,0,2" TextTrimming="CharacterEllipsis" />
-                </Grid>
+                <TextBlock Text="{x:Bind Label}"
+                           Style="{StaticResource BodyStrongTextBlockStyle}" />
             </Border>
         </DataTemplate>
     </ContentDialog.Resources>

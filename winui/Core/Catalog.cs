@@ -21,7 +21,8 @@ public sealed record ProviderField(
     bool IsFilePath = false,
     bool IsToggle = false,
     bool IsRequired = false,
-    string? Description = null);
+    string? Description = null,
+    bool IsGlobal = false);
 
 public enum ProviderPlanEvidence
 {
@@ -402,6 +403,9 @@ public static class Catalog
         },
         ["gemini"] = new[]
         {
+            new ProviderField("gemini_app_path", "Anti-Gravity app path", @"%LOCALAPPDATA%\Programs\Antigravity IDE\Antigravity IDE.exe",
+                IsFilePath: true, IsGlobal: true,
+                Description: "Anti-Gravity desktop app executable. Leave empty to auto-detect the installed app."),
             new ProviderField("gemini_home", "Gemini CLI data directory", @"%USERPROFILE%\.gemini",
                 Description: "Directory where the Gemini CLI stores its OAuth credentials (oauth_creds.json). Leave empty to use the .gemini directory under your user profile."),
             new ProviderField("gemini_path", "Gemini CLI executable", "gemini", IsFilePath: true,
@@ -503,6 +507,9 @@ public static class Catalog
         },
         ["kimi"] = new[]
         {
+            new ProviderField("kimi_app_path", "Kimi app path", @"%LOCALAPPDATA%\Programs\kimi-desktop\Kimi.exe",
+                IsFilePath: true, IsGlobal: true,
+                Description: "Kimi desktop app executable. Leave empty to auto-detect the installed app."),
             new ProviderField("kimi_cli_path", "Kimi CLI path", "kimi", IsFilePath: true,
                 Description: "Optional Kimi Code CLI executable. Used to refresh the OAuth token; leave empty to use 'kimi' on PATH."),
 

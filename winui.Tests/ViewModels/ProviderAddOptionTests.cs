@@ -113,7 +113,7 @@ public sealed class ProviderAddOptionTests
     }
 
     [TestMethod]
-    public void SuggestedGroup_ExcludesAlreadyAddedAndCapsAtSix()
+    public void SuggestedGroup_KeepsAlreadyAddedAndCapsAtSix()
     {
         var all = ProviderAddOptions.Build(Catalog.AddableTypes);
 
@@ -126,11 +126,11 @@ public sealed class ProviderAddOptionTests
         var withClaudeAdded = ProviderAddOptions.Build(
             Catalog.AddableTypes,
             new[] { new ProviderInstance("claude", "claude", "Claude Code") });
-        var trimmed = ProviderAddOptions.SuggestedGroup(withClaudeAdded);
+        var kept = ProviderAddOptions.SuggestedGroup(withClaudeAdded);
 
-        Assert.IsNotNull(trimmed);
-        Assert.IsFalse(trimmed!.Items.Any(option => option.Id == "claude"),
-            "An already-added provider is not a useful suggestion.");
+        Assert.IsNotNull(kept);
+        Assert.IsTrue(kept!.Items.Any(option => option.Id == "claude"),
+            "Already-added common providers stay visible in Suggested.");
     }
 
     [TestMethod]

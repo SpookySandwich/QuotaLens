@@ -219,16 +219,17 @@ internal static class ProviderAddOptions
             .ToArray();
 
     /// <summary>
-    /// Popular providers the user has not added yet, so the idle dialog opens on a
-    /// short list of likely picks instead of an alphabet. Entries are duplicated
-    /// into this group, not moved, so the canonical sections stay complete.
+    /// Popular providers, shown at the top even when they are already added, so the
+    /// idle dialog opens on a short list of likely picks instead of an alphabet.
+    /// Entries are duplicated into this group, not moved, so the canonical sections
+    /// stay complete.
     /// </summary>
     public static ProviderAddGroup? SuggestedGroup(IReadOnlyList<ProviderAddOption> options)
     {
         var suggested = SuggestedIds
             .Select(id => options.FirstOrDefault(option =>
                 string.Equals(option.Id, id, StringComparison.OrdinalIgnoreCase)))
-            .Where(option => option is { IsAlreadyAdded: false })
+            .Where(option => option is not null)
             .Select(option => option!)
             .Take(MaxSuggested)
             .ToArray();

@@ -177,6 +177,10 @@ public static class I18n
         ["status.autoRenew"] = "Auto-renew",
         // Extra (port-only) labels reusing existing English text where possible.
         ["common.cancel"] = "Cancel",
+        ["common.verify"] = "Verify",
+        ["common.done"] = "Done",
+        ["editProvider.required"] = "Required",
+        ["editProvider.fileNotFound"] = "File not found",
         ["common.remove"] = "Remove",
         ["common.refresh"] = "Refresh",
         ["common.refreshAll"] = "Refresh all",
@@ -378,6 +382,10 @@ public static class I18n
         ["status.autoRenew"] = "自动续费",
         // Extra (port-only) labels.
         ["common.cancel"] = "取消",
+        ["common.verify"] = "验证",
+        ["common.done"] = "完成",
+        ["editProvider.required"] = "必填",
+        ["editProvider.fileNotFound"] = "文件不存在",
         ["common.remove"] = "移除",
         ["common.refresh"] = "刷新",
         ["common.refreshAll"] = "全部刷新",
