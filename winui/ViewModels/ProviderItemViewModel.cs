@@ -38,11 +38,11 @@ public sealed partial class ProviderItemViewModel : ObservableObject
             : instance.Name;
         Name = DefaultName;
 
-        HasSettings = Catalog.Fields.TryGetValue(ProviderType, out var fields) && fields.Length > 0;
+        HasSettings = Catalog.IsAddableProviderType(ProviderType)
+            || (Catalog.Fields.TryGetValue(ProviderType, out var fields) && fields.Length > 0);
         RefreshLaunchAvailability();
 
         RefreshCommand = new AsyncRelayCommand(() => _svc.RefreshAsync(InstanceId));
-        SignInCommand = new AsyncRelayCommand(SignInAsync);
         LaunchCommand = new RelayCommand(() => _svc.LaunchIde(InstanceId));
         DeleteCommand = new RelayCommand(() => DeleteRequested?.Invoke(this, this));
         EditCommand = new RelayCommand(
@@ -78,7 +78,6 @@ public sealed partial class ProviderItemViewModel : ObservableObject
     public Microsoft.UI.Xaml.Media.Brush BrandBrush => Brand.Brush(ProviderType);
 
     public IAsyncRelayCommand RefreshCommand { get; }
-    public IAsyncRelayCommand SignInCommand { get; }
     public IRelayCommand LaunchCommand { get; }
     public IRelayCommand DeleteCommand { get; }
     public IRelayCommand EditCommand { get; }
@@ -103,10 +102,7 @@ public sealed partial class ProviderItemViewModel : ObservableObject
     [ObservableProperty] public partial bool IsStale { get; set; }
     [ObservableProperty] public partial string? FooterReset { get; set; }
 
-    // Error / sign-in.
     [ObservableProperty] public partial string? ErrorText { get; set; }
-    [ObservableProperty] public partial bool NeedsLogin { get; set; } // bayesdl/mimo "Login required"
-    [ObservableProperty] public partial string SignInText { get; set; } = "";
 
     // Balance card.
     [ObservableProperty] public partial string BalanceAmount { get; set; } = "";
@@ -186,12 +182,6 @@ public sealed partial class ProviderItemViewModel : ObservableObject
 
     /// "Updated" normally, "Last attempt" on an error card.
     public string UpdatedLabel => Kind is CardKind.Error ? I18n.T("card.lastAttempt") : I18n.T("card.updated");
-
-    private async Task SignInAsync()
-    {
-        try { await _svc.OpenLoginAsync(InstanceId); }
-        catch { /* swallowed, matches original */ }
-    }
 
     public void PulseTimelineHighlight()
     {
@@ -296,8 +286,6 @@ public sealed partial class ProviderItemViewModel : ObservableObject
                 : snap.Error!;
             var localizedError = I18n.LocalizeErrorMessage(err);
             ErrorText = localizedError.Length > 80 ? localizedError[..77] + "..." : localizedError;
-            NeedsLogin = ShouldOfferSignIn(ProviderType, snap.ErrorKind);
-            SignInText = I18n.T("login.withProvider", "name", I18n.ProviderName(ProviderType, Catalog.ProviderName(ProviderType)));
             FooterReset = null;
             ClearCollections();
             return;
@@ -406,38 +394,6 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         || snap.Accounts.Count > 0
         || snap.Primary.WindowMinutes is not null
         || !string.IsNullOrWhiteSpace(snap.Primary.ResetsAt);
-
-    private static bool HasLoginAction(string providerType) =>
-        WebLoginService.IsSupported(providerType) || ProviderLoginLauncher.IsSupported(providerType);
-
-    /// <summary>
-    /// Decides the sign-in button STRUCTURALLY, from the error's kind rather than its
-    /// wording. Matching prose is what let the Gemini dead end survive: a provider whose
-    /// message said "Not configured:" instead of "Login required" silently lost its
-    /// button even though a perfectly good login action existed.
-    /// </summary>
-    internal static bool ShouldOfferSignIn(string providerType, ProviderErrorKind errorKind)
-    {
-        // Nothing to click if there is no sign-in mechanism at all.
-        if (!HasLoginAction(providerType))
-            return false;
-
-        return errorKind switch
-        {
-            // Retry-and-wait states. Offering sign-in here would nag a healthy account —
-            // notably Claude's live-session-but-stale-token case.
-            ProviderErrorKind.RateLimited => false,
-            ProviderErrorKind.Unsupported => false,
-
-            // The fix is a settings value, not a credential.
-            ProviderErrorKind.Misconfigured => false,
-
-            // Anything else that failed is plausibly an auth problem, and the provider
-            // has a login action, so let the user act. Failing OPEN here is deliberate:
-            // an unnecessary button is recoverable, a missing one is a dead end.
-            _ => true,
-        };
-    }
 
     private void BuildAccountsAndInlineBalance(ProviderSnapshot snap)
     {

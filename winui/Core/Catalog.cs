@@ -480,7 +480,7 @@ public static class Catalog
         ["alibabatokenplan"] = new[]
         {
             new ProviderField("alibabatokenplan_url", "Login URL", "https://bailian.console.aliyun.com/cn-beijing?tab=plan#/efm/subscription/token-plan",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["antigravity"] = new[]
         {
@@ -491,12 +491,12 @@ public static class Catalog
         ["bayesdl"] = new[]
         {
             new ProviderField("bayesdl_url", "Login URL", "https://ai.bayesdl.com/base/login",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["mimo"] = new[]
         {
             new ProviderField("mimo_url", "Login URL", "https://platform.xiaomimimo.com/console/plan-manage",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["qoder"] = new[]
         {
@@ -515,37 +515,37 @@ public static class Catalog
                 Description: "Optional Kimi Code CLI executable. Used to refresh the OAuth token; leave empty to use 'kimi' on PATH."),
 
             new ProviderField("kimi_url", "Login URL", "https://www.kimi.com/code/console",
-                Description: "Opened when signing in from this provider card. If the Kimi Code CLI is installed and logged in ('kimi login'), its credentials are used automatically instead."),
+                Description: "Opened when signing in from this provider's settings. If the Kimi Code CLI is installed and logged in ('kimi login'), its credentials are used automatically instead."),
         },
         ["amp"] = new[]
         {
             new ProviderField("amp_url", "Login URL", "https://ampcode.com/settings",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["cursor"] = new[]
         {
             new ProviderField("cursor_url", "Login URL", "https://cursor.com/settings",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["augment"] = new[]
         {
             new ProviderField("augment_url", "Login URL", "https://app.augmentcode.com",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["factory"] = new[]
         {
             new ProviderField("factory_url", "Login URL", "https://app.factory.ai",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["minimax"] = new[]
         {
             new ProviderField("minimax_url", "Login URL", "https://platform.minimax.io/user-center/payment/token-plan",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["windsurf"] = new[]
         {
             new ProviderField("windsurf_url", "Login URL", "https://windsurf.com/subscription/usage",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["openrouter"] = new[]
         {
@@ -674,42 +674,42 @@ public static class Catalog
         ["manus"] = new[]
         {
             new ProviderField("manus_url", "Login URL", "https://manus.im",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["perplexity"] = new[]
         {
             new ProviderField("perplexity_url", "Login URL", "https://www.perplexity.ai/account/usage",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["t3chat"] = new[]
         {
             new ProviderField("t3chat_url", "Login URL", "https://t3.chat/settings/customization",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["commandcode"] = new[]
         {
             new ProviderField("commandcode_url", "Login URL", "https://commandcode.ai/studio",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["ollama"] = new[]
         {
             new ProviderField("ollama_url", "Login URL", "https://ollama.com/settings",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["abacus"] = new[]
         {
             new ProviderField("abacus_url", "Login URL", "https://apps.abacus.ai/chatllm/admin/compute-points-usage",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["stepfun"] = new[]
         {
             new ProviderField("stepfun_url", "Login URL", "https://platform.stepfun.com/plan-usage",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
         ["opencode"] = new[]
         {
             new ProviderField("opencode_url", "Login URL", "https://opencode.ai",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
             new ProviderField("opencode_workspace_id", "Workspace ID", "wrk_...",
                 Description: "Optional. Leave empty to use the first workspace returned by OpenCode."),
         },
@@ -718,14 +718,14 @@ public static class Catalog
             new ProviderField("opencodego_cli_path", "OpenCode CLI path", "opencode", IsFilePath: true,
                 Description: "Optional path used to read OpenCode Go usage from the local history database without opening a browser."),
             new ProviderField("opencodego_url", "Login URL", "https://opencode.ai",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
             new ProviderField("opencodego_workspace_id", "Workspace ID", "wrk_...",
                 Description: "Optional. Leave empty to use the first workspace returned by OpenCode."),
         },
         ["mistral"] = new[]
         {
             new ProviderField("mistral_url", "Login URL", "https://admin.mistral.ai/organization/usage",
-                Description: "Opened when signing in from this provider card."),
+                Description: "Opened when signing in from this provider's settings."),
         },
     };
 

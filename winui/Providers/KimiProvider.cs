@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
+using QuotaLens.Services;
 
 namespace QuotaLens.Providers;
 
@@ -46,7 +47,9 @@ public sealed class KimiProvider : IProvider
         Func<string, CancellationToken, Task<HttpResponseMessage>> sendUsageAsync,
         Func<string, IConfig, CancellationToken, Task<bool>>? refreshViaCliAsync = null,
         Func<bool>? appIsAvailable = null,
-        Func<CancellationToken, Task<ProviderSnapshot>>? fetchAppAsync = null)
+        Func<CancellationToken, Task<ProviderSnapshot>>? fetchAppAsync = null,
+        Func<string, IConfig, bool>? webIsAvailable = null,
+        Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>>? fetchWebAsync = null)
     {
         _readCredentials = readCredentials;
         _sendUsageAsync = sendUsageAsync;
@@ -56,6 +59,9 @@ public sealed class KimiProvider : IProvider
         {
             new KimiAppSource(appIsAvailable ?? (() => false), fetchAppAsync ?? ((_) => throw new ProviderException("Not available: Kimi app source is not configured."))),
             new KimiCliSource(this),
+            new KimiWebSource(
+                webIsAvailable ?? WebSessionExists,
+                fetchWebAsync ?? FetchWebAsync),
         };
     }
 
@@ -121,6 +127,37 @@ public sealed class KimiProvider : IProvider
                     "Run any 'kimi' command to refresh it, or open Kimi in browser.");
             }
         }
+    }
+
+    private sealed class KimiWebSource : IProviderSource
+    {
+        private readonly Func<string, IConfig, bool> _isAvailable;
+        private readonly Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>> _fetch;
+
+        public KimiWebSource(
+            Func<string, IConfig, bool> isAvailable,
+            Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>> fetch)
+        {
+            _isAvailable = isAvailable;
+            _fetch = fetch;
+        }
+
+        public string Id => "web";
+        public string Name => "Web";
+        public IReadOnlyList<string> ConfigFieldKeys => new[] { "kimi_url" };
+        public bool IsAvailable(string instanceId, IConfig config) => _isAvailable(instanceId, config);
+        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
+            _fetch(instanceId, config, ct);
+    }
+
+    private static bool WebSessionExists(string instanceId, IConfig _) =>
+        WebLoginService.Instance?.GetCached(instanceId, "kimi") is { Error: null };
+
+    private static Task<ProviderSnapshot> FetchWebAsync(string instanceId, IConfig config, CancellationToken ct)
+    {
+        var service = WebLoginService.Instance
+            ?? throw new ProviderException("Login required: Kimi web session is not available.");
+        return service.FetchAsync(instanceId, "kimi", config);
     }
 
     private async Task<ProviderSnapshot> FetchWithCliAsync(string instanceId, JsonObject creds, IConfig config, CancellationToken ct)
@@ -276,7 +313,10 @@ public sealed class KimiProvider : IProvider
     private static async Task<ProviderSnapshot> FetchAppAsync(CancellationToken ct)
     {
         var token = ReadKimiDesktopAccessToken()
-            ?? throw new ProviderException("Login required: Kimi desktop app is not signed in.");
+            ?? throw new ProviderException("Not available: Kimi desktop app has no session. Open the Kimi app.");
+
+        if (IsJwtExpired(token, DateTimeOffset.UtcNow))
+            throw new ProviderException("Not available: Kimi desktop session expired. Open the Kimi app.");
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(WebTotalQuotaTimeout);
@@ -287,17 +327,73 @@ public sealed class KimiProvider : IProvider
         {
             Content = new StringContent("{\"scope\":[\"FEATURE_CODING\"]}", Encoding.UTF8, "application/json"),
         };
-        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
-        request.Headers.TryAddWithoutValidation("connect-protocol-version", "1");
-        request.Headers.TryAddWithoutValidation("x-msh-platform", "web");
+        ApplyKimiAppHeaders(request, token);
 
         using var response = await Http.Client.SendAsync(request, timeout.Token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new ProviderException($"Not available: Kimi app billing request failed (HTTP {(int)response.StatusCode}).");
+            throw new ProviderException("Not available: Kimi desktop session was rejected. Open the Kimi app.");
 
         var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
         return ParseAppUsage(json);
     }
+
+    internal static void ApplyKimiAppHeaders(HttpRequestMessage request, string token)
+    {
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+        request.Headers.TryAddWithoutValidation("Cookie", "kimi-auth=" + token);
+        request.Headers.TryAddWithoutValidation("Origin", "https://www.kimi.com");
+        request.Headers.TryAddWithoutValidation("Referer", "https://www.kimi.com/code/console");
+        request.Headers.TryAddWithoutValidation("Accept", "*/*");
+        request.Headers.TryAddWithoutValidation("connect-protocol-version", "1");
+        request.Headers.TryAddWithoutValidation("x-msh-platform", "web");
+        request.Headers.TryAddWithoutValidation("x-language", "en-US");
+
+        var payload = JwtPayload(token);
+        if (payload is null)
+            return;
+
+        if (JwtString(payload.Value, "device_id") is { } deviceId)
+            request.Headers.TryAddWithoutValidation("x-msh-device-id", deviceId);
+        if (JwtString(payload.Value, "ssid") is { } sessionId)
+            request.Headers.TryAddWithoutValidation("x-msh-session-id", sessionId);
+        if (JwtString(payload.Value, "sub") is { } trafficId)
+            request.Headers.TryAddWithoutValidation("x-traffic-id", trafficId);
+    }
+
+    internal static bool IsJwtExpired(string token, DateTimeOffset now, int graceSeconds = 60)
+    {
+        var payload = JwtPayload(token);
+        if (payload is null)
+            return false;
+        if (!payload.Value.TryGetProperty("exp", out var exp) || exp.ValueKind != JsonValueKind.Number)
+            return false;
+        return now.ToUnixTimeSeconds() >= exp.GetInt64() - graceSeconds;
+    }
+
+    private static JsonElement? JwtPayload(string token)
+    {
+        var parts = token.Split('.');
+        if (parts.Length < 2)
+            return null;
+
+        try
+        {
+            var payload = parts[1].Replace('-', '+').Replace('_', '/');
+            while (payload.Length % 4 != 0)
+                payload += "=";
+            using var document = JsonDocument.Parse(Convert.FromBase64String(payload));
+            return document.RootElement.Clone();
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static string? JwtString(JsonElement payload, string key) =>
+        payload.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
+            ? value.GetString()
+            : null;
 
     private static string? ReadKimiDesktopAccessToken()
     {

@@ -15,9 +15,11 @@ namespace QuotaLens.Views;
 /// Provider edit dialog. Fields are built dynamically from
 /// <see cref="Catalog.Fields"/> for the instance's type (TextBox / PasswordBox /
 /// file-pick / ToggleSwitch), read+written with scoped config keys (global for
-/// <see cref="ProviderField.IsGlobal"/> app-path fields), then persisted via a
-/// Verify → Done flow: the Verify button marks invalid fields red and Done is
-/// enabled only after a passing Verify.
+/// <see cref="ProviderField.IsGlobal"/> app-path fields). Done is enabled when
+/// the visible fields are valid, then a live fetch must succeed before the
+/// dialog closes. Sign-in lives here, not on the card. ContentDialog chrome
+/// buttons always dismiss unless cancelled, so in-dialog actions must not live
+/// on Primary/Secondary.
 /// </summary>
 public sealed partial class EditProviderDialog : ContentDialog
 {
@@ -35,7 +37,8 @@ public sealed partial class EditProviderDialog : ContentDialog
     private readonly List<(Func<bool> IsValid, Func<string?> Error, TextBlock ErrorText)> _errorViews = new();
     private IReadOnlyList<IProviderSource> _sources = Array.Empty<IProviderSource>();
     private string? _selectedSourceId;
-    private bool _verified;
+    private bool _revealAllErrors;
+    private TextBlock? _fetchErrorText;
 
     public EditProviderDialog(IProviderService svc, string instanceId, string providerType, string displayName, nint hwnd)
     {
@@ -48,13 +51,11 @@ public sealed partial class EditProviderDialog : ContentDialog
 
         Title = displayName;
         PrimaryButtonText = I18n.T("common.done");
-        SecondaryButtonText = I18n.T("common.verify");
         CloseButtonText = I18n.T("common.cancel");
         IsPrimaryButtonEnabled = false;
 
         BuildFields();
         PrimaryButtonClick += OnSave;
-        SecondaryButtonClick += OnVerify;
     }
 
     private void BuildFields()
@@ -62,16 +63,25 @@ public sealed partial class EditProviderDialog : ContentDialog
         FieldsPanel.Children.Clear();
         _editors.Clear();
         _errorViews.Clear();
-        _verified = false;
+        _fetchErrorText = null;
+        _revealAllErrors = false;
         IsPrimaryButtonEnabled = false;
 
-        if (!Catalog.Fields.TryGetValue(_type, out var fields) || fields.Length == 0) return;
+        Catalog.Fields.TryGetValue(_type, out var fields);
+        fields ??= Array.Empty<ProviderField>();
 
         AddSectionHeader(I18n.T("editProvider.connection"), I18n.T("editProvider.connectionHint"));
 
         _sources = ProviderRegistry.Create(_type).Sources;
         if (_sources.Count > 1)
             BuildSourceSelector();
+        BuildConnectionActions();
+
+        if (fields.Length == 0)
+        {
+            RefreshValidity();
+            return;
+        }
 
         var visibleKeys = VisibleFieldKeys(fields);
         foreach (var field in fields)
@@ -179,6 +189,8 @@ public sealed partial class EditProviderDialog : ContentDialog
             FieldsPanel.Children.Add(wrap);
             _editors.Add((field, read, write));
         }
+
+        RefreshValidity();
     }
 
     private Button BuildBrowseButton(ProviderField field, Action<string> write)
@@ -236,35 +248,77 @@ public sealed partial class EditProviderDialog : ContentDialog
         return () => null;
     }
 
-    /// <summary>Verify click: mark invalid fields red; enable Done only when all pass.</summary>
-    private void OnVerify(ContentDialog sender, ContentDialogButtonClickEventArgs args)
+    /// <summary>
+    /// Live-gates Done. Empty required fields stay quiet until a save attempt;
+    /// a typed path that does not exist is shown immediately so the disabled
+    /// button has a reason.
+    /// </summary>
+    private void OnFieldChanged() => RefreshValidity();
+
+    private bool RefreshValidity()
     {
-        _verified = true;
+        var fileNotFound = I18n.T("editProvider.fileNotFound");
+        var valid = true;
         foreach (var (isValid, error, errorText) in _errorViews)
         {
             if (isValid())
             {
                 errorText.Text = "";
                 errorText.Visibility = Visibility.Collapsed;
+                continue;
             }
-            else
-            {
-                errorText.Text = error();
-                errorText.Visibility = Visibility.Visible;
-                _verified = false;
-            }
+
+            valid = false;
+            var message = error();
+            var show = _revealAllErrors || string.Equals(message, fileNotFound, StringComparison.Ordinal);
+            errorText.Text = show ? (message ?? "") : "";
+            errorText.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        IsPrimaryButtonEnabled = _verified;
+        IsPrimaryButtonEnabled = valid;
+        return valid;
     }
 
-    /// <summary>Any edit invalidates a prior Verify and re-gates Done.</summary>
-    private void OnFieldChanged()
+    private void BuildConnectionActions()
     {
-        _verified = false;
-        IsPrimaryButtonEnabled = false;
-        foreach (var (_, _, errorText) in _errorViews)
-            errorText.Visibility = Visibility.Collapsed;
+        if (ShowsSignIn())
+        {
+            var signIn = new Button { Content = I18n.T("editProvider.signIn") };
+            AutomationProperties.SetAutomationId(signIn, $"SignIn_{_instanceId}");
+            AutomationProperties.SetName(signIn, I18n.T("editProvider.signIn"));
+            signIn.Click += OnSignInClick;
+            FieldsPanel.Children.Add(signIn);
+        }
+
+        _fetchErrorText = new TextBlock
+        {
+            Foreground = InvalidBrush,
+            FontSize = 12,
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+        };
+        FieldsPanel.Children.Add(_fetchErrorText);
+    }
+
+    private string? SelectedSourceId() =>
+        !string.IsNullOrWhiteSpace(_selectedSourceId)
+            ? _selectedSourceId
+            : _sources.FirstOrDefault()?.Id;
+
+    private bool ShowsSignIn()
+    {
+        var source = SelectedSourceId();
+        if (WebLoginService.IsSupported(_type))
+            return _sources.Count <= 1 || string.Equals(source, "web", StringComparison.OrdinalIgnoreCase);
+
+        return ProviderLoginLauncher.IsSupported(_type)
+            && (_sources.Count <= 1 || string.Equals(source, "cli", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async void OnSignInClick(object sender, RoutedEventArgs e)
+    {
+        if (await _svc.OpenLoginAsync(_instanceId).ConfigureAwait(true))
+            SetFetchError(null);
     }
 
     /// <summary>
@@ -389,6 +443,13 @@ public sealed partial class EditProviderDialog : ContentDialog
 
     private async void OnSave(ContentDialog sender, ContentDialogButtonClickEventArgs args)
     {
+        _revealAllErrors = true;
+        if (!RefreshValidity())
+        {
+            args.Cancel = true;
+            return;
+        }
+
         var deferral = args.GetDeferral();
         try
         {
@@ -401,11 +462,33 @@ public sealed partial class EditProviderDialog : ContentDialog
             }
 
             await _svc.Config.SaveAsync();
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            await ProviderRegistry.Create(_type)
+                .FetchAsync(_instanceId, _svc.Config, timeout.Token)
+                .ConfigureAwait(true);
+            SetFetchError(null);
+        }
+        catch (Exception error)
+        {
+            SetFetchError(I18n.LocalizeErrorMessage(error.Message));
+            args.Cancel = true;
         }
         finally
         {
             deferral.Complete();
         }
+    }
+
+    private void SetFetchError(string? message)
+    {
+        if (_fetchErrorText is null)
+            return;
+
+        _fetchErrorText.Text = message ?? "";
+        _fetchErrorText.Visibility = string.IsNullOrWhiteSpace(message)
+            ? Visibility.Collapsed
+            : Visibility.Visible;
     }
 
     private string ReadValue(ProviderField field) =>

@@ -411,6 +411,21 @@ public sealed class CatalogConsistencyTests
     }
 
     [TestMethod]
+    public void EveryAddableProvider_HasAConfigurationPage()
+    {
+        var missing = Catalog.AddableTypes
+            .Where(type => !Catalog.Fields.TryGetValue(type.Id, out var fields) || fields.Length == 0)
+            .Select(type => type.Id)
+            .ToArray();
+
+        Assert.AreEqual(
+            0,
+            missing.Length,
+            "Every addable provider needs settings fields so Add/Edit open the same configuration page: "
+            + string.Join(", ", missing));
+    }
+
+    [TestMethod]
     public void ProviderSetupKind_IsDerivedFromCatalogCapabilities()
     {
         Assert.AreEqual(ProviderSetupKind.ApiKey, Catalog.SetupKindFor("deepseek"));

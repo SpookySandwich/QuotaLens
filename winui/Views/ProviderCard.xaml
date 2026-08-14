@@ -344,11 +344,6 @@
                                    Foreground="{ThemeResource SystemFillColorCautionBrush}" />
                         <TextBlock Text="{x:Bind ErrorText, Mode=OneWay}" TextWrapping="Wrap"
                                    Style="{StaticResource CaptionText}" />
-                        <Button Content="{x:Bind SignInText, Mode=OneWay}"
-                                Command="{x:Bind SignInCommand}"
-                                Style="{StaticResource AccentButtonStyle}"
-                                HorizontalAlignment="Left"
-                                Visibility="{x:Bind NeedsLogin, Converter={StaticResource BoolToVis}, Mode=OneWay}" />
                     </StackPanel>
                     <ContentControl HorizontalContentAlignment="Stretch"
                                     Content="{x:Bind}"

@@ -140,7 +140,7 @@ public sealed class ProviderItemViewModelTests
     }
 
     [TestMethod]
-    public void Update_WithWebLoginRequiredError_UsesGenericProviderLoginText()
+    public void Update_WithLoginRequiredError_DoesNotOfferCardSignIn()
     {
         var service = new FakeProviderService(new ProviderInstance("kimi", "kimi", "Kimi"));
         var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
@@ -148,25 +148,8 @@ public sealed class ProviderItemViewModelTests
 
         viewModel.Update(snapshot, refreshing: false);
 
-        Assert.IsTrue(viewModel.NeedsLogin);
-        Assert.AreEqual("Login with Kimi", viewModel.SignInText);
-    }
-
-    [TestMethod]
-    public void Update_WithClaudeLoginRequiredError_OffersClaudeLoginAction()
-    {
-        var service = new FakeProviderService(new ProviderInstance("claude", "claude", "Claude Code"));
-        var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
-        var snapshot = ProviderSnapshot.ForError(
-            "claude",
-            "Claude Code",
-            "Claude CLI",
-            "Login required: Claude CLI authentication failed while refreshing usage.");
-
-        viewModel.Update(snapshot, refreshing: false);
-
-        Assert.IsTrue(viewModel.NeedsLogin);
-        Assert.AreEqual("Login with Claude Code", viewModel.SignInText);
+        Assert.AreEqual(CardKind.Error, viewModel.Kind);
+        StringAssert.Contains(viewModel.ErrorText, "Login required");
     }
 
     [TestMethod]
@@ -571,37 +554,6 @@ public sealed class ProviderItemViewModelTests
         Assert.IsNull(viewModel.InlineBalanceDetail);
         Assert.AreEqual("Account 1", viewModel.Accounts[0].Name);
         Assert.AreEqual("Account 2", viewModel.Accounts[1].Name);
-    }
-
-    [TestMethod]
-    public void ShouldOfferSignIn_DoesNotDependOnErrorWording()
-    {
-        // The Gemini dead end: its message says "Login required..." for some states and
-        // "Not configured:" for others. The button must not depend on which.
-        foreach (var providerType in new[] { "gemini", "claude", "codex", "kiro", "grok", "bedrock" })
-        {
-            Assert.IsTrue(
-                ProviderItemViewModel.ShouldOfferSignIn(providerType, ProviderErrorKind.Unknown),
-                $"{providerType} has a login action, so an unclassified failure must still be actionable.");
-        }
-    }
-
-    [TestMethod]
-    public void ShouldOfferSignIn_NeverNagsAHealthyOrUnfixableAccount()
-    {
-        // Claude's live-session-but-stale-token case is tagged Unsupported precisely so
-        // a signed-in user is never told to sign in again.
-        Assert.IsFalse(ProviderItemViewModel.ShouldOfferSignIn("claude", ProviderErrorKind.Unsupported));
-        Assert.IsFalse(ProviderItemViewModel.ShouldOfferSignIn("claude", ProviderErrorKind.RateLimited));
-        // A missing setting is fixed in Settings, not by signing in again.
-        Assert.IsFalse(ProviderItemViewModel.ShouldOfferSignIn("bedrock", ProviderErrorKind.Misconfigured));
-    }
-
-    [TestMethod]
-    public void ShouldOfferSignIn_IsFalseWithoutAnyLoginMechanism()
-    {
-        foreach (var providerType in new[] { "antigravity", "codex-lb", "jetbrains", "deepseek" })
-            Assert.IsFalse(ProviderItemViewModel.ShouldOfferSignIn(providerType, ProviderErrorKind.Unknown), providerType);
     }
 
     private static string TempExecutablePath() =>

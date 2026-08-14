@@ -8,138 +8,46 @@ namespace QuotaLens.Tests.ViewModels;
 public sealed class ProviderAddFlowTests
 {
     [TestMethod]
-    public async Task AddAsync_ForProviderWithoutSettings_AddsAndRefreshesImmediately()
+    public async Task AddAsync_OpensConfigurationForEveryAddableProvider()
     {
-        var service = new FakeProviderService();
-        var providerType = new ProviderType("test-no-settings", "Test");
+        foreach (var providerType in Catalog.AddableTypes)
+        {
+            var service = new FakeProviderService();
+            var configured = false;
 
-        var instance = await ProviderAddFlow.AddAsync(
-            service,
-            providerType,
-            _ => throw new InvalidOperationException("configure should not run"));
+            var instance = await ProviderAddFlow.AddAsync(
+                service,
+                providerType,
+                _ =>
+                {
+                    configured = true;
+                    return Task.FromResult(true);
+                });
 
-        Assert.IsNotNull(instance);
-        Assert.AreEqual("test-no-settings", service.AddedProviderType);
-        Assert.IsTrue(service.AddRefreshImmediately);
-        Assert.AreEqual(0, service.RemovedIds.Count);
-        Assert.AreEqual(0, service.RefreshedIds.Count);
+            Assert.IsTrue(configured, $"{providerType.Id} must open the configuration page.");
+            Assert.IsNotNull(instance, providerType.Id);
+            Assert.IsFalse(service.AddRefreshImmediately, providerType.Id);
+            Assert.AreEqual(0, service.RemovedIds.Count, providerType.Id);
+            CollectionAssert.AreEqual(new[] { instance!.Id }, service.RefreshedIds.ToArray(), providerType.Id);
+        }
     }
 
     [TestMethod]
-    public async Task AddAsync_ForLocalProviderWithoutSetupProbe_AddsAndRefreshesWithoutOpeningConfiguration()
+    public async Task AddAsync_WhenConfigurationIsCancelled_RemovesProvisionalInstance()
     {
-        var service = new FakeProviderService();
+        foreach (var id in new[] { "opencode", "cursor", "claude", "qoder", "deepseek", "kimi" })
+        {
+            var service = new FakeProviderService();
 
-        var instance = await ProviderAddFlow.AddAsync(
-            service,
-            Catalog.FindType("claude")!,
-            _ => throw new InvalidOperationException("optional settings should not block adding"));
+            var instance = await ProviderAddFlow.AddAsync(
+                service,
+                Catalog.FindType(id)!,
+                _ => Task.FromResult(false));
 
-        Assert.IsNotNull(instance);
-        Assert.AreEqual("claude", service.AddedProviderType);
-        Assert.IsFalse(service.AddRefreshImmediately);
-        Assert.AreEqual(0, service.RemovedIds.Count);
-        CollectionAssert.AreEqual(new[] { instance!.Id }, service.RefreshedIds.ToArray());
-    }
-
-    [TestMethod]
-    public async Task AddAsync_ForLocalProviderWithConfiguredTool_AddsAndRefreshesWithoutOpeningConfiguration()
-    {
-        var service = new FakeProviderService();
-
-        var instance = await ProviderAddFlow.AddAsync(
-            service,
-            Catalog.FindType("qoder")!,
-            _ => throw new InvalidOperationException("configured local tools should not open edit settings"),
-            needsLocalSetup: _ => false);
-
-        Assert.IsNotNull(instance);
-        Assert.AreEqual("qoder", service.AddedProviderType);
-        Assert.IsFalse(service.AddRefreshImmediately);
-        Assert.AreEqual(0, service.RemovedIds.Count);
-        CollectionAssert.AreEqual(new[] { instance!.Id }, service.RefreshedIds.ToArray());
-    }
-
-    [TestMethod]
-    public async Task AddAsync_ForLocalProviderWithMissingTool_OpensConfigurationBeforeKeepingInstance()
-    {
-        var service = new FakeProviderService();
-
-        var instance = await ProviderAddFlow.AddAsync(
-            service,
-            Catalog.FindType("qoder")!,
-            added =>
-            {
-                service.Config.Set($"{added.Id}.qoder_cli_path", @"C:\Tools\qodercli.exe");
-                return Task.FromResult(true);
-            },
-            needsLocalSetup: _ => true);
-
-        Assert.IsNotNull(instance);
-        Assert.AreEqual("qoder", service.AddedProviderType);
-        Assert.IsFalse(service.AddRefreshImmediately);
-        Assert.AreEqual(0, service.RemovedIds.Count);
-        Assert.AreEqual(@"C:\Tools\qodercli.exe", service.Config.GetScoped(instance!.Id, "qoder_cli_path"));
-        CollectionAssert.AreEqual(new[] { instance.Id }, service.RefreshedIds.ToArray());
-    }
-
-    [TestMethod]
-    public async Task AddAsync_ForLocalProviderWithMissingTool_WhenConfigurationIsCancelled_RemovesInstance()
-    {
-        var service = new FakeProviderService();
-
-        var instance = await ProviderAddFlow.AddAsync(
-            service,
-            Catalog.FindType("qoder")!,
-            _ => Task.FromResult(false),
-            needsLocalSetup: _ => true);
-
-        Assert.IsNull(instance);
-        Assert.AreEqual("qoder", service.AddedProviderType);
-        Assert.IsFalse(service.AddRefreshImmediately);
-        CollectionAssert.AreEqual(new[] { "qoder-new" }, service.RemovedIds.ToArray());
-        Assert.AreEqual(0, service.RefreshedIds.Count);
-    }
-
-    [TestMethod]
-    public async Task AddAsync_ForBrowserLoginProvider_OpensLoginBeforeKeepingInstance()
-    {
-        var service = new FakeProviderService();
-
-        var instance = await ProviderAddFlow.AddAsync(
-            service,
-            Catalog.FindType("cursor")!,
-            _ => throw new InvalidOperationException("browser login should not open edit settings"),
-            added =>
-            {
-                service.LoginIds.Add(added.Id);
-                return Task.FromResult(true);
-            });
-
-        Assert.IsNotNull(instance);
-        Assert.AreEqual("cursor", service.AddedProviderType);
-        Assert.IsFalse(service.AddRefreshImmediately);
-        CollectionAssert.AreEqual(new[] { instance!.Id }, service.LoginIds.ToArray());
-        Assert.AreEqual(0, service.RemovedIds.Count);
-        Assert.AreEqual(0, service.RefreshedIds.Count, "The login service refreshes the card after capture.");
-    }
-
-    [TestMethod]
-    public async Task AddAsync_ForBrowserLoginProvider_WhenLoginIsCancelled_RemovesProvisionalInstance()
-    {
-        var service = new FakeProviderService();
-
-        var instance = await ProviderAddFlow.AddAsync(
-            service,
-            Catalog.FindType("cursor")!,
-            _ => throw new InvalidOperationException("browser login should not open edit settings"),
-            _ => Task.FromResult(false));
-
-        Assert.IsNull(instance);
-        Assert.AreEqual("cursor", service.AddedProviderType);
-        Assert.IsFalse(service.AddRefreshImmediately);
-        CollectionAssert.AreEqual(new[] { "cursor-new" }, service.RemovedIds.ToArray());
-        Assert.AreEqual(0, service.RefreshedIds.Count);
+            Assert.IsNull(instance, id);
+            CollectionAssert.AreEqual(new[] { $"{id}-new" }, service.RemovedIds.ToArray(), id);
+            Assert.AreEqual(0, service.RefreshedIds.Count, id);
+        }
     }
 
     [TestMethod]
@@ -156,28 +64,6 @@ public sealed class ProviderAddFlowTests
         Assert.IsTrue(ProviderAddFlow.RequiresSetup("deepseek"));
         Assert.IsTrue(ProviderAddFlow.RequiresSetup("kimi"));
         Assert.IsFalse(ProviderAddFlow.RequiresSetup("qoder"));
-    }
-
-    [TestMethod]
-    public async Task AddAsync_ForMultiSourceProvider_OpensConfigBeforeKeepingInstance()
-    {
-        var service = new FakeProviderService();
-
-        var instance = await ProviderAddFlow.AddAsync(
-            service,
-            Catalog.FindType("kimi")!,
-            _ =>
-            {
-                service.Config.Set("configured", "true");
-                return Task.FromResult(true);
-            });
-
-        Assert.IsNotNull(instance);
-        Assert.AreEqual("kimi", service.AddedProviderType);
-        Assert.IsFalse(service.AddRefreshImmediately);
-        Assert.AreEqual(0, service.RemovedIds.Count);
-        CollectionAssert.AreEqual(new[] { instance!.Id }, service.RefreshedIds.ToArray());
-        Assert.AreEqual("true", service.Config.Get("configured"));
     }
 
     [TestMethod]

@@ -1,0 +1,140 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using QuotaLens.Core;
+
+namespace QuotaLens.Tests.Core;
+
+[TestClass]
+public sealed class ProviderSourceRunnerTests
+{
+    [TestMethod]
+    public async Task FetchAsync_UsesSelectedSourceWhenItIsAvailable()
+    {
+        var web = new FakeSource("web", available: true, label: "web-data");
+        var app = new FakeSource("app", available: true, label: "app-data");
+        var config = new MapConfig(new Dictionary<string, string>
+        {
+            ["kimi.provider_source"] = "web",
+        });
+
+        var snapshot = await ProviderSourceRunner.FetchAsync(
+            new UnusedProvider(),
+            new IProviderSource[] { app, web },
+            "kimi",
+            config,
+            CancellationToken.None);
+
+        Assert.AreEqual("web-data", snapshot.Name);
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_FallsThroughWhenSelectedSourceIsUnsigned()
+    {
+        var web = new FakeSource("web", available: true, label: "web-data");
+        var app = new FakeSource("app", available: false, label: "app-data");
+        var config = new MapConfig(new Dictionary<string, string>
+        {
+            ["kimi.provider_source"] = "app",
+        });
+
+        var snapshot = await ProviderSourceRunner.FetchAsync(
+            new UnusedProvider(),
+            new IProviderSource[] { app, web },
+            "kimi",
+            config,
+            CancellationToken.None);
+
+        Assert.AreEqual("web-data", snapshot.Name);
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_WhenSelectedSourceFails_DoesNotSwitchToAnotherLogin()
+    {
+        var app = new FakeSource(
+            "app",
+            available: true,
+            label: "app-data",
+            fail: new ProviderException("Not available: HTTP 401"));
+        var web = new FakeSource("web", available: true, label: "web-data");
+        var config = new MapConfig(new Dictionary<string, string>
+        {
+            ["kimi.provider_source"] = "app",
+        });
+
+        var error = await Assert.ThrowsExactlyAsync<ProviderException>(() =>
+            ProviderSourceRunner.FetchAsync(
+                new UnusedProvider(),
+                new IProviderSource[] { app, web },
+                "kimi",
+                config,
+                CancellationToken.None));
+
+        StringAssert.Contains(error.Message, "401");
+    }
+
+    private sealed class FakeSource : IProviderSource
+    {
+        private readonly bool _available;
+        private readonly string _label;
+        private readonly Exception? _fail;
+
+        public FakeSource(string id, bool available, string label = "", Exception? fail = null)
+        {
+            Id = id;
+            Name = id;
+            _available = available;
+            _label = label;
+            _fail = fail;
+        }
+
+        public string Id { get; }
+        public string Name { get; }
+        public bool IsAvailable(string instanceId, IConfig config) => _available;
+
+        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
+        {
+            if (_fail is not null)
+                throw _fail;
+            if (!_available)
+                throw new ProviderException("Login required: " + Id);
+            return Task.FromResult(new ProviderSnapshot { ProviderId = "kimi", Name = _label });
+        }
+    }
+
+    private sealed class UnusedProvider : IProvider
+    {
+        public string Type => "kimi";
+        public string Name => "Kimi";
+        public string SourceLabel => "unused";
+        public Confidence Confidence => Confidence.Official;
+
+        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
+            throw new AssertFailedException("provider FetchAsync should not run when sources exist");
+    }
+
+    private sealed class EmptyConfig : IConfig
+    {
+        public string Get(string key, string fallback = "") => fallback;
+        public string GetScoped(string instanceId, string key, string fallback = "") => fallback;
+        public bool HasScoped(string instanceId, string key) => false;
+        public bool GetBool(string key, bool fallback = false) => fallback;
+    }
+
+    private sealed class MapConfig : IConfig
+    {
+        private readonly Dictionary<string, string> _values;
+
+        public MapConfig(Dictionary<string, string> values) => _values = values;
+
+        public string Get(string key, string fallback = "") =>
+            _values.TryGetValue(key, out var value) ? value : fallback;
+
+        public string GetScoped(string instanceId, string key, string fallback = "") =>
+            Get($"{instanceId}.{key}", fallback);
+
+        public bool HasScoped(string instanceId, string key) =>
+            _values.ContainsKey($"{instanceId}.{key}");
+
+        public bool GetBool(string key, bool fallback = false) =>
+            _values.TryGetValue(key, out var value) ? value == "true" : fallback;
+    }
+}

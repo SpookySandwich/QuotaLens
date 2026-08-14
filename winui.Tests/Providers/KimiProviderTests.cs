@@ -115,12 +115,13 @@ public sealed class KimiProviderTests
     {
         var provider = new KimiProvider(
             () => null,
-            (_, _) => throw new AssertFailedException("no usage call expected"));
+            (_, _) => throw new AssertFailedException("no usage call expected"),
+            webIsAvailable: (_, _) => false);
 
         var ex = await Assert.ThrowsExactlyAsync<ProviderException>(
             () => provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None));
 
-        StringAssert.Contains(ex.Message, "Login required");
+        StringAssert.Contains(ex.Message, "no data source is ready");
     }
 
     [TestMethod]
@@ -212,6 +213,82 @@ public sealed class KimiProviderTests
 
         Assert.AreEqual(1, appCalls);
         Assert.AreEqual("Total quota", snapshot.Primary.Label);
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_UsesWebSourceWhenAppAndCliAreUnsigned()
+    {
+        var webCalls = 0;
+        var provider = new KimiProvider(
+            () => null,
+            (_, _) => throw new AssertFailedException("CLI must not be used when only Web is available"),
+            appIsAvailable: () => false,
+            fetchAppAsync: _ => throw new AssertFailedException("App must not be used when unsigned"),
+            webIsAvailable: (_, _) => true,
+            fetchWebAsync: (_, _, _) =>
+            {
+                webCalls++;
+                return Task.FromResult(new ProviderSnapshot
+                {
+                    ProviderId = "kimi",
+                    Name = "Kimi",
+                    SourceLabel = "Kimi WebView",
+                    Primary = new RateWindow { Label = "Weekly", UsedPercent = 40 },
+                });
+            });
+
+        var snapshot = await provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None);
+
+        Assert.AreEqual(1, webCalls);
+        Assert.AreEqual("Kimi WebView", snapshot.SourceLabel);
+        CollectionAssert.AreEqual(new[] { "app", "cli", "web" }, provider.Sources.Select(source => source.Id).ToArray());
+    }
+
+    [TestMethod]
+    public void ApplyKimiAppHeaders_CopiesJwtSessionClaims()
+    {
+        var token = FakeJwt(new Dictionary<string, object>
+        {
+            ["device_id"] = "dev-1",
+            ["ssid"] = "sess-1",
+            ["sub"] = "user-1",
+            ["exp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 600,
+        });
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://www.kimi.com/");
+        KimiProvider.ApplyKimiAppHeaders(request, token);
+
+        Assert.AreEqual("Bearer " + token, request.Headers.GetValues("Authorization").Single());
+        Assert.AreEqual("kimi-auth=" + token, request.Headers.GetValues("Cookie").Single());
+        Assert.AreEqual("dev-1", request.Headers.GetValues("x-msh-device-id").Single());
+        Assert.AreEqual("sess-1", request.Headers.GetValues("x-msh-session-id").Single());
+        Assert.AreEqual("user-1", request.Headers.GetValues("x-traffic-id").Single());
+    }
+
+    [TestMethod]
+    public void IsJwtExpired_UsesExpClaim()
+    {
+        var expired = FakeJwt(new Dictionary<string, object>
+        {
+            ["exp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - 120,
+        });
+        var fresh = FakeJwt(new Dictionary<string, object>
+        {
+            ["exp"] = DateTimeOffset.UtcNow.ToUnixTimeSeconds() + 600,
+        });
+
+        Assert.IsTrue(KimiProvider.IsJwtExpired(expired, DateTimeOffset.UtcNow));
+        Assert.IsFalse(KimiProvider.IsJwtExpired(fresh, DateTimeOffset.UtcNow));
+    }
+
+    private static string FakeJwt(IReadOnlyDictionary<string, object> claims)
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(claims);
+        var payload = Convert.ToBase64String(Encoding.UTF8.GetBytes(json))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+        return $"aaa.{payload}.sig";
     }
 
     // ---- helpers -----------------------------------------------------------

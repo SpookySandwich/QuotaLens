@@ -1,8 +1,9 @@
 namespace QuotaLens.Core;
 
 /// <summary>
-/// Shared orchestration for multi-source providers: use the user's selected source
-/// (when set and available), otherwise the first available source in priority order.
+/// Shared orchestration for multi-source providers: honor the user's selected
+/// source when it has credentials. Do not silently switch them to a different
+/// login (e.g. App → Web). If nothing is selected, use the first available source.
 /// Providers with no sources fall through to their own <see cref="IProvider.FetchAsync"/>.
 /// </summary>
 public static class ProviderSourceRunner
@@ -20,11 +21,11 @@ public static class ProviderSourceRunner
         if (sources.Count == 0)
             return await provider.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
 
-        var selected = config.GetScoped(instanceId, SourceConfigKey);
-        var selectedSource = sources.FirstOrDefault(source =>
-            string.Equals(source.Id, selected, StringComparison.OrdinalIgnoreCase));
-        if (selectedSource is not null && selectedSource.IsAvailable(instanceId, config))
-            return await selectedSource.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
+        var selectedId = config.GetScoped(instanceId, SourceConfigKey);
+        var selected = sources.FirstOrDefault(source =>
+            string.Equals(source.Id, selectedId, StringComparison.OrdinalIgnoreCase));
+        if (selected is not null && selected.IsAvailable(instanceId, config))
+            return await selected.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
 
         foreach (var source in sources)
         {
@@ -32,6 +33,6 @@ public static class ProviderSourceRunner
                 return await source.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
         }
 
-        throw new ProviderException("Login required: no data source is signed in. Add credentials in Settings.");
+        throw new ProviderException("Not available: no data source is ready. Open the app or pick another source.");
     }
 }

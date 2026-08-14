@@ -216,8 +216,7 @@ public sealed partial class MainWindow : Window
             type,
             async instance =>
                 await ShowDialogAsync(new EditProviderDialog(_svc, instance.Id, instance.Type, instance.Name, _hwnd))
-                == ContentDialogResult.Primary,
-            async instance => await _svc.OpenLoginAsync(instance.Id));
+                == ContentDialogResult.Primary);
     }
 
     private async void OnDeleteProviderRequested(object? sender, ProviderItemViewModel item)
