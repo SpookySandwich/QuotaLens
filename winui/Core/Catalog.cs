@@ -346,6 +346,14 @@ public static class Catalog
         ["moonshot_app_path"] = "",
         ["zai_app_path"] = "",
         ["alibaba_app_path"] = "",
+        ["cursor_app_path"] = "",
+        ["windsurf_app_path"] = "",
+        ["warp_app_path"] = "",
+        ["copilot_app_path"] = "",
+        ["factory_app_path"] = "",
+        ["perplexity_app_path"] = "",
+        ["ollama_app_path"] = "",
+        ["doubao_app_path"] = "",
     };
 
     private static readonly IReadOnlyDictionary<string, string> FieldDefaultOverrides = new Dictionary<string, string>
@@ -1428,6 +1436,62 @@ public static class Catalog
                 @"%ProgramFiles%\Qwen\QwenChat.exe",
             },
             new[] { "QwenChat.exe" }),
+        ["cursor"] = new(
+            "Cursor",
+            "cursor_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\Cursor\Cursor.exe",
+                @"%ProgramFiles%\Cursor\Cursor.exe",
+            },
+            new[] { "Cursor.exe" }),
+        ["windsurf"] = new(
+            "Windsurf",
+            "windsurf_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\Windsurf\Windsurf.exe",
+                @"%ProgramFiles%\Windsurf\Windsurf.exe",
+            },
+            new[] { "Windsurf.exe" }),
+        ["warp"] = new(
+            "Warp",
+            "warp_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\Warp\Warp.exe",
+                @"%ProgramFiles%\Warp\Warp.exe",
+            },
+            new[] { "Warp.exe" }),
+        ["copilot"] = new(
+            "GitHub Copilot",
+            "copilot_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\GitHub Copilot\GitHub Copilot.exe",
+                @"%ProgramFiles%\GitHub Copilot\GitHub Copilot.exe",
+            },
+            new[] { "GitHub Copilot.exe" }),
+        ["factory"] = new(
+            "Factory",
+            "factory_app_path",
+            new[] { @"%LOCALAPPDATA%\Programs\Factory\Factory.exe" },
+            new[] { "Factory.exe" }),
+        ["perplexity"] = new(
+            "Perplexity",
+            "perplexity_app_path",
+            new[] { @"%LOCALAPPDATA%\Programs\Perplexity\Perplexity.exe" },
+            new[] { "Perplexity.exe" }),
+        ["ollama"] = new(
+            "Ollama",
+            "ollama_app_path",
+            new[] { @"%LOCALAPPDATA%\Programs\Ollama" },
+            new[] { "ollama app.exe" }),
+        ["doubao"] = new(
+            "豆包 Doubao",
+            "doubao_app_path",
+            new[] { @"%LOCALAPPDATA%\Doubao\Doubao.exe" },
+            new[] { "Doubao.exe" }),
     };
 
     public static readonly IReadOnlyDictionary<string, ProviderLocalSetupProbe> LocalSetupProbes =
