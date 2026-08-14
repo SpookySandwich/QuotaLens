@@ -109,7 +109,7 @@ dotnet test  .\QuotaLens.slnx -c Debug -p:Platform=x64
 .\scripts\package-windows.ps1 -Configuration Release -Platform x64 -Version 1.0.0
 ```
 
-CI 会对每次推送执行构建和测试（`.github/workflows/windows-installer.yml`）；打 `v*` 标签会生成一个 GitHub release 草稿（`.github/workflows/release.yml`）。
+CI 会对每次推送执行构建和测试（`.github/workflows/windows-installer.yml`）。打 `v*` 标签或手动跑 Release 工作流会打 `1.0.0` 包并生成 GitHub release 草稿。
 
 ## 参考文档
 

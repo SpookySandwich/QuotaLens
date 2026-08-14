@@ -109,7 +109,7 @@ Package the installer and portable zip locally (needs [Inno Setup 6](https://jrs
 .\scripts\package-windows.ps1 -Configuration Release -Platform x64 -Version 1.0.0
 ```
 
-CI builds and tests every push (`.github/workflows/windows-installer.yml`); tagging `v*` drafts a GitHub release (`.github/workflows/release.yml`).
+CI builds and tests every push (`.github/workflows/windows-installer.yml`). Tagging `v*` (or running the Release workflow) packages `1.0.0` and drafts a GitHub release.
 
 ## Reference
 
