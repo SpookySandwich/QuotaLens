@@ -27,16 +27,31 @@ public sealed class RefreshService : IProviderService
 
     public IConfigService Config { get; }
 
+    private readonly SnapshotStore _store;
+
     public RefreshService(IConfigService config, DispatcherQueue ui)
+        : this(config, ui, new SnapshotStore(DefaultSnapshotDirectory()))
+    {
+    }
+
+    internal RefreshService(IConfigService config, DispatcherQueue ui, SnapshotStore store)
     {
         Config = config;
         _ui = ui;
+        _store = store;
         _keepAlive = new CliTokenKeepAliveService(config);
         foreach (var t in Catalog.Types)
             _byType[t.Id] = ProviderRegistry.Create(t.Id);
+        // Seed cards with last-known data so a restart shows a stale snapshot while the
+        // first refresh runs, instead of an empty/error state.
         foreach (var inst in Config.Instances)
-            _snapshots[inst.Id] = null;
+            _snapshots[inst.Id] = store.Load(inst.Id, inst.Type);
     }
+
+    private static string DefaultSnapshotDirectory() =>
+        System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "QuotaLens", "Snapshots");
 
     public IReadOnlyList<ProviderInstance> Instances => Config.Instances;
     public ProviderSnapshot? GetSnapshot(string instanceId) => _snapshots.TryGetValue(instanceId, out var s) ? s : null;
@@ -89,6 +104,7 @@ public sealed class RefreshService : IProviderService
             snap);
         snap.ProviderId = id;
         _snapshots[id] = snap;
+        _store.Save(id, instance?.Type ?? Catalog.ProviderTypeFromId(id), snap);
         OnUi(() => SnapshotUpdated?.Invoke(this, snap));
     }
 
@@ -190,6 +206,7 @@ public sealed class RefreshService : IProviderService
         var instance = Instances.FirstOrDefault(i => string.Equals(i.Id, instanceId, StringComparison.OrdinalIgnoreCase));
         Config.RemoveInstance(instanceId);
         _snapshots.TryRemove(instanceId, out _);
+        _store.Delete(instanceId);
         if (instance is not null && WebLoginService.IsSupported(instance.Type))
             WebLoginService.Instance?.RemoveInstanceData(instance.Id, instance.Type);
         OnUi(() => InstancesChanged?.Invoke(this, EventArgs.Empty));

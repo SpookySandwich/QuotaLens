@@ -385,6 +385,8 @@ public static class Catalog
                 Description: "Directory where the Gemini CLI stores its OAuth credentials (oauth_creds.json). Leave empty to use the .gemini directory under your user profile."),
             new ProviderField("gemini_path", "Gemini CLI executable", "gemini", IsFilePath: true,
                 Description: "Path to the gemini executable. Used to refresh the OAuth token and open the sign-in window. Leave empty to use 'gemini' on PATH."),
+            new ProviderField("gemini_app_path", "Anti-Gravity app location", @"%LOCALAPPDATA%\Programs\Antigravity IDE\Antigravity IDE.exe", IsFilePath: true,
+                Description: "Optional Anti-Gravity desktop app used for the Launch button. Leave empty to auto-detect."),
         },
         ["bedrock"] = new[]
         {
@@ -487,6 +489,8 @@ public static class Catalog
         {
             new ProviderField("kimi_cli_path", "Kimi CLI path", "kimi", IsFilePath: true,
                 Description: "Optional Kimi Code CLI executable. Used to refresh the OAuth token; leave empty to use 'kimi' on PATH."),
+            new ProviderField("kimi_app_path", "Kimi app location", @"%LOCALAPPDATA%\Programs\kimi-desktop\Kimi.exe", IsFilePath: true,
+                Description: "Optional Kimi desktop app (Kimi.work) used for the Launch button. Leave empty to auto-detect."),
             new ProviderField("kimi_url", "Login URL", "https://www.kimi.com/code/console",
                 Description: "Opened when signing in from this provider card. If the Kimi Code CLI is installed and logged in ('kimi login'), its credentials are used automatically instead."),
         },
@@ -1359,6 +1363,28 @@ public static class Catalog
                 @"%LOCALAPPDATA%\Programs\Qoder\Qoder.exe",
             },
             new[] { "QoderWork.exe", "Qoder.exe" }),
+        ["kimi"] = new(
+            "Kimi",
+            "kimi_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\kimi-desktop\Kimi.exe",
+                @"%LOCALAPPDATA%\Programs\Kimi.work\Kimi.exe",
+                @"%ProgramFiles%\kimi-desktop\Kimi.exe",
+                @"%ProgramFiles%\Kimi.work\Kimi.exe",
+            },
+            new[] { "Kimi.exe", "kimi.exe" }),
+        ["gemini"] = new(
+            "Anti-Gravity",
+            "gemini_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\Antigravity IDE\Antigravity IDE.exe",
+                @"%LOCALAPPDATA%\Programs\Antigravity\Antigravity.exe",
+                @"%ProgramFiles%\Antigravity IDE\Antigravity IDE.exe",
+                @"%ProgramFiles%\Antigravity\Antigravity.exe",
+            },
+            new[] { "Antigravity IDE.exe", "Antigravity.exe" }),
     };
 
     public static readonly IReadOnlyDictionary<string, ProviderLocalSetupProbe> LocalSetupProbes =
