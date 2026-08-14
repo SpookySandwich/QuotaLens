@@ -223,7 +223,13 @@ public sealed partial class AddProviderDialog : ContentDialog
         if (ProviderAddOptions.SuggestedGroup(options) is { } suggested)
             groups.Add(suggested);
 
-        groups.AddRange(ProviderAddOptions.GroupBySetupKind(options));
+        // One flat, alphabetical list — no source/setup categorization. Users care about
+        // their data, not how a provider authenticates.
+        groups.Add(new ProviderAddGroup(
+            "All",
+            I18n.T("addProvider.group.all"),
+            "",
+            options.OrderBy(option => option.Name, StringComparer.OrdinalIgnoreCase).ToArray()));
         return groups;
     }
 

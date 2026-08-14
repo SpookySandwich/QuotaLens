@@ -24,12 +24,20 @@ public sealed partial class EditProviderDialog : ContentDialog
 {
     // Segoe Fluent / MDL2 glyphs.
     private const string BrowseGlyph = "\uE8E5";
+    private const string CheckGlyph = "\uE73E";
+    private const string ErrorGlyph = "\uE711";
+
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush ValidBrush =
+        new(Windows.UI.Color.FromArgb(255, 34, 197, 94));
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush InvalidBrush =
+        new(Windows.UI.Color.FromArgb(255, 239, 68, 68));
 
     private readonly IProviderService _svc;
     private readonly string _instanceId;
     private readonly string _type;
     private readonly nint _hwnd;
-    private readonly List<(ProviderField Field, Func<string> Read, Action<string> Write)> _editors = new();
+    private readonly List<(ProviderField Field, Func<string> Read, Action<string> Write, Func<bool> IsValid)> _editors = new();
+    private readonly List<(Func<bool> IsValid, FontIcon Icon)> _validations = new();
 
     public EditProviderDialog(IProviderService svc, string instanceId, string providerType, string displayName, nint hwnd)
     {
@@ -44,6 +52,7 @@ public sealed partial class EditProviderDialog : ContentDialog
         CloseButtonText = I18n.T("common.cancel");
 
         BuildFields();
+        ValidateAll();
         PrimaryButtonClick += OnSave;
     }
 
@@ -75,7 +84,7 @@ public sealed partial class EditProviderDialog : ContentDialog
                 panel.Children.Add(toggle);
                 AddDescription(panel, field.Description);
                 FieldsPanel.Children.Add(panel);
-                _editors.Add((field, () => toggle.IsOn ? "true" : "false", value => toggle.IsOn = IsTruthy(value)));
+                _editors.Add((field, () => toggle.IsOn ? "true" : "false", value => toggle.IsOn = IsTruthy(value), () => true));
                 continue;
             }
 
@@ -99,6 +108,7 @@ public sealed partial class EditProviderDialog : ContentDialog
                     Password = current,
                     PlaceholderText = placeholder,
                 };
+                box.PasswordChanged += (_, _) => ValidateAll();
                 read = () => box.Password;
                 write = value => box.Password = value;
                 input = box;
@@ -111,10 +121,13 @@ public sealed partial class EditProviderDialog : ContentDialog
                     Text = current,
                     PlaceholderText = placeholder,
                 };
+                box.TextChanged += (_, _) => ValidateAll();
                 read = () => box.Text;
                 write = value => box.Text = value;
                 input = box;
             }
+
+            var isValid = ValidationFor(field, read);
 
             AutomationProperties.SetAutomationId(input, automationId);
             Grid.SetColumn(input, 0);
@@ -130,6 +143,13 @@ public sealed partial class EditProviderDialog : ContentDialog
             if (field.IsFilePath)
                 trailing.Children.Add(BuildBrowseButton(field, write));
 
+            if (field.IsRequired || field.IsFilePath)
+            {
+                var icon = new FontIcon { FontSize = 14, VerticalAlignment = VerticalAlignment.Bottom };
+                _validations.Add((isValid, icon));
+                trailing.Children.Add(icon);
+            }
+
             if (trailing.Children.Count > 0)
             {
                 Grid.SetColumn(trailing, 1);
@@ -140,7 +160,7 @@ public sealed partial class EditProviderDialog : ContentDialog
             wrap.Children.Add(grid);
             AddDescription(wrap, field.Description);
             FieldsPanel.Children.Add(wrap);
-            _editors.Add((field, read, write));
+            _editors.Add((field, read, write, isValid));
         }
     }
 
@@ -163,6 +183,37 @@ public sealed partial class EditProviderDialog : ContentDialog
                 write(path);
         };
         return browse;
+    }
+
+    private static Func<bool> ValidationFor(ProviderField field, Func<string> read)
+    {
+        if (field.IsRequired)
+            return () => !string.IsNullOrWhiteSpace(read());
+
+        if (field.IsFilePath)
+            return () => string.IsNullOrWhiteSpace(read()) || File.Exists(read());
+
+        return () => true;
+    }
+
+    /// <summary>Refreshes per-field validation glyphs and gates the Done button.</summary>
+    private void ValidateAll()
+    {
+        foreach (var (isValid, icon) in _validations)
+        {
+            if (isValid())
+            {
+                icon.Glyph = CheckGlyph;
+                icon.Foreground = ValidBrush;
+            }
+            else
+            {
+                icon.Glyph = ErrorGlyph;
+                icon.Foreground = InvalidBrush;
+            }
+        }
+
+        IsPrimaryButtonEnabled = _editors.All(editor => editor.IsValid());
     }
 
     /// <summary>
@@ -222,7 +273,8 @@ public sealed partial class EditProviderDialog : ContentDialog
         _editors.Add((
             new ProviderField("provider_source", "Source"),
             () => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "",
-            _ => { }));
+            _ => { },
+            () => true));
     }
 
     private void AddSectionHeader(string title, string description)
@@ -270,7 +322,7 @@ public sealed partial class EditProviderDialog : ContentDialog
         var deferral = args.GetDeferral();
         try
         {
-            foreach (var (field, read, _) in _editors)
+            foreach (var (field, read, _, _) in _editors)
                 _svc.Config.Set(ScopedKey(field.Key), read());
 
             await _svc.Config.SaveAsync();
