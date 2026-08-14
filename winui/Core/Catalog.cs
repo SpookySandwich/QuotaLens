@@ -304,6 +304,7 @@ public static class Catalog
     public static readonly IReadOnlySet<string> RetiredProviderTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         "kimik2",
+        "antigravity", // now a source under Gemini
     };
 
     public static readonly IReadOnlyList<ProviderType> AddableTypes =

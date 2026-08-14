@@ -18,7 +18,9 @@ public static class ProviderRegistry
             ["deepseek"] = () => new DeepSeekProvider(),
             ["kiro"] = () => new KiroProvider(),
             ["alibabacloud"] = () => new AlibabaProvider(),
-            ["antigravity"] = () => new AntigravityProvider(),
+            ["antigravity"] = () => new RetiredProvider(
+                "antigravity",
+                "Provider retired: Antigravity is now a data source under Gemini. Remove this card and use Gemini."),
             ["qoder"] = () => new QoderProvider(),
             ["azureopenai"] = () => new AzureOpenAIProvider(),
             ["doubao"] = () => new DoubaoProvider(),

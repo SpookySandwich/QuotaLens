@@ -27,6 +27,13 @@ public sealed class AntigravityProvider : IProvider
     public string SourceLabel => "Antigravity local probe";
     public Confidence Confidence => Confidence.SemiOfficial;
 
+    /// <summary>Lightweight availability probe: is the bundled language server running?</summary>
+    internal static bool IsRunning()
+    {
+        try { return Process.GetProcessesByName("language_server").Length > 0; }
+        catch { return false; }
+    }
+
     /// <summary>
     /// Dedicated HttpClient that accepts the self-signed localhost cert. NOT the shared
     /// Http.Client. Mirrors the Rust reqwest client built with danger_accept_invalid_certs(true)

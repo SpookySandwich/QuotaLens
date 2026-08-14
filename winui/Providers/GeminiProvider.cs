@@ -21,12 +21,27 @@ public sealed partial class GeminiProvider : IProvider
     private static readonly DateTimeOffset ConsumerOAuthRetirement =
         new(2026, 6, 18, 0, 0, 0, TimeSpan.Zero);
 
+    private readonly IReadOnlyList<IProviderSource> _sources;
+
+    public GeminiProvider()
+    {
+        _sources = new IProviderSource[]
+        {
+            new GeminiCliSource(this),
+            new AntigravityIdeSource(),
+        };
+    }
+
     public string Type => "gemini";
     public string Name => "Gemini";
     public string SourceLabel => "Gemini OAuth";
     public Confidence Confidence => Confidence.SemiOfficial;
+    public IReadOnlyList<IProviderSource> Sources => _sources;
 
-    public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
+    public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
+        ProviderSourceRunner.FetchAsync(this, _sources, instanceId, config, ct);
+
+    private async Task<ProviderSnapshot> FetchCliAsync(string instanceId, IConfig config, CancellationToken ct)
     {
         var geminiDir = ResolveGeminiDirectory(instanceId, config);
         var authType = CurrentAuthType(geminiDir);
@@ -538,6 +553,45 @@ public sealed partial class GeminiProvider : IProvider
     internal sealed record CodeAssistStatus(string? ProjectId, string? TierId, string? TierName)
     {
         public static CodeAssistStatus Empty { get; } = new(null, null, null);
+    }
+
+    // ---- sources -------------------------------------------------------------
+
+    private bool CliCredentialsExist(string instanceId, IConfig config)
+    {
+        try
+        {
+            var dir = ResolveGeminiDirectory(instanceId, config);
+            return File.Exists(Path.Combine(dir, "oauth_creds.json"));
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private sealed class GeminiCliSource : IProviderSource
+    {
+        private readonly GeminiProvider _owner;
+
+        public GeminiCliSource(GeminiProvider owner) => _owner = owner;
+
+        public string Id => "cli";
+        public string Name => "Gemini CLI";
+        public bool IsAvailable(string instanceId, IConfig config) => _owner.CliCredentialsExist(instanceId, config);
+        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
+            _owner.FetchCliAsync(instanceId, config, ct);
+    }
+
+    private sealed class AntigravityIdeSource : IProviderSource
+    {
+        private static readonly AntigravityProvider Provider = new();
+
+        public string Id => "ide";
+        public string Name => "Antigravity IDE";
+        public bool IsAvailable(string instanceId, IConfig config) => AntigravityProvider.IsRunning();
+        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
+            Provider.FetchAsync(instanceId, config, ct);
     }
 
 }
