@@ -147,9 +147,12 @@ public sealed partial class EditProviderDialog : ContentDialog
         {
             Content = new FontIcon { Glyph = BrowseGlyph, FontSize = 14 },
             VerticalAlignment = VerticalAlignment.Bottom,
+            Style = (Style)Application.Current.Resources["CardIconButton"],
         };
+        var browseName = I18n.T("settings.browse");
+        ToolTipService.SetToolTip(browse, browseName);
         AutomationProperties.SetAutomationId(browse, $"Browse_{_instanceId}_{field.Key}");
-        AutomationProperties.SetName(browse, $"Browse {field.Label}");
+        AutomationProperties.SetName(browse, browseName);
         browse.Click += async (_, _) =>
         {
             var path = await PickFileAsync();
@@ -169,6 +172,7 @@ public sealed partial class EditProviderDialog : ContentDialog
         {
             Content = new FontIcon { Glyph = ImportGlyph, FontSize = 14 },
             VerticalAlignment = VerticalAlignment.Bottom,
+            Style = (Style)Application.Current.Resources["CardIconButton"],
         };
         var name = "Import from " + string.Join(" / ", envKeys);
         ToolTipService.SetToolTip(button, name);

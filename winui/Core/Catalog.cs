@@ -344,7 +344,7 @@ public static class Catalog
     {
         "deepseek_key", "deepseek_user_token", "alibabacloud_key_id", "alibabacloud_key_secret",
         "openrouter_key", "openrouter_management_key", "moonshot_key", "venice_key", "crof_key",
-        "openai_key", "copilot_key", "gemini_oauth_client_secret", "bedrock_access_key_id", "bedrock_secret_access_key", "bedrock_session_token", "vertexai_credentials_path", "azureopenai_key", "azureopenai_arm_token", "elevenlabs_key", "warp_key", "codebuff_key", "synthetic_key", "zai_key", "llmproxy_key",
+        "openai_key", "copilot_key", "bedrock_access_key_id", "bedrock_secret_access_key", "bedrock_session_token", "vertexai_credentials_path", "azureopenai_key", "azureopenai_arm_token", "elevenlabs_key", "warp_key", "codebuff_key", "synthetic_key", "zai_key", "llmproxy_key",
         "doubao_key", "groq_key", "deepgram_key",
         "grok_path",
         "kilo_key", "kilo_auth_path",
@@ -381,16 +381,10 @@ public static class Catalog
         },
         ["gemini"] = new[]
         {
-            new ProviderField("gemini_home", "Gemini home", @"%USERPROFILE%\.gemini",
-                Description: "Optional Gemini CLI credential directory. Leave empty to use the current user's .gemini directory."),
-            new ProviderField("gemini_path", "Gemini CLI", "gemini", IsFilePath: true,
-                Description: "Optional Gemini CLI executable path. Used only to discover OAuth refresh configuration."),
-            new ProviderField("gemini_package_root", "Gemini package root", @"%APPDATA%\npm\node_modules\@google\gemini-cli",
-                Description: "Optional @google/gemini-cli package root. Leave empty to discover it from the Gemini CLI executable."),
-            new ProviderField("gemini_oauth_client_id", "OAuth client ID", "",
-                Description: "Optional override used only when the installed Gemini CLI package cannot be inspected."),
-            new ProviderField("gemini_oauth_client_secret", "OAuth client secret", "", IsPassword: true,
-                Description: "Optional override used only when the installed Gemini CLI package cannot be inspected."),
+            new ProviderField("gemini_home", "Gemini CLI data directory", @"%USERPROFILE%\.gemini",
+                Description: "Directory where the Gemini CLI stores its OAuth credentials (oauth_creds.json). Leave empty to use the .gemini directory under your user profile."),
+            new ProviderField("gemini_path", "Gemini CLI executable", "gemini", IsFilePath: true,
+                Description: "Path to the gemini executable. Used to refresh the OAuth token and open the sign-in window. Leave empty to use 'gemini' on PATH."),
         },
         ["bedrock"] = new[]
         {
