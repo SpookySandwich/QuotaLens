@@ -59,7 +59,7 @@ public sealed class ProviderAddOptionTests
 
         var byCategory = ProviderAddOptions.Filter(options, "browser login");
         Assert.IsTrue(byCategory.All(option => option.SetupKind == ProviderSetupKind.BrowserLogin));
-        Assert.IsTrue(byCategory.Any(option => option.Id == "kimi"));
+        Assert.IsTrue(byCategory.Any(option => option.Id == "cursor"));
     }
 
     [TestMethod]
@@ -103,7 +103,7 @@ public sealed class ProviderAddOptionTests
         var groups = ProviderAddOptions.GroupBySetupKind(options);
 
         CollectionAssert.AreEqual(
-            new[] { "BrowserLogin", "ApiKey", "LocalAppOrCli" },
+            new[] { "BrowserLogin", "ApiKey", "LocalAppOrCli", "Ready" },
             groups.Select(group => group.Key).ToArray(),
             "Setup kinds must be listed in setup order, and kinds with no members must not appear.");
         Assert.IsTrue(groups.All(group => group.Count > 0));

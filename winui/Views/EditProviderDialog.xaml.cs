@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using QuotaLens.Core;
 using QuotaLens.Helpers;
 using QuotaLens.Providers;
+using QuotaLens.Services;
 using Windows.Storage.Pickers;
 using WinRT.Interop;
 
@@ -54,6 +55,8 @@ public sealed partial class EditProviderDialog : ContentDialog
         if (!Catalog.Fields.TryGetValue(_type, out var fields) || fields.Length == 0) return;
 
         AddSectionHeader("Connection", "Provider-specific account, CLI, or sign-in settings.");
+
+        AddSourceSelector();
 
         foreach (var field in fields)
         {
@@ -178,6 +181,48 @@ public sealed partial class EditProviderDialog : ContentDialog
         }
 
         return field.Placeholder;
+    }
+
+    /// <summary>
+    /// For multi-source providers, a source dropdown (App / CLI) so the user can choose
+    /// which data origin this instance uses. Stored per instance as "provider_source".
+    /// </summary>
+    private void AddSourceSelector()
+    {
+        if (!Catalog.MultiSourceProviders.Contains(_type))
+            return;
+
+        var sources = ProviderRegistry.Create(_type).Sources;
+        if (sources.Count <= 1)
+            return;
+
+        var combo = new ComboBox
+        {
+            Header = "Source",
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+        foreach (var source in sources)
+            combo.Items.Add(new ComboBoxItem { Content = source.Name, Tag = source.Id });
+
+        var current = ReadValue("provider_source");
+        var selected = 0;
+        for (var index = 0; index < sources.Count; index++)
+        {
+            if (string.Equals(sources[index].Id, current, StringComparison.OrdinalIgnoreCase))
+            {
+                selected = index;
+                break;
+            }
+        }
+        combo.SelectedIndex = selected;
+
+        AutomationProperties.SetAutomationId(combo, $"Source_{_instanceId}");
+        FieldsPanel.Children.Add(combo);
+
+        _editors.Add((
+            new ProviderField("provider_source", "Source"),
+            () => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "",
+            _ => { }));
     }
 
     private void AddSectionHeader(string title, string description)

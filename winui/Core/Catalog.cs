@@ -1697,9 +1697,21 @@ public static class Catalog
         return RequiredFieldSets.TryGetValue(normalized, out var required) && required.Length > 0;
     }
 
+    /// <summary>
+    /// Providers exposing more than one data source (selected per instance). Kept in
+    /// sync with <see cref="IProvider.Sources"/>; see KimiProvider (App + CLI).
+    /// </summary>
+    public static readonly IReadOnlySet<string> MultiSourceProviders =
+        new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "kimi" };
+
     public static ProviderSetupKind SetupKindFor(string providerType)
     {
         var normalized = FindType(providerType)?.Id ?? providerType;
+
+        // Multi-source providers are added without a forced login/configure step; the
+        // source is auto-detected on first refresh and switchable in the edit dialog.
+        if (MultiSourceProviders.Contains(normalized))
+            return ProviderSetupKind.Ready;
 
         if (RequiresUserConfiguration(normalized))
             return ProviderSetupKind.ApiKey;

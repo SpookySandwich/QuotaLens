@@ -108,7 +108,7 @@ public sealed class ProviderAddFlowTests
 
         var instance = await ProviderAddFlow.AddAsync(
             service,
-            Catalog.FindType("kimi")!,
+            Catalog.FindType("cursor")!,
             _ => throw new InvalidOperationException("browser login should not open edit settings"),
             added =>
             {
@@ -117,7 +117,7 @@ public sealed class ProviderAddFlowTests
             });
 
         Assert.IsNotNull(instance);
-        Assert.AreEqual("kimi", service.AddedProviderType);
+        Assert.AreEqual("cursor", service.AddedProviderType);
         Assert.IsFalse(service.AddRefreshImmediately);
         CollectionAssert.AreEqual(new[] { instance!.Id }, service.LoginIds.ToArray());
         Assert.AreEqual(0, service.RemovedIds.Count);
@@ -131,14 +131,14 @@ public sealed class ProviderAddFlowTests
 
         var instance = await ProviderAddFlow.AddAsync(
             service,
-            Catalog.FindType("kimi")!,
+            Catalog.FindType("cursor")!,
             _ => throw new InvalidOperationException("browser login should not open edit settings"),
             _ => Task.FromResult(false));
 
         Assert.IsNull(instance);
-        Assert.AreEqual("kimi", service.AddedProviderType);
+        Assert.AreEqual("cursor", service.AddedProviderType);
         Assert.IsFalse(service.AddRefreshImmediately);
-        CollectionAssert.AreEqual(new[] { "kimi-new" }, service.RemovedIds.ToArray());
+        CollectionAssert.AreEqual(new[] { "cursor-new" }, service.RemovedIds.ToArray());
         Assert.AreEqual(0, service.RefreshedIds.Count);
     }
 
@@ -154,7 +154,8 @@ public sealed class ProviderAddFlowTests
     public void RequiresSetup_IncludesApiKeyAndBrowserLoginProviders()
     {
         Assert.IsTrue(ProviderAddFlow.RequiresSetup("deepseek"));
-        Assert.IsTrue(ProviderAddFlow.RequiresSetup("kimi"));
+        Assert.IsTrue(ProviderAddFlow.RequiresSetup("cursor"));
+        Assert.IsFalse(ProviderAddFlow.RequiresSetup("kimi")); // multi-source → Ready
         Assert.IsFalse(ProviderAddFlow.RequiresSetup("qoder"));
     }
 
