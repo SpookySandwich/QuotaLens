@@ -202,9 +202,7 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         var launchTarget = Catalog.LaunchTargetFor(ProviderType, _svc.Config);
         var configuredPath = launchTarget?.ConfigKey is null
             ? null
-            : launchTarget.ConfigKey == Catalog.DefaultLaunchEditorPathKey
-                ? _svc.Config.Get(launchTarget.ConfigKey)
-                : _svc.Config.GetScoped(InstanceId, launchTarget.ConfigKey);
+            : _svc.Config.Get(launchTarget.ConfigKey);
         var canResolveLaunchPath = launchTarget != null
             && IdeLauncher.TryResolveLaunchPath(ProviderType, launchTarget, configuredPath, out _);
 

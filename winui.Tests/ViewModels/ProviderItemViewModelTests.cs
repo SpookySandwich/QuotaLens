@@ -42,7 +42,7 @@ public sealed class ProviderItemViewModelTests
     {
         var executable = TempExecutablePath();
         var service = new FakeProviderService(new ProviderInstance("qoder", "qoder", "Qoder"));
-        service.Config.Set("qoder.qoder_app_path", executable);
+        service.Config.Set("qoder_app_path", executable);
 
         try
         {
@@ -63,7 +63,7 @@ public sealed class ProviderItemViewModelTests
     public void Constructor_WhenLaunchExecutableIsMissing_HidesLaunchButton()
     {
         var service = new FakeProviderService(new ProviderInstance("qoder", "qoder", "Qoder"));
-        service.Config.Set("qoder.qoder_app_path", @"C:\missing\QoderWork.exe");
+        service.Config.Set("qoder_app_path", @"C:missingQoderWork.exe");
 
         var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
 
@@ -75,7 +75,7 @@ public sealed class ProviderItemViewModelTests
     {
         var executable = TempExecutablePath();
         var service = new FakeProviderService(new ProviderInstance("work", "qoder", "Work Qoder"));
-        service.Config.Set("work.qoder_app_path", executable);
+        service.Config.Set("qoder_app_path", executable);
 
         try
         {

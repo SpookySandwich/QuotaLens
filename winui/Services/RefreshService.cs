@@ -223,11 +223,7 @@ public sealed class RefreshService : IProviderService
         if (target == null)
             return;
 
-        var path = target.ConfigKey is null
-            ? ""
-            : target.ConfigKey == Catalog.DefaultLaunchEditorPathKey
-                ? Config.Get(target.ConfigKey)
-                : Config.GetScoped(instanceId, target.ConfigKey);
+        var path = target.ConfigKey is null ? "" : Config.Get(target.ConfigKey);
         try { IdeLauncher.LaunchIde(type, target, string.IsNullOrWhiteSpace(path) ? null : path); }
         catch { /* UI swallows launch errors (matches original) */ }
     }

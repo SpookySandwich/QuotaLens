@@ -332,6 +332,20 @@ public static class Catalog
         ["deprioritize_empty_providers"] = "true",
         ["hide_sensitive_info"] = "false",
         ["sort_priority_order"] = "plan-value,reset-frequency,next-reset",
+        // Desktop-app launch paths are GLOBAL (one per provider type, shared by every
+        // instance) rather than per-instance fields.
+        ["claude_app_path"] = "",
+        ["codex_app_path"] = "",
+        ["codex_lb_app_path"] = "",
+        ["antigravity_path"] = "",
+        ["kiro_app_path"] = "",
+        ["qoder_app_path"] = "",
+        ["kimi_app_path"] = "",
+        ["gemini_app_path"] = "",
+        ["openai_app_path"] = "",
+        ["moonshot_app_path"] = "",
+        ["zai_app_path"] = "",
+        ["alibaba_app_path"] = "",
     };
 
     private static readonly IReadOnlyDictionary<string, string> FieldDefaultOverrides = new Dictionary<string, string>
@@ -360,8 +374,7 @@ public static class Catalog
         {
             new ProviderField("codex_lb_url", "Base URL", "http://127.0.0.1:2455",
                 Description: "Local codex-lb service endpoint."),
-            new ProviderField("codex_lb_app_path", "Codex app location", @"%LOCALAPPDATA%\Programs\Codex\Codex.exe", IsFilePath: true,
-                Description: "Optional Codex GUI app path. Leave empty to use the default install paths."),
+
         },
         ["codex"] = new[]
         {
@@ -369,8 +382,7 @@ public static class Catalog
                 Description: "Optional Codex home directory. Leave empty to use CODEX_HOME or the default user profile location."),
             new ProviderField("codex_chatgpt_base_url", "ChatGPT base URL", "https://chatgpt.com/backend-api",
                 Description: "Optional Codex usage API base URL. Leave empty unless your Codex configuration uses a custom ChatGPT base URL."),
-            new ProviderField("codex_app_path", "Codex app location", @"%LOCALAPPDATA%\Programs\Codex\Codex.exe", IsFilePath: true,
-                Description: "Optional Codex GUI app path. Leave empty to use the default install paths."),
+
         },
         ["copilot"] = new[]
         {
@@ -385,8 +397,7 @@ public static class Catalog
                 Description: "Directory where the Gemini CLI stores its OAuth credentials (oauth_creds.json). Leave empty to use the .gemini directory under your user profile."),
             new ProviderField("gemini_path", "Gemini CLI executable", "gemini", IsFilePath: true,
                 Description: "Path to the gemini executable. Used to refresh the OAuth token and open the sign-in window. Leave empty to use 'gemini' on PATH."),
-            new ProviderField("gemini_app_path", "Anti-Gravity app location", @"%LOCALAPPDATA%\Programs\Antigravity IDE\Antigravity IDE.exe", IsFilePath: true,
-                Description: "Optional Anti-Gravity desktop app used for the Launch button. Leave empty to auto-detect."),
+
         },
         ["bedrock"] = new[]
         {
@@ -424,8 +435,7 @@ public static class Catalog
         {
             new ProviderField("claude_path", "Claude Code executable", "claude", IsFilePath: true,
                 Description: "Leave empty to use the claude command on PATH."),
-            new ProviderField("claude_app_path", "Claude app location", @"%LOCALAPPDATA%\Programs\Claude\Claude.exe", IsFilePath: true,
-                Description: "Optional GUI app path. This does not affect Claude Code quota probing."),
+
         },
         ["deepseek"] = new[]
         {
@@ -435,8 +445,7 @@ public static class Catalog
         },
         ["kiro"] = new[]
         {
-            new ProviderField("kiro_app_path", "App location", @"%LOCALAPPDATA%\Programs\Kiro\Kiro.exe", IsFilePath: true,
-                Description: "Optional GUI app path. Leave empty to use the default install path."),
+
             new ProviderField("kiro_cli_path", "CLI location", @"%LOCALAPPDATA%\Kiro-Cli\kiro-cli.exe", IsFilePath: true,
                 Description: "Leave empty to use KIRO_CLI_PATH, then the default LocalAppData install path."),
         },
@@ -461,8 +470,7 @@ public static class Catalog
         },
         ["antigravity"] = new[]
         {
-            new ProviderField("antigravity_path", "Executable location", @"%LOCALAPPDATA%\Programs\Antigravity\Antigravity.exe", IsFilePath: true,
-                Description: "Used when QuotaLens needs to start Antigravity before probing local quota status."),
+
             new ProviderField("show_antigravity_other_quotas", "Show Other model group", IsToggle: true,
                 Description: "Include non-Claude and non-Gemini Antigravity model quotas in the card."),
         },
@@ -478,8 +486,7 @@ public static class Catalog
         },
         ["qoder"] = new[]
         {
-            new ProviderField("qoder_app_path", "Qoder app location", @"%ProgramFiles%\QoderWork\QoderWork\QoderWork.exe", IsFilePath: true,
-                Description: "Optional GUI app path. This does not affect qodercli credit tracking."),
+
             new ProviderField("qoder_cli_path", "Qoder CLI location", @"%ProgramFiles%\QoderWork\QoderWork\resources\bin\qodercli.exe", IsFilePath: true,
                 Description: "Leave empty to use the default QoderWork install path."),
             new ProviderField("qoder_token", "Personal access token", "...", IsPassword: true,
@@ -489,8 +496,7 @@ public static class Catalog
         {
             new ProviderField("kimi_cli_path", "Kimi CLI path", "kimi", IsFilePath: true,
                 Description: "Optional Kimi Code CLI executable. Used to refresh the OAuth token; leave empty to use 'kimi' on PATH."),
-            new ProviderField("kimi_app_path", "Kimi app location", @"%LOCALAPPDATA%\Programs\kimi-desktop\Kimi.exe", IsFilePath: true,
-                Description: "Optional Kimi desktop app (Kimi.work) used for the Launch button. Leave empty to auto-detect."),
+
             new ProviderField("kimi_url", "Login URL", "https://www.kimi.com/code/console",
                 Description: "Opened when signing in from this provider card. If the Kimi Code CLI is installed and logged in ('kimi login'), its credentials are used automatically instead."),
         },
@@ -1370,6 +1376,7 @@ public static class Catalog
             {
                 @"%LOCALAPPDATA%\Programs\kimi-desktop\Kimi.exe",
                 @"%LOCALAPPDATA%\Programs\Kimi.work\Kimi.exe",
+                @"%LOCALAPPDATA%\Programs\Kimi\Kimi.exe",
                 @"%ProgramFiles%\kimi-desktop\Kimi.exe",
                 @"%ProgramFiles%\Kimi.work\Kimi.exe",
             },
@@ -1385,6 +1392,42 @@ public static class Catalog
                 @"%ProgramFiles%\Antigravity\Antigravity.exe",
             },
             new[] { "Antigravity IDE.exe", "Antigravity.exe" }),
+        ["openai"] = new(
+            "ChatGPT",
+            "openai_app_path",
+            new[]
+            {
+                @"%ProgramFiles%\WindowsApps\OpenAI.ChatGPT_*\ChatGPT.exe",
+                @"%LOCALAPPDATA%\Programs\ChatGPT\ChatGPT.exe",
+            },
+            new[] { "ChatGPT.exe" }),
+        ["moonshot"] = new(
+            "Kimi",
+            "moonshot_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\Kimi\Kimi.exe",
+                @"%ProgramFiles%\Kimi\Kimi.exe",
+            },
+            new[] { "Kimi.exe" }),
+        ["zai"] = new(
+            "ZCode",
+            "zai_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\ZCode\ZCode.exe",
+                @"%ProgramFiles%\ZCode\ZCode.exe",
+            },
+            new[] { "ZCode.exe" }),
+        ["alibaba"] = new(
+            "Qwen Chat",
+            "alibaba_app_path",
+            new[]
+            {
+                @"%LOCALAPPDATA%\Programs\Qwen\QwenChat.exe",
+                @"%ProgramFiles%\Qwen\QwenChat.exe",
+            },
+            new[] { "QwenChat.exe" }),
     };
 
     public static readonly IReadOnlyDictionary<string, ProviderLocalSetupProbe> LocalSetupProbes =

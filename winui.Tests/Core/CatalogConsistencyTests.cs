@@ -169,6 +169,10 @@ public sealed class CatalogConsistencyTests
                 "hide_sensitive_info",
                 "sort_priority_order",
             })
+            .Concat(Catalog.LaunchTargets.Values
+                .Select(target => target.ConfigKey)
+                .Where(key => key is not null)
+                .Select(key => key!))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var unexpected = Catalog.DefaultConfig.Keys
@@ -311,18 +315,16 @@ public sealed class CatalogConsistencyTests
     }
 
     [TestMethod]
-    public void LaunchTargets_UseKnownEditableConfigKeys()
+    public void LaunchTargets_UseKnownGlobalConfigKeys()
     {
+        // Launch paths are global (one per provider type), so they only need a default
+        // in the global config — not a per-instance editable field.
         foreach (var (providerType, target) in Catalog.LaunchTargets)
         {
             if (target.ConfigKey is null)
                 continue;
 
-            Assert.IsTrue(Catalog.DefaultConfig.ContainsKey(target.ConfigKey), $"{providerType} launch target config key has no default.");
-            Assert.IsTrue(
-                Catalog.Fields.TryGetValue(providerType, out var fields)
-                && fields.Any(field => field.Key == target.ConfigKey),
-                $"{providerType} launch target config key is not editable.");
+            Assert.IsTrue(Catalog.DefaultConfig.ContainsKey(target.ConfigKey), $"{providerType} launch target config key has no global default.");
         }
     }
 

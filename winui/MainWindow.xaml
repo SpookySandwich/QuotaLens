@@ -534,6 +534,17 @@
                     </Grid>
                 </Border>
 
+                <!-- Desktop-app launch paths (global, one per provider type). -->
+                <Border Style="{StaticResource CardStyle}">
+                    <StackPanel Spacing="12">
+                        <StackPanel Spacing="2">
+                            <TextBlock x:Name="LaunchPathsTitle" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock x:Name="LaunchPathsHint" Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <StackPanel x:Name="LaunchPathsPanel" Spacing="8" />
+                    </StackPanel>
+                </Border>
+
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button x:Name="SaveSettingsButton"
                             AutomationProperties.AutomationId="SaveSettingsButton"

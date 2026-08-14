@@ -45,6 +45,7 @@ public sealed partial class MainWindow : Window
     private readonly List<Storyboard> _providerReorderAnimations = new();
     private readonly List<ProviderSortTerm> _sortPriorityTerms = new();
     private readonly Dictionary<string, List<PlanRuleEditor>> _planRuleEditorsByProvider = new();
+    private readonly List<(string ConfigKey, TextBox Box)> _launchPathEditors = new();
     private long _ambientTintStartTimestamp;
     private Windows.UI.Color _ambientTintStartColor;
     private Windows.UI.Color _ambientTintTargetColor;
@@ -128,6 +129,9 @@ public sealed partial class MainWindow : Window
         BackButtonToolTipText.Text = I18n.T("settings.close");
         AutomationProperties.SetName(BrowseDefaultLaunchEditorButton, I18n.T("settings.browseDefaultLaunchEditor"));
         BrowseDefaultLaunchEditorToolTipText.Text = I18n.T("settings.browse");
+        LaunchPathsTitle.Text = I18n.T("settings.launchPaths");
+        LaunchPathsHint.Text = I18n.T("settings.launchPathsHint");
+        RenderLaunchPathRows();
         SaveSettingsButton.Content = I18n.T("settings.save");
         CancelSettingsButton.Content = I18n.T("settings.close");
 
@@ -764,6 +768,7 @@ public sealed partial class MainWindow : Window
         StartHiddenAtStartupToggle.IsOn = _startupLaunch.IsStartHiddenEnabled();
         UpdateStartHiddenAtStartupAvailability();
         DefaultLaunchEditorBox.Text = _svc.Config.Get(Catalog.DefaultLaunchEditorPathKey);
+        LoadLaunchPaths();
         LoadSortPrioritySettings();
         LoadPlanValueRulesSettings();
 
@@ -797,6 +802,7 @@ public sealed partial class MainWindow : Window
         _svc.Config.Set(ProviderSortPolicy.DeprioritizeEmptyProvidersConfigKey, DeprioritizeEmptyToggle.IsOn ? "true" : "false");
         _startupLaunch.SetEnabled(LaunchAtStartupToggle.IsOn, StartHiddenAtStartupToggle.IsOn);
         _svc.Config.Set(Catalog.DefaultLaunchEditorPathKey, DefaultLaunchEditorBox.Text);
+        SaveLaunchPaths();
         _svc.Config.Set(ProviderSortPriorityOrder.ConfigKey, ProviderSortPriorityOrder.Serialize(_sortPriorityTerms));
         SavePlanValueRulesSettings();
 
@@ -824,6 +830,80 @@ public sealed partial class MainWindow : Window
         var file = await picker.PickSingleFileAsync();
         if (file != null)
             DefaultLaunchEditorBox.Text = file.Path;
+    }
+
+    // ---- Desktop-app launch paths (global, per provider type) ----
+
+    private void RenderLaunchPathRows()
+    {
+        LaunchPathsPanel.Children.Clear();
+        _launchPathEditors.Clear();
+
+        foreach (var (providerType, target) in Catalog.LaunchTargets)
+        {
+            if (target.ConfigKey is null)
+                continue;
+
+            var box = new TextBox
+            {
+                PlaceholderText = "Auto-detect",
+                MinWidth = 220,
+            };
+            AutomationProperties.SetName(box, target.DisplayName + " app path");
+
+            var browse = new Button
+            {
+                Content = new FontIcon { Glyph = "\uE8E5", FontSize = 14 },
+                Style = (Style)Application.Current.Resources["CardIconButton"],
+            };
+            var browseName = I18n.T("settings.browse");
+            ToolTipService.SetToolTip(browse, browseName);
+            AutomationProperties.SetName(browse, browseName);
+            browse.Click += async (_, _) =>
+            {
+                var picker = new FileOpenPicker();
+                InitializeWithWindow.Initialize(picker, _hwnd);
+                picker.FileTypeFilter.Add(".exe");
+                picker.FileTypeFilter.Add("*");
+                var file = await picker.PickSingleFileAsync();
+                if (file is not null)
+                    box.Text = file.Path;
+            };
+
+            var grid = new Grid { ColumnSpacing = 8 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Text = target.DisplayName,
+                VerticalAlignment = VerticalAlignment.Center,
+                MinWidth = 120,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+            };
+            Grid.SetColumn(label, 0);
+            grid.Children.Add(label);
+            Grid.SetColumn(box, 1);
+            grid.Children.Add(box);
+            Grid.SetColumn(browse, 2);
+            grid.Children.Add(browse);
+
+            LaunchPathsPanel.Children.Add(grid);
+            _launchPathEditors.Add((target.ConfigKey, box));
+        }
+    }
+
+    private void LoadLaunchPaths()
+    {
+        foreach (var (configKey, box) in _launchPathEditors)
+            box.Text = _svc.Config.Get(configKey);
+    }
+
+    private void SaveLaunchPaths()
+    {
+        foreach (var (configKey, box) in _launchPathEditors)
+            _svc.Config.Set(configKey, box.Text);
     }
 
     private void LoadSortPrioritySettings()
