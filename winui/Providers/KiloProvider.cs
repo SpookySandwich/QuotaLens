@@ -24,7 +24,7 @@ public sealed class KiloProvider : IProvider
     {
         var token = ResolveToken(instanceId, config)
             ?? throw new ProviderException("Not configured: Kilo API key not set. Add it in Settings or run kilo login.");
-        var configuredBaseUrl = ProviderConfig.Scoped(instanceId, config, "kilo_base_url")
+        var configuredBaseUrl = ProviderConfig.Resolve(instanceId, config, "kilo", "kilo_base_url")
             ?? "https://app.kilo.ai/api/trpc";
         var baseUrl = ProviderEndpointPolicy.RequireCredentialBase(Type, configuredBaseUrl).ToString();
         var organizationId = ProviderConfig.Clean(config.GetScoped(instanceId, "kilo_organization_id"));
@@ -145,11 +145,11 @@ public sealed class KiloProvider : IProvider
 
     private static string? ResolveToken(string instanceId, IConfig config)
     {
-        var configured = ProviderConfig.Scoped(instanceId, config, "kilo_key");
+        var configured = ProviderConfig.Resolve(instanceId, config, "kilo", "kilo_key");
         if (configured is not null)
             return configured;
 
-        var authPath = ProviderConfig.Scoped(instanceId, config, "kilo_auth_path")
+        var authPath = ProviderConfig.Resolve(instanceId, config, "kilo", "kilo_auth_path")
             ?? Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
                 ".local",

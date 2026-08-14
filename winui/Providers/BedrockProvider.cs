@@ -27,7 +27,7 @@ public sealed class BedrockProvider : IProvider
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
         var resolved = await ResolveCredentialsAsync(instanceId, config, ct).ConfigureAwait(false);
-        var budget = ParsePositiveDouble(ProviderConfig.Scoped(instanceId, config, "bedrock_budget"));
+        var budget = ParsePositiveDouble(ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_budget"));
         var monthlySpend = await FetchMonthlySpendAsync(instanceId, config, resolved.Credentials, ct).ConfigureAwait(false);
         return Snapshot(new BedrockUsage(monthlySpend, budget, resolved.Region, DateTimeOffset.UtcNow));
     }
@@ -234,7 +234,7 @@ public sealed class BedrockProvider : IProvider
         string body,
         CancellationToken ct)
     {
-        var configuredEndpoint = ProviderConfig.Scoped(instanceId, config, "bedrock_cost_explorer_url") ?? DefaultCostExplorerUrl;
+        var configuredEndpoint = ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_cost_explorer_url") ?? DefaultCostExplorerUrl;
         var endpoint = ProviderEndpointPolicy.RequireCredentialTarget("bedrock", configuredEndpoint);
 
         try
@@ -265,8 +265,8 @@ public sealed class BedrockProvider : IProvider
 
     private static async Task<ResolvedAwsCredentials> ResolveCredentialsAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var authMode = ProviderConfig.Scoped(instanceId, config, "bedrock_auth_mode")?.ToLowerInvariant();
-        var profile = ProviderConfig.Scoped(instanceId, config, "bedrock_profile");
+        var authMode = ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_auth_mode")?.ToLowerInvariant();
+        var profile = ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_profile");
         var staticCredentials = StaticCredentials(instanceId, config);
         var hasStaticKeys = staticCredentials is not null;
 
@@ -275,7 +275,7 @@ public sealed class BedrockProvider : IProvider
             if (string.IsNullOrWhiteSpace(profile))
                 throw new ProviderException("Not configured: AWS profile not set.", ProviderErrorKind.Misconfigured);
 
-            var awsPath = ProviderConfig.Scoped(instanceId, config, "bedrock_aws_cli_path") ?? "aws";
+            var awsPath = ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_aws_cli_path") ?? "aws";
             var credentials = await ExportProfileCredentialsAsync(awsPath, profile, ct).ConfigureAwait(false);
             var region = Region(instanceId, config)
                 ?? await ResolveProfileRegionAsync(awsPath, profile, ct).ConfigureAwait(false)
@@ -291,17 +291,17 @@ public sealed class BedrockProvider : IProvider
 
     private static AwsCredentials? StaticCredentials(string instanceId, IConfig config)
     {
-        var accessKeyId = ProviderConfig.Scoped(instanceId, config, "bedrock_access_key_id");
-        var secretAccessKey = ProviderConfig.Scoped(instanceId, config, "bedrock_secret_access_key");
+        var accessKeyId = ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_access_key_id");
+        var secretAccessKey = ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_secret_access_key");
         if (accessKeyId is null || secretAccessKey is null)
             return null;
 
-        var sessionToken = ProviderConfig.Scoped(instanceId, config, "bedrock_session_token");
+        var sessionToken = ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_session_token");
         return new AwsCredentials(accessKeyId, secretAccessKey, sessionToken);
     }
 
     private static string? Region(string instanceId, IConfig config) =>
-        ProviderConfig.Scoped(instanceId, config, "bedrock_region");
+        ProviderConfig.Resolve(instanceId, config, "bedrock", "bedrock_region");
 
     private static async Task<AwsCredentials> ExportProfileCredentialsAsync(string awsPath, string profile, CancellationToken ct)
     {

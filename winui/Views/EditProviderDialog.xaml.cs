@@ -23,7 +23,6 @@ public sealed partial class EditProviderDialog : ContentDialog
 {
     // Segoe Fluent / MDL2 glyphs.
     private const string BrowseGlyph = "\uE8E5";
-    private const string ImportGlyph = "\uE8B5";
 
     private readonly IProviderService _svc;
     private readonly string _instanceId;
@@ -77,11 +76,15 @@ public sealed partial class EditProviderDialog : ContentDialog
                 continue;
             }
 
-            // Text-like field: input on the left, trailing glyph buttons on the right.
+            // Text-like field: input on the left, a browse button on the right for
+            // file paths. The placeholder shows the effective value when the field is
+            // left empty: the mapped environment variable (or "from ENV" for secrets),
+            // otherwise the static default.
             var grid = new Grid { ColumnSpacing = 6 };
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
+            var placeholder = EffectivePlaceholder(field);
             Func<string> read;
             Action<string> write;
             Control input;
@@ -91,7 +94,7 @@ public sealed partial class EditProviderDialog : ContentDialog
                 {
                     Header = field.Label,
                     Password = current,
-                    PlaceholderText = field.Placeholder,
+                    PlaceholderText = placeholder,
                 };
                 read = () => box.Password;
                 write = value => box.Password = value;
@@ -103,7 +106,7 @@ public sealed partial class EditProviderDialog : ContentDialog
                 {
                     Header = field.Label,
                     Text = current,
-                    PlaceholderText = field.Placeholder,
+                    PlaceholderText = placeholder,
                 };
                 read = () => box.Text;
                 write = value => box.Text = value;
@@ -123,9 +126,6 @@ public sealed partial class EditProviderDialog : ContentDialog
 
             if (field.IsFilePath)
                 trailing.Children.Add(BuildBrowseButton(field, write));
-
-            if (TryBuildImportButton(field, write) is { } importButton)
-                trailing.Children.Add(importButton);
 
             if (trailing.Children.Count > 0)
             {
@@ -162,29 +162,22 @@ public sealed partial class EditProviderDialog : ContentDialog
         return browse;
     }
 
-    private Button? TryBuildImportButton(ProviderField field, Action<string> write)
+    /// <summary>
+    /// Placeholder for an empty field: the effective value QuotaLens will use when
+    /// the field is left empty. A set environment variable wins (its value for plain
+    /// fields, "from ENV" for secrets), otherwise the static default.
+    /// </summary>
+    private string EffectivePlaceholder(ProviderField field)
     {
-        var envKeys = ProviderConfig.EnvironmentKeysFor(_type, field.Key);
-        if (envKeys.Count == 0)
-            return null;
+        foreach (var envKey in ProviderConfig.EnvironmentKeysFor(_type, field.Key))
+        {
+            var envValue = ProviderConfig.Environment(envKey);
+            if (envValue is null)
+                continue;
+            return field.IsPassword ? $"from {envKey}" : envValue;
+        }
 
-        var button = new Button
-        {
-            Content = new FontIcon { Glyph = ImportGlyph, FontSize = 14 },
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Style = (Style)Application.Current.Resources["CardIconButton"],
-        };
-        var name = "Import from " + string.Join(" / ", envKeys);
-        ToolTipService.SetToolTip(button, name);
-        AutomationProperties.SetAutomationId(button, $"ImportEnv_{_instanceId}_{field.Key}");
-        AutomationProperties.SetName(button, name);
-        button.Click += (_, _) =>
-        {
-            var imported = _svc.Config.ImportEnvironmentField(_instanceId, field.Key);
-            if (imported is not null)
-                write(imported);
-        };
-        return button;
+        return field.Placeholder;
     }
 
     private void AddSectionHeader(string title, string description)

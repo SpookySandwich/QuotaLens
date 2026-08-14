@@ -347,7 +347,7 @@ public sealed class SimpleApiProvider : IProvider
         if (!Definitions.TryGetValue(type, out var definition))
             throw new ArgumentException($"Unknown simple API provider type: {type}");
 
-        return ProviderConfig.Scoped(instanceId, config, definition.ConfigKey);
+        return ProviderConfig.Resolve(instanceId, config, definition.Type, definition.ConfigKey);
     }
 
     private static async Task<ProviderSnapshot> FetchOpenRouterAsync(
@@ -384,7 +384,7 @@ public sealed class SimpleApiProvider : IProvider
     }
 
     internal static string? ResolveOpenRouterManagementKey(string instanceId, IConfig config) =>
-        ProviderConfig.Scoped(instanceId, config, "openrouter_management_key");
+        ProviderConfig.Resolve(instanceId, config, "openrouter", "openrouter_management_key");
 
     private static async Task<ProviderSnapshot> FetchCodebuffAsync(
         SimpleApiProvider provider,
@@ -548,7 +548,7 @@ public sealed class SimpleApiProvider : IProvider
     }
 
     internal static IReadOnlyList<string> ResolveOpenAiProjectIds(string instanceId, IConfig config) =>
-        ParseOpenAiProjectIds(ProviderConfig.Scoped(instanceId, config, "openai_project_ids"));
+        ParseOpenAiProjectIds(ProviderConfig.Resolve(instanceId, config, "openai", "openai_project_ids"));
 
     internal static IReadOnlyList<string> ParseOpenAiProjectIds(string? value)
     {
@@ -1880,30 +1880,31 @@ public sealed class SimpleApiProvider : IProvider
 
 
     private static string ResolveElevenLabsUrl(string instanceId, IConfig config) =>
-        ResolveUrlWithOptionalBase(instanceId, config, "elevenlabs_base_url", "https://api.elevenlabs.io", "v1/user/subscription");
+        ResolveUrlWithOptionalBase(instanceId, config, "elevenlabs", "elevenlabs_base_url", "https://api.elevenlabs.io", "v1/user/subscription");
 
     internal static string ResolveMoonshotUrl(string instanceId, IConfig config) =>
-        ResolveUrlWithOptionalBase(instanceId, config, "moonshot_base_url", "https://api.moonshot.ai", "v1/users/me/balance");
+        ResolveUrlWithOptionalBase(instanceId, config, "moonshot", "moonshot_base_url", "https://api.moonshot.ai", "v1/users/me/balance");
 
     private static string ResolveCodebuffUrl(string instanceId, IConfig config) =>
-        ResolveUrlWithOptionalBase(instanceId, config, "codebuff_base_url", "https://www.codebuff.com", "api/v1/usage");
+        ResolveUrlWithOptionalBase(instanceId, config, "codebuff", "codebuff_base_url", "https://www.codebuff.com", "api/v1/usage");
 
     private static string ResolveCodebuffSubscriptionUrl(string instanceId, IConfig config) =>
-        ResolveUrlWithOptionalBase(instanceId, config, "codebuff_base_url", "https://www.codebuff.com", "api/user/subscription");
+        ResolveUrlWithOptionalBase(instanceId, config, "codebuff", "codebuff_base_url", "https://www.codebuff.com", "api/user/subscription");
 
     private static string ResolveSyntheticUrl(string instanceId, IConfig config) =>
-        ProviderConfig.Scoped(instanceId, config, "synthetic_url")
+        ProviderConfig.Resolve(instanceId, config, "synthetic", "synthetic_url")
         ?? "https://api.synthetic.new/v2/quotas";
 
     private static string ResolveZaiUrl(string instanceId, IConfig config)
     {
-        var quotaUrl = ProviderConfig.Scoped(instanceId, config, "zai_quota_url");
+        var quotaUrl = ProviderConfig.Resolve(instanceId, config, "zai", "zai_quota_url");
         if (!string.IsNullOrWhiteSpace(quotaUrl))
             return quotaUrl!;
 
         return ResolveUrlWithOptionalBase(
             instanceId,
             config,
+            "zai",
             "zai_base_url",
             "https://api.z.ai",
             "api/monitor/usage/quota/limit");
@@ -1911,7 +1912,7 @@ public sealed class SimpleApiProvider : IProvider
 
     internal static string ResolveLlmProxyUrl(string instanceId, IConfig config)
     {
-        var baseUrl = ProviderConfig.Scoped(instanceId, config, "llmproxy_base_url");
+        var baseUrl = ProviderConfig.Resolve(instanceId, config, "llmproxy", "llmproxy_base_url");
         if (string.IsNullOrWhiteSpace(baseUrl))
             throw new ProviderException("Not configured: LLM Proxy base URL not set. Add it in Settings.");
 
@@ -1924,7 +1925,7 @@ public sealed class SimpleApiProvider : IProvider
 
     private static string ResolveCopilotUrl(string instanceId, IConfig config)
     {
-        var host = ProviderConfig.Scoped(instanceId, config, "copilot_enterprise_host") ?? "github.com";
+        var host = ProviderConfig.Resolve(instanceId, config, "copilot", "copilot_enterprise_host") ?? "github.com";
         host = host.Trim()
             .Replace("https://", "", StringComparison.OrdinalIgnoreCase)
             .Replace("http://", "", StringComparison.OrdinalIgnoreCase)
@@ -1940,11 +1941,12 @@ public sealed class SimpleApiProvider : IProvider
     private static string ResolveUrlWithOptionalBase(
         string instanceId,
         IConfig config,
+        string providerType,
         string configKey,
         string defaultBaseUrl,
         string path)
     {
-        var baseUrl = ProviderConfig.Scoped(instanceId, config, configKey) ?? defaultBaseUrl;
+        var baseUrl = ProviderConfig.Resolve(instanceId, config, providerType, configKey) ?? defaultBaseUrl;
         return AppendPath(baseUrl, path);
     }
 

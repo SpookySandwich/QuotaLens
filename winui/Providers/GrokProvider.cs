@@ -531,7 +531,7 @@ public sealed class GrokProvider : IProvider
     }
 
     internal static string ResolveGrokPath(string instanceId, IConfig config) =>
-        ProviderConfig.ResolveCliPath(instanceId, config, "grok_path", "grok");
+        ProviderConfig.ResolveCliPath(instanceId, config, "grok", "grok_path", "grok");
 
     // ---- silent CLI token refresh -------------------------------------------
 

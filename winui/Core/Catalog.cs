@@ -485,6 +485,8 @@ public static class Catalog
         },
         ["kimi"] = new[]
         {
+            new ProviderField("kimi_cli_path", "Kimi CLI path", "kimi", IsFilePath: true,
+                Description: "Optional Kimi Code CLI executable. Used to refresh the OAuth token; leave empty to use 'kimi' on PATH."),
             new ProviderField("kimi_url", "Login URL", "https://www.kimi.com/code/console",
                 Description: "Opened when signing in from this provider card. If the Kimi Code CLI is installed and logged in ('kimi login'), its credentials are used automatically instead."),
         },
@@ -1224,6 +1226,9 @@ public static class Catalog
             ["alibabacloud"] = FieldEnv(
                 ("alibabacloud_key_id", ["ALIBABA_ACCESS_KEY_ID"]),
                 ("alibabacloud_key_secret", ["ALIBABA_ACCESS_KEY_SECRET"])),
+            ["alibaba"] = FieldEnv(
+                ("alibabacloud_key_id", ["ALIBABA_ACCESS_KEY_ID"]),
+                ("alibabacloud_key_secret", ["ALIBABA_ACCESS_KEY_SECRET"])),
             ["bedrock"] = FieldEnv(
                 ("bedrock_budget", ["CODEXBAR_BEDROCK_BUDGET", "QUOTALENS_BEDROCK_BUDGET"]),
                 ("bedrock_cost_explorer_url", ["CODEXBAR_BEDROCK_API_URL", "QUOTALENS_BEDROCK_API_URL"]),
@@ -1243,6 +1248,7 @@ public static class Catalog
                 ("deepgram_base_url", ["DEEPGRAM_API_URL"])),
             ["gemini"] = FieldEnv(("gemini_home", ["GEMINI_HOME"])),
             ["codex"] = FieldEnv(("codex_home", ["CODEX_HOME"])),
+            ["kimi"] = FieldEnv(("kimi_cli_path", ["KIMI_CLI_PATH"])),
             ["kilo"] = FieldEnv(
                 ("kilo_key", ["KILO_API_KEY"]),
                 ("kilo_auth_path", ["KILO_AUTH_PATH"]),

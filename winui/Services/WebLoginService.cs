@@ -1064,8 +1064,8 @@ public sealed class WebLoginService
     {
         if (!string.Equals(providerType, "alibaba", StringComparison.OrdinalIgnoreCase)
             || snapshot.Balance is not null
-            || ProviderConfig.Scoped(instanceId, config, "alibabacloud_key_id") is null
-            || ProviderConfig.Scoped(instanceId, config, "alibabacloud_key_secret") is null)
+            || ProviderConfig.Resolve(instanceId, config, providerType, "alibabacloud_key_id") is null
+            || ProviderConfig.Resolve(instanceId, config, providerType, "alibabacloud_key_secret") is null)
         {
             return;
         }

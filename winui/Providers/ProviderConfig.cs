@@ -6,14 +6,51 @@ namespace QuotaLens.Providers;
 
 internal static partial class ProviderConfig
 {
-    /// <summary>
-    /// Reads a per-instance config value and nothing else. Config is the single source
-    /// of truth: an empty value IS empty. Environment variables are copied into config
-    /// by the import step (see <see cref="Catalog.FieldEnvironment"/>) rather than
-    /// consulted here at runtime.
-    /// </summary>
+    /// <summary>Reads a per-instance config value and nothing else (empty IS empty).</summary>
     public static string? Scoped(string instanceId, IConfig config, string configKey) =>
         Clean(config.GetScoped(instanceId, configKey));
+
+    /// <summary>
+    /// The single env-fallback rule every provider uses: the typed per-instance config
+    /// value wins; otherwise the first set environment variable mapped to that field
+    /// (see <see cref="Catalog.FieldEnvironment"/>); otherwise the default.
+    /// </summary>
+    public static string? Resolve(
+        string instanceId,
+        IConfig config,
+        string providerType,
+        string fieldKey,
+        string? defaultValue = null)
+    {
+        var configured = Scoped(instanceId, config, fieldKey);
+        if (configured is not null)
+            return configured;
+
+        foreach (var envKey in EnvironmentKeysFor(providerType, fieldKey))
+        {
+            var envValue = Environment(envKey);
+            if (envValue is not null)
+                return envValue;
+        }
+
+        return Clean(defaultValue);
+    }
+
+    /// <summary>
+    /// The first non-empty environment value mapped to a provider field, or null.
+    /// Used by the settings dialog to render the effective value as placeholder text.
+    /// </summary>
+    public static string? EnvironmentValueFor(string providerType, string fieldKey)
+    {
+        foreach (var envKey in EnvironmentKeysFor(providerType, fieldKey))
+        {
+            var envValue = Environment(envKey);
+            if (envValue is not null)
+                return envValue;
+        }
+
+        return null;
+    }
 
     public static string? Environment(string key) =>
         Clean(System.Environment.GetEnvironmentVariable(key))
@@ -22,20 +59,21 @@ internal static partial class ProviderConfig
 
     /// <summary>
     /// Resolves a CLI binary the same way every CLI-backed provider does: per-instance
-    /// config value, then environment variable(s), then a bare command name left for
-    /// <see cref="HiddenCliProcess"/> to resolve on PATH. Configured values are
-    /// environment-expanded (so %VAR% in a user-set path works).
+    /// config value, then environment variable(s) mapped to that field, then a bare
+    /// command name left for <see cref="HiddenCliProcess"/> to resolve on PATH.
+    /// Configured values are environment-expanded (so %VAR% in a user-set path works).
     /// </summary>
     public static string ResolveCliPath(
         string instanceId,
         IConfig config,
+        string providerType,
         string configKey,
         string fallbackCommand)
     {
-        var configured = Scoped(instanceId, config, configKey);
-        return string.IsNullOrWhiteSpace(configured)
+        var resolved = Resolve(instanceId, config, providerType, configKey, fallbackCommand);
+        return string.IsNullOrWhiteSpace(resolved)
             ? fallbackCommand
-            : System.Environment.ExpandEnvironmentVariables(configured);
+            : System.Environment.ExpandEnvironmentVariables(resolved);
     }
 
     public static string? Clean(string? value) => TextUtil.Clean(value);

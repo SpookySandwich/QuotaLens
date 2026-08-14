@@ -49,8 +49,8 @@ public sealed class AlibabaProvider : IProvider
     private static (string Id, string Secret)? GetCreds(string instanceId, IConfig config)
     {
         // Env fallback is disabled for explicit blank scoped keys on a newly added card.
-        var id = ProviderConfig.Scoped(instanceId, config, "alibabacloud_key_id");
-        var secret = ProviderConfig.Scoped(instanceId, config, "alibabacloud_key_secret");
+        var id = ProviderConfig.Resolve(instanceId, config, "alibabacloud", "alibabacloud_key_id");
+        var secret = ProviderConfig.Resolve(instanceId, config, "alibabacloud", "alibabacloud_key_secret");
 
         if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(secret))
             return null;

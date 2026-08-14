@@ -178,6 +178,7 @@ public sealed class CliTokenKeepAliveService
                 return ProviderConfig.ResolveCliPath(
                     instance.Id,
                     _config,
+                    descriptor.ProviderType,
                     descriptor.CliPathFieldKey,
                     descriptor.CliCommand);
             }

@@ -295,8 +295,7 @@ public sealed class ProviderAddFlowTests
 
         public void Remove(string key) => _values.Remove(key);
         public Task SaveAsync() => Task.CompletedTask;
-        public int ImportEnvironment(string instanceId) => 0;
-        public string? ImportEnvironmentField(string instanceId, string fieldKey) => null;
+
         public ProviderInstance AddInstance(string providerType) => new(providerType, providerType, providerType);
         public void RemoveInstance(string id)
         {

@@ -32,7 +32,7 @@ public sealed class KimiProvider : IProvider
 
     private readonly Func<JsonObject?> _readCredentials;
     private readonly Func<string, CancellationToken, Task<HttpResponseMessage>> _sendUsageAsync;
-    private readonly Func<IConfig, CancellationToken, Task<bool>> _refreshViaCliAsync;
+    private readonly Func<string, IConfig, CancellationToken, Task<bool>> _refreshViaCliAsync;
     private readonly IProvider _webFallback;
 
     public KimiProvider()
@@ -44,12 +44,12 @@ public sealed class KimiProvider : IProvider
         Func<JsonObject?> readCredentials,
         Func<string, CancellationToken, Task<HttpResponseMessage>> sendUsageAsync,
         IProvider webFallback,
-        Func<IConfig, CancellationToken, Task<bool>>? refreshViaCliAsync = null)
+        Func<string, IConfig, CancellationToken, Task<bool>>? refreshViaCliAsync = null)
     {
         _readCredentials = readCredentials;
         _sendUsageAsync = sendUsageAsync;
         _webFallback = webFallback;
-        _refreshViaCliAsync = refreshViaCliAsync ?? ((_, _) => Task.FromResult(false));
+        _refreshViaCliAsync = refreshViaCliAsync ?? ((_, _, _) => Task.FromResult(false));
     }
 
     public string Type => "kimi";
@@ -71,7 +71,7 @@ public sealed class KimiProvider : IProvider
 
         try
         {
-            return await FetchWithCliAsync(creds, config, ct).ConfigureAwait(false);
+            return await FetchWithCliAsync(instanceId, creds, config, ct).ConfigureAwait(false);
         }
         catch (KimiCliAuthException authError)
         {
@@ -90,7 +90,7 @@ public sealed class KimiProvider : IProvider
         }
     }
 
-    private async Task<ProviderSnapshot> FetchWithCliAsync(JsonObject creds, IConfig config, CancellationToken ct)
+    private async Task<ProviderSnapshot> FetchWithCliAsync(string instanceId, JsonObject creds, IConfig config, CancellationToken ct)
     {
         var token = StringField(creds, "access_token") ?? "";
         if (string.IsNullOrWhiteSpace(token))
@@ -101,7 +101,7 @@ public sealed class KimiProvider : IProvider
         // rather than spent on a request that is certain to 401.
         if (IsExpired(creds))
         {
-            creds = await RefreshCredentialsAsync(creds, config, ct).ConfigureAwait(false)
+            creds = await RefreshCredentialsAsync(instanceId, creds, config, ct).ConfigureAwait(false)
                 ?? throw new KimiCliAuthException("the stored access token has expired");
             token = StringField(creds, "access_token") ?? "";
         }
@@ -110,7 +110,7 @@ public sealed class KimiProvider : IProvider
         if (!IsAuthFailure(resp))
             return await ParseUsageResponseAsync(resp, ct).ConfigureAwait(false);
 
-        var refreshed = await RefreshCredentialsAsync(creds, config, ct).ConfigureAwait(false)
+        var refreshed = await RefreshCredentialsAsync(instanceId, creds, config, ct).ConfigureAwait(false)
             ?? throw new KimiCliAuthException("the stored access token was rejected");
 
         using var retry = await SendUsageWithNetworkErrorsAsync(
@@ -127,7 +127,7 @@ public sealed class KimiProvider : IProvider
     /// credential the CLI would pop a browser for a full sign-in, which a background
     /// quota refresh must never do unprompted.
     /// </summary>
-    private async Task<JsonObject?> RefreshCredentialsAsync(JsonObject creds, IConfig config, CancellationToken ct)
+    private async Task<JsonObject?> RefreshCredentialsAsync(string instanceId, JsonObject creds, IConfig config, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(StringField(creds, "access_token"))
             || NumberField(creds, "expires_at") is not > 0)
@@ -135,7 +135,7 @@ public sealed class KimiProvider : IProvider
             return null;
         }
 
-        return await _refreshViaCliAsync(config, ct).ConfigureAwait(false)
+        return await _refreshViaCliAsync(instanceId, config, ct).ConfigureAwait(false)
             ? _readCredentials()
             : null;
     }
@@ -214,12 +214,9 @@ public sealed class KimiProvider : IProvider
     /// 0.28.1, `kimi login` exits 0xC0000409 AFTER succeeding and exits 0 when it
     /// no-ops, so the exit code says the opposite of the truth.
     /// </summary>
-    private static async Task<bool> RefreshViaCliAsync(IConfig config, CancellationToken ct)
+    private static async Task<bool> RefreshViaCliAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var configured = config.Get("kimi_cli_path");
-        var binary = string.IsNullOrWhiteSpace(configured)
-            ? "kimi"
-            : Environment.ExpandEnvironmentVariables(configured);
+        var binary = ProviderConfig.ResolveCliPath(instanceId, config, "kimi", "kimi_cli_path", "kimi");
 
         return await CliTokenRefresher.TryRefreshAsync(
             binary,

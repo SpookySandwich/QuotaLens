@@ -15,10 +15,10 @@ public sealed class DeepgramProvider : IProvider
 
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var apiKey = ProviderConfig.Scoped(instanceId, config, "deepgram_key")
+        var apiKey = ProviderConfig.Resolve(instanceId, config, "deepgram", "deepgram_key")
             ?? throw new ProviderException("Not configured: Deepgram API key not set. Add it in Settings.");
-        var projectId = ProviderConfig.Scoped(instanceId, config, "deepgram_project_id");
-        var configuredBaseUrl = ProviderConfig.Scoped(instanceId, config, "deepgram_base_url")
+        var projectId = ProviderConfig.Resolve(instanceId, config, "deepgram", "deepgram_project_id");
+        var configuredBaseUrl = ProviderConfig.Resolve(instanceId, config, "deepgram", "deepgram_base_url")
             ?? "https://api.deepgram.com/v1";
         var baseUrl = ProviderEndpointPolicy.RequireCredentialBase(Type, configuredBaseUrl).ToString();
 

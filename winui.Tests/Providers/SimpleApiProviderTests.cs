@@ -1320,6 +1320,37 @@ public sealed class SimpleApiProviderTests
         }
     }
 
+    [TestMethod]
+    public void Resolve_ConfigThenEnvironmentThenDefault()
+    {
+        var previous = Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY");
+        try
+        {
+            var blank = new FakeConfig(new Dictionary<string, string>
+            {
+                ["deepseek-new.deepseek_key"] = "",
+            });
+
+            // Environment wins when config is empty (process scope shadows user/machine).
+            Environment.SetEnvironmentVariable("DEEPSEEK_API_KEY", "env-token");
+            Assert.AreEqual("env-token", ProviderConfig.Resolve("deepseek-new", blank, "deepseek", "deepseek_key"));
+
+            // Config wins over environment.
+            var set = new FakeConfig(new Dictionary<string, string>
+            {
+                ["deepseek-new.deepseek_key"] = "from-config",
+            });
+            Assert.AreEqual("from-config", ProviderConfig.Resolve("deepseek-new", set, "deepseek", "deepseek_key"));
+
+            // Default when the field has no env mapping (claude_path is not env-backed).
+            Assert.AreEqual("fallback", ProviderConfig.Resolve("deepseek-new", blank, "claude", "claude_path", "fallback"));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("DEEPSEEK_API_KEY", previous);
+        }
+    }
+
     private static JsonElement Json(string json)
     {
         using var document = JsonDocument.Parse(json);

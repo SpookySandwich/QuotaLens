@@ -719,8 +719,7 @@ public sealed class ProviderItemViewModelTests
             }
 
             public Task SaveAsync() => Task.CompletedTask;
-        public int ImportEnvironment(string instanceId) => 0;
-        public string? ImportEnvironmentField(string instanceId, string fieldKey) => null;
+
 
             public ProviderInstance AddInstance(string providerType) => new(providerType, providerType, providerType);
 

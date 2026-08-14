@@ -422,31 +422,7 @@ public sealed class ConfigServiceTests
         Assert.AreEqual("codex-lb", Catalog.ProviderTypeFromId("codex-lb-1234abcd"));
     }
 
-    [TestMethod]
-    public void ImportEnvironment_FillsEmptyFieldsWithoutClobberingExistingValues()
-    {
-        var dir = NewTempDir();
-        var previous = Environment.GetEnvironmentVariable("DEEPSEEK_API_KEY");
-        try
-        {
-            Environment.SetEnvironmentVariable("DEEPSEEK_API_KEY", "env-key");
-            var config = new ConfigService(dir, () => null);
-            var instance = config.AddInstance("deepseek");
 
-            Assert.AreEqual(1, config.ImportEnvironment(instance.Id));
-            Assert.AreEqual("env-key", config.GetScoped(instance.Id, "deepseek_key"));
-
-            // A changed env var is ignored once config has a value.
-            Environment.SetEnvironmentVariable("DEEPSEEK_API_KEY", "env-key-2");
-            Assert.AreEqual(0, config.ImportEnvironment(instance.Id));
-            Assert.AreEqual("env-key", config.GetScoped(instance.Id, "deepseek_key"));
-        }
-        finally
-        {
-            Environment.SetEnvironmentVariable("DEEPSEEK_API_KEY", previous);
-            DeleteTempDir(dir);
-        }
-    }
 
     private static string NewTempDir()
     {

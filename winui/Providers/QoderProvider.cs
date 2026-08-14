@@ -26,7 +26,7 @@ public sealed class QoderProvider : IProvider
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
         var binary = ResolveQoderCliPath(instanceId, config);
-        var token = ProviderConfig.Scoped(instanceId, config, "qoder_token");
+        var token = ProviderConfig.Resolve(instanceId, config, "qoder", "qoder_token");
 
         // Shared launch path: resolves .cmd/.ps1 shims instead of a bare CreateProcess.
         var psi = HiddenCliProcess.CreateStartInfo(binary, new[] { "--output-format", "stream-json", "--input-format", "stream-json" });
@@ -376,7 +376,7 @@ public sealed class QoderProvider : IProvider
 
     private static string ResolveQoderCliPath(string instanceId, IConfig config)
     {
-        var configured = ProviderConfig.Scoped(instanceId, config, "qoder_cli_path");
+        var configured = ProviderConfig.Resolve(instanceId, config, "qoder", "qoder_cli_path");
         if (!string.IsNullOrWhiteSpace(configured))
             return Environment.ExpandEnvironmentVariables(configured);
 

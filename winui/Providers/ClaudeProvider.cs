@@ -177,7 +177,7 @@ public sealed class ClaudeProvider : IProvider
     /// </summary>
     private static async Task<bool> RefreshViaCliAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var binary = ProviderConfig.ResolveCliPath(instanceId, config, "claude_path", "claude");
+        var binary = ProviderConfig.ResolveCliPath(instanceId, config, "claude", "claude_path", "claude");
 
         return await CliTokenRefresher.TryRefreshAsync(
             binary,

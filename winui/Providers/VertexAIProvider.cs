@@ -188,7 +188,7 @@ public sealed class VertexAIProvider : IProvider
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
         var projectId = FirstNonEmpty(
-            ProviderConfig.Scoped(instanceId, config, "vertexai_project_id"),
+            ProviderConfig.Resolve(instanceId, config, "vertexai", "vertexai_project_id"),
             OptionalString(root, "project_id"),
             LoadGcloudProjectId(instanceId, config));
 
@@ -356,7 +356,7 @@ public sealed class VertexAIProvider : IProvider
 
     private static async Task<string> PrintAccessTokenAsync(string instanceId, IConfig config, CancellationToken ct)
     {
-        var gcloud = ProviderConfig.Scoped(instanceId, config, "vertexai_gcloud_path") ?? "gcloud";
+        var gcloud = ProviderConfig.Resolve(instanceId, config, "vertexai", "vertexai_gcloud_path") ?? "gcloud";
         var output = await RunProcessAsync(gcloud, new[] { "auth", "application-default", "print-access-token" }, ct).ConfigureAwait(false);
         return ProviderConfig.Clean(output)
             ?? throw new ProviderException("Login required: gcloud returned an empty access token.");
@@ -392,7 +392,7 @@ public sealed class VertexAIProvider : IProvider
 
     private static string? ResolveCredentialsPath(string instanceId, IConfig config)
     {
-        var configured = ProviderConfig.Scoped(instanceId, config, "vertexai_credentials_path");
+        var configured = ProviderConfig.Resolve(instanceId, config, "vertexai", "vertexai_credentials_path");
         if (!string.IsNullOrWhiteSpace(configured))
             return Expand(configured!);
 
@@ -403,7 +403,7 @@ public sealed class VertexAIProvider : IProvider
 
     private static string? LoadGcloudProjectId(string instanceId, IConfig config)
     {
-        var configuredConfig = ProviderConfig.Scoped(instanceId, config, "vertexai_gcloud_config_dir");
+        var configuredConfig = ProviderConfig.Resolve(instanceId, config, "vertexai", "vertexai_gcloud_config_dir");
         var dirs = !string.IsNullOrWhiteSpace(configuredConfig)
             ? new[] { Expand(configuredConfig!) }
             : CandidateGcloudConfigDirs();
