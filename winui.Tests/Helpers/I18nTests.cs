@@ -134,26 +134,4 @@ public class I18nTests
             I18n.SetLanguage(original == I18n.Lang.Zh ? "zh" : "en");
         }
     }
-
-    [TestMethod]
-    public void WindowLabel_ReturnsLocalizedOrEnglish()
-    {
-        var original = I18n.Current;
-        try
-        {
-            I18n.SetLanguage("zh");
-            Assert.AreEqual("5 小时池", I18n.WindowLabel("5h Pool"));
-            Assert.AreEqual("每周", I18n.WindowLabel("Weekly"));
-            Assert.AreEqual("每月积分", I18n.WindowLabel("Monthly credits"));
-            Assert.AreEqual("Kilo Pass", I18n.WindowLabel("Kilo Pass"),
-                "Brand/plan names pass through.");
-
-            I18n.SetLanguage("en");
-            Assert.AreEqual("5h Pool", I18n.WindowLabel("5h Pool"));
-        }
-        finally
-        {
-            I18n.SetLanguage(original == I18n.Lang.Zh ? "zh" : "en");
-        }
-    }
 }

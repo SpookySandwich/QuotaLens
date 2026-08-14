@@ -18,7 +18,7 @@ public sealed partial class QuotaRowViewModel : ObservableObject
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        Label = I18n.WindowLabel(window.Label);
+        Label = window.Label;
         IsQuota = window.Kind == RateWindowKind.Quota;
         var rawValueText = IsQuota
             ? ""
@@ -84,7 +84,7 @@ public sealed partial class FamilyGroupViewModel : ObservableObject
 {
     public FamilyGroupViewModel(string family, QuotaRowViewModel best)
     {
-        Family = I18n.WindowLabel(family);
+        Family = family;
         Best = best;
     }
 
@@ -98,12 +98,12 @@ public sealed partial class AccountRowViewModel : ObservableObject
     public AccountRowViewModel(AccountInfo account, int index, bool hideSensitive = false)
     {
         AutomationId = $"AccountRow_{index}";
-        var accountName = account.Email ?? account.Plan ?? I18n.T("privacy.account", "n", (index + 1).ToString());
+        var accountName = account.Email ?? account.Plan ?? $"Account {index + 1}";
         Name = SensitiveDisplay.AccountName(accountName, index, hideSensitive);
         IsNameHidden = hideSensitive && !string.IsNullOrWhiteSpace(account.Email);
         PrivacyPlaceholderWidth = 96 + (index % 3) * 18;
-        PrimaryLabel = I18n.WindowLabel(account.PrimaryLabel ?? "5h");
-        SecondaryLabel = I18n.WindowLabel(account.SecondaryLabel ?? "Weekly");
+        PrimaryLabel = account.PrimaryLabel ?? "5h";
+        SecondaryLabel = account.SecondaryLabel ?? "Weekly";
 
         if (account.PrimaryUsedPercent is double primaryUsed)
         {
@@ -136,12 +136,12 @@ public sealed partial class AccountRowViewModel : ObservableObject
         {
             automationParts.Add($"{PrimaryLabel} {PrimaryAvailableText}");
             if (HasPrimaryResetText)
-                automationParts.Add($"{I18n.T("quota.resets")} {PrimaryResetText}");
+                automationParts.Add($"resets {PrimaryResetText}");
             if (HasSecondaryWindow)
             {
                 automationParts.Add($"{SecondaryLabel} {SecondaryAvailableText}");
                 if (HasSecondaryResetText)
-                    automationParts.Add($"{I18n.T("quota.resets")} {SecondaryResetText}");
+                    automationParts.Add($"resets {SecondaryResetText}");
             }
         }
         else if (HasSinglePercent)
