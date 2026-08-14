@@ -121,6 +121,11 @@ public static class I18n
         ["settings.defaultLaunchEditorPlaceholder"] = "C:\\Path\\To\\Editor.exe",
         ["settings.browseDefaultLaunchEditor"] = "Browse default launch editor",
         ["settings.browse"] = "Browse",
+        ["settings.language"] = "Language",
+        ["settings.languageHint"] = "Interface language. Follow system uses the Windows display language. Applies after restarting QuotaLens.",
+        ["settings.language.system"] = "Follow system",
+        ["settings.language.en"] = "English",
+        ["settings.language.zh"] = "中文",
         ["addProvider.group.all"] = "All providers",
         ["settings.launchPaths"] = "Desktop apps",
         ["settings.launchPathsHint"] = "Optional per-provider desktop-app locations for the Launch button. Leave empty to auto-detect.",
@@ -326,6 +331,11 @@ public static class I18n
         ["settings.defaultLaunchEditorPlaceholder"] = "C:\\Path\\To\\Editor.exe",
         ["settings.browseDefaultLaunchEditor"] = "浏览默认启动编辑器",
         ["settings.browse"] = "浏览",
+        ["settings.language"] = "语言",
+        ["settings.languageHint"] = "界面语言。跟随系统使用 Windows 显示语言。重启 QuotaLens 后生效。",
+        ["settings.language.system"] = "跟随系统",
+        ["settings.language.en"] = "English",
+        ["settings.language.zh"] = "中文",
         ["addProvider.group.all"] = "全部供应商",
         ["settings.launchPaths"] = "桌面应用",
         ["settings.launchPathsHint"] = "为每个平台的 Launch 按钮手动指定桌面应用位置。留空则自动检测。",
@@ -421,7 +431,23 @@ public static class I18n
         ["addProvider.countLabel"] = "{0} 个平台",
     };
 
-    public static Lang Current { get; } = DetectLang();
+    public static Lang Current { get; private set; } = DetectLang();
+
+    /// <summary>
+    /// Applies the "language" config value: "en" forces English, "zh" forces
+    /// Chinese, anything else ("" or "system") follows the Windows display
+    /// language. Called at startup before any UI text is rendered.
+    /// </summary>
+    public static void SetLanguage(string? configValue)
+    {
+        var normalized = configValue?.Trim().ToLowerInvariant();
+        Current = normalized switch
+        {
+            "en" => Lang.En,
+            "zh" => Lang.Zh,
+            _ => DetectLang(),
+        };
+    }
 
     private static Lang DetectLang()
     {

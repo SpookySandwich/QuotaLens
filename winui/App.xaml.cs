@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 using QuotaLens.Services;
 
 namespace QuotaLens;
@@ -48,6 +49,8 @@ public partial class App : Application
         WebLoginService.Instance = new WebLoginService(ui);
 
         var config = new ConfigService();
+        // The language preference must be applied before any UI text is rendered.
+        I18n.SetLanguage(config.Get("language"));
         _svc = new RefreshService(config, ui);
 
         _window = new MainWindow(_svc);

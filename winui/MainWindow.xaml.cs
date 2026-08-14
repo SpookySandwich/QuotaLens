@@ -132,6 +132,9 @@ public sealed partial class MainWindow : Window
         LaunchPathsTitle.Text = I18n.T("settings.launchPaths");
         LaunchPathsHint.Text = I18n.T("settings.launchPathsHint");
         RenderLaunchPathRows();
+        LanguageRowTitle.Text = I18n.T("settings.language");
+        LanguageHint.Text = I18n.T("settings.languageHint");
+        BuildLanguageOptions();
         SaveSettingsButton.Content = I18n.T("settings.save");
         CancelSettingsButton.Content = I18n.T("settings.close");
 
@@ -755,6 +758,29 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void BuildLanguageOptions()
+    {
+        LanguageBox.Items.Clear();
+        LanguageBox.Items.Add(new ComboBoxItem { Content = I18n.T("settings.language.system"), Tag = "" });
+        LanguageBox.Items.Add(new ComboBoxItem { Content = I18n.T("settings.language.en"), Tag = "en" });
+        LanguageBox.Items.Add(new ComboBoxItem { Content = I18n.T("settings.language.zh"), Tag = "zh" });
+    }
+
+    private void SelectLanguageOption(string value)
+    {
+        for (var i = 0; i < LanguageBox.Items.Count; i++)
+        {
+            if (string.Equals((LanguageBox.Items[i] as ComboBoxItem)?.Tag?.ToString(),
+                    value, StringComparison.OrdinalIgnoreCase))
+            {
+                LanguageBox.SelectedIndex = i;
+                return;
+            }
+        }
+
+        LanguageBox.SelectedIndex = 0; // Follow system
+    }
+
     private void OpenSettingsPage()
     {
         var current = _svc.Config.Get("min_refresh_interval_secs", "1800");
@@ -768,6 +794,7 @@ public sealed partial class MainWindow : Window
         StartHiddenAtStartupToggle.IsOn = _startupLaunch.IsStartHiddenEnabled();
         UpdateStartHiddenAtStartupAvailability();
         DefaultLaunchEditorBox.Text = _svc.Config.Get(Catalog.DefaultLaunchEditorPathKey);
+        SelectLanguageOption(_svc.Config.Get("language"));
         LoadLaunchPaths();
         LoadSortPrioritySettings();
         LoadPlanValueRulesSettings();
@@ -802,6 +829,7 @@ public sealed partial class MainWindow : Window
         _svc.Config.Set(ProviderSortPolicy.DeprioritizeEmptyProvidersConfigKey, DeprioritizeEmptyToggle.IsOn ? "true" : "false");
         _startupLaunch.SetEnabled(LaunchAtStartupToggle.IsOn, StartHiddenAtStartupToggle.IsOn);
         _svc.Config.Set(Catalog.DefaultLaunchEditorPathKey, DefaultLaunchEditorBox.Text);
+        _svc.Config.Set("language", (LanguageBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "");
         SaveLaunchPaths();
         _svc.Config.Set(ProviderSortPriorityOrder.ConfigKey, ProviderSortPriorityOrder.Serialize(_sortPriorityTerms));
         SavePlanValueRulesSettings();

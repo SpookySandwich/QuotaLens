@@ -168,6 +168,7 @@ public sealed class CatalogConsistencyTests
                 "deprioritize_empty_providers",
                 "hide_sensitive_info",
                 "sort_priority_order",
+                "language",
             })
             .Concat(Catalog.LaunchTargets.Values
                 .Select(target => target.ConfigKey)

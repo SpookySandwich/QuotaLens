@@ -256,6 +256,36 @@
                 <StackPanel Spacing="14" Margin="16,8,16,16">
                 <TextBlock x:Name="SettingsHeading" Style="{StaticResource SubtitleTextBlockStyle}" />
 
+                <!-- Language row, styled like a native Windows 11 settings card. -->
+                <Border Style="{StaticResource CardStyle}">
+                    <Grid x:Name="LanguageSettingsRow" ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border Grid.Column="0" Width="36" Height="36" VerticalAlignment="Center"
+                                CornerRadius="{StaticResource ControlCornerRadius}"
+                                Background="{ThemeResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource ControlElevationBorderBrush}"
+                                BorderThickness="1">
+                            <FontIcon FontSize="16" Glyph="&#xE8D2;"
+                                      AutomationProperties.AccessibilityView="Raw" />
+                        </Border>
+
+                        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                            <TextBlock x:Name="LanguageRowTitle" Style="{StaticResource BodyStrongTextBlockStyle}" />
+                            <TextBlock x:Name="LanguageHint" Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                        </StackPanel>
+
+                        <ComboBox Grid.Column="2" x:Name="LanguageBox"
+                                  AutomationProperties.AutomationId="LanguageBox"
+                                  AutomationProperties.LabeledBy="{x:Bind LanguageRowTitle}"
+                                  Width="180" VerticalAlignment="Center" />
+                    </Grid>
+                </Border>
+
                 <!-- Refresh-interval row, styled like a native Windows 11 settings card. -->
                 <Border Style="{StaticResource CardStyle}">
                     <Grid x:Name="RefreshIntervalSettingsRow" ColumnSpacing="16">

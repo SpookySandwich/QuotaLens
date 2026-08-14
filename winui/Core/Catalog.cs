@@ -330,6 +330,7 @@ public static class Catalog
     private static readonly IReadOnlyDictionary<string, string> GlobalDefaultConfig = new Dictionary<string, string>
     {
         [DefaultLaunchEditorPathKey] = "",
+        ["language"] = "",
         ["empty_threshold_pct"] = "5",
         ["deprioritize_empty_providers"] = "true",
         ["hide_sensitive_info"] = "false",
