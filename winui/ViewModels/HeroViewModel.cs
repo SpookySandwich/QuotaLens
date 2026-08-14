@@ -389,20 +389,20 @@ public sealed partial class HeroViewModel : ObservableObject
             const double week = 7 * day;
 
             if (Math.Abs(minutes - hour) < 0.1)
-                return "reset hourly";
+                return I18n.T("timeline.resetHourly");
             if (Math.Abs(minutes - day) < 0.1)
-                return "reset daily";
+                return I18n.T("timeline.resetDaily");
             if (Math.Abs(minutes - week) < 0.1)
-                return "reset weekly";
+                return I18n.T("timeline.resetWeekly");
             if (minutes >= 28 * day)
-                return "reset monthly";
+                return I18n.T("timeline.resetMonthly");
 
             if (minutes >= day && Math.Abs(minutes % day) < 0.1)
-                return $"reset every {minutes / day:0}d";
+                return I18n.T("timeline.resetEveryD", "n", (minutes / day).ToString("0", CultureInfo.InvariantCulture));
             if (minutes >= hour && Math.Abs(minutes % hour) < 0.1)
-                return $"reset every {minutes / hour:0}h";
+                return I18n.T("timeline.resetEveryH", "n", (minutes / hour).ToString("0", CultureInfo.InvariantCulture));
 
-            return $"reset every {minutes:0}m";
+            return I18n.T("timeline.resetEveryM", "n", minutes.ToString("0", CultureInfo.InvariantCulture));
         }
 
         private static double ResolveWindowSortMinutes(
