@@ -67,5 +67,12 @@ public interface IProvider
     string SourceLabel { get; }   // e.g. "DeepSeek API"
     Confidence Confidence { get; }
 
+    /// <summary>
+    /// Ordered data sources, best first. Empty means the provider is single-source and
+    /// <see cref="FetchAsync"/> IS the source (the legacy shape). Multi-source providers
+    /// delegate their FetchAsync to <see cref="ProviderSourceRunner"/>.
+    /// </summary>
+    IReadOnlyList<IProviderSource> Sources => Array.Empty<IProviderSource>();
+
     Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct);
 }

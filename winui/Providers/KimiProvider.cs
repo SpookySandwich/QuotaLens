@@ -34,32 +34,36 @@ public sealed class KimiProvider : IProvider
     private readonly Func<JsonObject?> _readCredentials;
     private readonly Func<string, CancellationToken, Task<HttpResponseMessage>> _sendUsageAsync;
     private readonly Func<string, IConfig, CancellationToken, Task<bool>> _refreshViaCliAsync;
-    private readonly Func<CancellationToken, Task<CliUsageDetail?>> _fetchWebTotalQuotaAsync;
-    private readonly IProvider _webFallback;
+    private readonly IReadOnlyList<IProviderSource> _sources;
 
     public KimiProvider()
-        : this(ReadCredentials, SendUsageAsync, new WebViewLoginProvider("kimi"), RefreshViaCliAsync, FetchWebTotalQuotaAsync)
+        : this(ReadCredentials, SendUsageAsync, RefreshViaCliAsync, AppIsAvailable, FetchAppAsync)
     {
     }
 
     internal KimiProvider(
         Func<JsonObject?> readCredentials,
         Func<string, CancellationToken, Task<HttpResponseMessage>> sendUsageAsync,
-        IProvider webFallback,
         Func<string, IConfig, CancellationToken, Task<bool>>? refreshViaCliAsync = null,
-        Func<CancellationToken, Task<CliUsageDetail?>>? fetchWebTotalQuotaAsync = null)
+        Func<bool>? appIsAvailable = null,
+        Func<CancellationToken, Task<ProviderSnapshot>>? fetchAppAsync = null)
     {
         _readCredentials = readCredentials;
         _sendUsageAsync = sendUsageAsync;
-        _webFallback = webFallback;
         _refreshViaCliAsync = refreshViaCliAsync ?? ((_, _, _) => Task.FromResult(false));
-        _fetchWebTotalQuotaAsync = fetchWebTotalQuotaAsync ?? ((_) => Task.FromResult<CliUsageDetail?>(null));
+
+        _sources = new IProviderSource[]
+        {
+            new KimiAppSource(appIsAvailable ?? (() => false), fetchAppAsync ?? ((_) => throw new ProviderException("Not available: Kimi app source is not configured."))),
+            new KimiCliSource(this),
+        };
     }
 
     public string Type => "kimi";
     public string Name => "Kimi";
     public string SourceLabel => "Kimi Code CLI";
     public Confidence Confidence => Confidence.Official;
+    public IReadOnlyList<IProviderSource> Sources => _sources;
 
     /// <summary>Auth failures that mean the CLI session is dead (vs transient errors).</summary>
     private sealed class KimiCliAuthException : Exception
@@ -67,29 +71,52 @@ public sealed class KimiProvider : IProvider
         public KimiCliAuthException(string message) : base(message) { }
     }
 
-    public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
-    {
-        var creds = _readCredentials();
-        if (creds is null)
-            return await _webFallback.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
+    public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
+        ProviderSourceRunner.FetchAsync(this, _sources, instanceId, config, ct);
 
-        try
+    // ---- sources -------------------------------------------------------------
+
+    private sealed class KimiAppSource : IProviderSource
+    {
+        private readonly Func<bool> _isAvailable;
+        private readonly Func<CancellationToken, Task<ProviderSnapshot>> _fetch;
+
+        public KimiAppSource(Func<bool> isAvailable, Func<CancellationToken, Task<ProviderSnapshot>> fetch)
         {
-            return await FetchWithCliAsync(instanceId, creds, config, ct).ConfigureAwait(false);
+            _isAvailable = isAvailable;
+            _fetch = fetch;
         }
-        catch (KimiCliAuthException authError)
+
+        public string Id => "app";
+        public string Name => "App";
+        public bool IsAvailable(string instanceId, IConfig config) => _isAvailable();
+        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) => _fetch(ct);
+    }
+
+    private sealed class KimiCliSource : IProviderSource
+    {
+        private readonly KimiProvider _owner;
+
+        public KimiCliSource(KimiProvider owner) => _owner = owner;
+
+        public string Id => "cli";
+        public string Name => "CLI";
+
+        public bool IsAvailable(string instanceId, IConfig config) => _owner._readCredentials() is not null;
+
+        public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
         {
-            // The CLI session is dead; the WebView session (or its cache) may still work,
-            // and if not, the card should surface the sign-in action.
+            var creds = _owner._readCredentials()
+                ?? throw new ProviderException("Login required: Kimi Code CLI is not signed in.");
             try
             {
-                return await _webFallback.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
+                return await _owner.FetchWithCliAsync(instanceId, creds, config, ct).ConfigureAwait(false);
             }
-            catch (ProviderException)
+            catch (KimiCliAuthException error)
             {
                 throw new ProviderException(
-                    $"Login required: Kimi Code CLI session is not usable ({authError.Message}). " +
-                    "Run any 'kimi' command to refresh it, or click to open Kimi in browser.");
+                    $"Login required: Kimi Code CLI session is not usable ({error.Message}). " +
+                    "Run any 'kimi' command to refresh it, or open Kimi in browser.");
             }
         }
     }
@@ -242,38 +269,32 @@ public sealed class KimiProvider : IProvider
 
     private static readonly TimeSpan WebTotalQuotaTimeout = TimeSpan.FromSeconds(5);
 
-    private static async Task<CliUsageDetail?> FetchWebTotalQuotaAsync(CancellationToken ct)
+    private static bool AppIsAvailable() => ReadKimiDesktopAccessToken() is not null;
+
+    private static async Task<ProviderSnapshot> FetchAppAsync(CancellationToken ct)
     {
-        try
+        var token = ReadKimiDesktopAccessToken()
+            ?? throw new ProviderException("Login required: Kimi desktop app is not signed in.");
+
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(WebTotalQuotaTimeout);
+
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            "https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages")
         {
-            var token = ReadKimiDesktopAccessToken();
-            if (string.IsNullOrWhiteSpace(token))
-                return null;
+            Content = new StringContent("{\"scope\":[\"FEATURE_CODING\"]}", Encoding.UTF8, "application/json"),
+        };
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+        request.Headers.TryAddWithoutValidation("connect-protocol-version", "1");
+        request.Headers.TryAddWithoutValidation("x-msh-platform", "web");
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(WebTotalQuotaTimeout);
+        using var response = await Http.Client.SendAsync(request, timeout.Token).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+            throw new ProviderException($"Not available: Kimi app billing request failed (HTTP {(int)response.StatusCode}).");
 
-            using var request = new HttpRequestMessage(
-                HttpMethod.Post,
-                "https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages")
-            {
-                Content = new StringContent("{\"scope\":[\"FEATURE_CODING\"]}", Encoding.UTF8, "application/json"),
-            };
-            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
-            request.Headers.TryAddWithoutValidation("connect-protocol-version", "1");
-            request.Headers.TryAddWithoutValidation("x-msh-platform", "web");
-
-            using var response = await Http.Client.SendAsync(request, timeout.Token).ConfigureAwait(false);
-            if (!response.IsSuccessStatusCode)
-                return null;
-
-            var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
-            return ParseWebTotalQuota(json);
-        }
-        catch
-        {
-            return null; // enrichment is best-effort and must never fail the fetch
-        }
+        var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
+        return ParseAppUsage(json);
     }
 
     private static string? ReadKimiDesktopAccessToken()
@@ -326,6 +347,72 @@ public sealed class KimiProvider : IProvider
         return detail.Limit is null && detail.Used is null && detail.Remaining is null
             ? null
             : detail;
+    }
+
+    internal static ProviderSnapshot ParseAppUsage(string json)
+    {
+        KimiAppUsageResponse? data;
+        try
+        {
+            data = JsonSerializer.Deserialize<KimiAppUsageResponse>(json);
+        }
+        catch (Exception e)
+        {
+            throw new ProviderException($"Parse error: Invalid Kimi app JSON: {e.Message}", e);
+        }
+
+        var coding = data?.Usages?.FirstOrDefault(u =>
+                string.Equals(u.Scope, "FEATURE_CODING", StringComparison.OrdinalIgnoreCase))
+            ?? throw new ProviderException("Parse error: Kimi app usage missing FEATURE_CODING scope");
+        var weekly = coding.Detail
+            ?? throw new ProviderException("Parse error: Kimi app weekly usage missing");
+
+        var rateLimit = coding.Limits?
+            .Where(limit => limit.Detail is not null)
+            .OrderBy(limit => WindowMinutesFor(limit.Window) ?? long.MaxValue)
+            .FirstOrDefault();
+
+        var total = data.TotalQuota is { } tq
+            && (ParseLong(tq.Limit) is not null || ParseLong(tq.Remaining) is not null || ParseLong(tq.Used) is not null)
+            ? BuildWindow("Total quota", tq, windowMinutes: null, descriptionPrefix: null)
+            : null;
+        var weeklyWindow = BuildWindow("Weekly", weekly, windowMinutes: 10080, descriptionPrefix: null);
+        RateWindow? rateWindow = null;
+        if (rateLimit?.Detail is not null)
+        {
+            var minutes = WindowMinutesFor(rateLimit.Window);
+            rateWindow = BuildWindow(
+                minutes == 300 ? "5h Rate Limit" : "Rate Limit",
+                rateLimit.Detail,
+                windowMinutes: minutes,
+                descriptionPrefix: "Rate: ");
+        }
+
+        return new ProviderSnapshot
+        {
+            ProviderId = "kimi",
+            Name = "Kimi",
+            // Total quota leads when present; otherwise weekly leads.
+            Primary = total ?? weeklyWindow,
+            Secondary = total is not null ? weeklyWindow : rateWindow,
+            Tertiary = total is not null ? rateWindow : null,
+            SourceLabel = "Kimi app",
+            Confidence = Confidence.Official,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+    }
+
+    private sealed class KimiAppUsageResponse
+    {
+        [JsonPropertyName("usages")] public List<KimiAppUsage>? Usages { get; set; }
+        [JsonPropertyName("totalQuota")] public CliUsageDetail? TotalQuota { get; set; }
+    }
+
+    private sealed class KimiAppUsage
+    {
+        [JsonPropertyName("scope")] public string? Scope { get; set; }
+        [JsonPropertyName("detail")] public CliUsageDetail? Detail { get; set; }
+        [JsonPropertyName("limits")] public List<CliUsageLimit>? Limits { get; set; }
     }
 
     // ---- usage response parsing ----------------------------------------------
@@ -383,23 +470,7 @@ public sealed class KimiProvider : IProvider
             throw new ProviderException($"Network error: HTTP {status}");
 
         var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        var snapshot = ParseCliUsage(json);
-
-        // Best-effort enrichment: the CLI endpoint reports totalQuota as empty for
-        // CLI-auth; the web billing endpoint (using the Kimi desktop app's token) does
-        // report it. Attach it only when the CLI response did not already carry one.
-        if (snapshot.Tertiary is null)
-        {
-            var webTotal = await _fetchWebTotalQuotaAsync(ct).ConfigureAwait(false);
-            if (webTotal is not null)
-                snapshot.Tertiary = BuildWindow("Total quota", webTotal, windowMinutes: null, descriptionPrefix: null);
-        }
-
-        // "Total quota" is the headline when available; otherwise weekly stays primary.
-        if (snapshot.Tertiary is not null)
-            (snapshot.Primary, snapshot.Secondary, snapshot.Tertiary) = (snapshot.Tertiary, snapshot.Primary, snapshot.Secondary);
-
-        return snapshot;
+        return ParseCliUsage(json);
     }
 
     internal ProviderSnapshot ParseCliUsage(string json)

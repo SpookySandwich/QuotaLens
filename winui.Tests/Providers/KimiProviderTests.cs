@@ -111,18 +111,16 @@ public sealed class KimiProviderTests
     }
 
     [TestMethod]
-    public async Task FetchAsync_WithoutCredentialsFile_DelegatesToWebFallback()
+    public async Task FetchAsync_WithoutAnySource_ThrowsLoginRequired()
     {
-        var fallback = new FakeProvider(_ => Task.FromResult(new ProviderSnapshot { ProviderId = "kimi", Name = "Kimi Web" }));
         var provider = new KimiProvider(
             () => null,
-            (_, _) => throw new AssertFailedException("no usage call expected"),
-            fallback);
+            (_, _) => throw new AssertFailedException("no usage call expected"));
 
-        var snapshot = await provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None);
+        var ex = await Assert.ThrowsExactlyAsync<ProviderException>(
+            () => provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None));
 
-        Assert.AreEqual("Kimi Web", snapshot.Name);
-        Assert.AreEqual(1, fallback.Calls);
+        StringAssert.Contains(ex.Message, "Login required");
     }
 
     [TestMethod]
@@ -131,8 +129,7 @@ public sealed class KimiProviderTests
         var usageCalls = new List<string>();
         var provider = new KimiProvider(
             FreshCredentials,
-            (token, _) => { usageCalls.Add(token); return Task.FromResult(UsageResponse()); },
-            FailingFallback());
+            (token, _) => { usageCalls.Add(token); return Task.FromResult(UsageResponse()); });
 
         var snapshot = await provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None);
 
@@ -142,44 +139,12 @@ public sealed class KimiProviderTests
     }
 
     [TestMethod]
-    public async Task FetchAsync_WithExpiredToken_NeverCallsTheApiAndFallsBack()
+    public async Task FetchAsync_WithExpiredToken_NeverCallsTheApiAndThrowsLoginRequired()
     {
-        // Read-only policy: an expired token is reported, never refreshed. Kimi's
-        // refresh rotates the refresh token, so refreshing would force a write back
-        // into the CLI's credential store and could strand the CLI's own session.
-        var fallback = new FakeProvider(_ => Task.FromResult(new ProviderSnapshot { ProviderId = "kimi", Name = "Kimi Web Cache" }));
+        // Read-only policy: an expired token is reported, never refreshed.
         var provider = new KimiProvider(
             ExpiredCredentials,
-            (_, _) => throw new AssertFailedException("an expired token must not be sent to the usage API"),
-            fallback);
-
-        var snapshot = await provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None);
-
-        Assert.AreEqual("Kimi Web Cache", snapshot.Name);
-        Assert.AreEqual(1, fallback.Calls);
-    }
-
-    [TestMethod]
-    public async Task FetchAsync_WithRejectedToken_FallsBackInsteadOfRefreshing()
-    {
-        var fallback = new FakeProvider(_ => Task.FromResult(new ProviderSnapshot { ProviderId = "kimi", Name = "Kimi Web Cache" }));
-        var provider = new KimiProvider(
-            FreshCredentials,
-            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)),
-            fallback);
-
-        var snapshot = await provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None);
-
-        Assert.AreEqual("Kimi Web Cache", snapshot.Name);
-    }
-
-    [TestMethod]
-    public async Task FetchAsync_WithDeadCliSessionAndNoWebSession_ThrowsLoginRequired()
-    {
-        var provider = new KimiProvider(
-            ExpiredCredentials,
-            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)),
-            FailingFallback());
+            (_, _) => throw new AssertFailedException("an expired token must not be sent to the usage API"));
 
         var ex = await Assert.ThrowsExactlyAsync<ProviderException>(
             () => provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None));
@@ -187,12 +152,73 @@ public sealed class KimiProviderTests
         StringAssert.Contains(ex.Message, "Login required");
     }
 
+    [TestMethod]
+    public async Task FetchAsync_WithRejectedToken_ThrowsLoginRequiredInsteadOfRefreshing()
+    {
+        var provider = new KimiProvider(
+            FreshCredentials,
+            (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)));
+
+        var ex = await Assert.ThrowsExactlyAsync<ProviderException>(
+            () => provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None));
+
+        StringAssert.Contains(ex.Message, "Login required");
+    }
+
+    [TestMethod]
+    public void ParseAppUsage_OrdersTotalQuotaThenWeeklyThenRate()
+    {
+        var snapshot = KimiProvider.ParseAppUsage(
+            """
+            {
+              "usages": [{ "scope": "FEATURE_CODING",
+                "detail": { "limit": "100", "used": "69", "remaining": "31", "resetTime": "2026-08-16T05:56:16Z" },
+                "limits": [{ "window": { "duration": 300, "timeUnit": "TIME_UNIT_MINUTE" },
+                  "detail": { "limit": "100", "used": "21", "remaining": "79", "resetTime": "2026-08-14T07:56:16Z" } }]
+              }],
+              "totalQuota": { "limit": "100", "used": "59", "remaining": "41" }
+            }
+            """);
+
+        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        Assert.AreEqual(59.0, snapshot.Primary.UsedPercent);
+        Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
+        Assert.AreEqual(69.0, snapshot.Secondary.UsedPercent);
+        Assert.AreEqual("5h Rate Limit", snapshot.Tertiary!.Label);
+        Assert.AreEqual(21.0, snapshot.Tertiary.UsedPercent);
+        Assert.AreEqual("Kimi app", snapshot.SourceLabel);
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_PrefersAppSourceWhenAvailable()
+    {
+        var appCalls = 0;
+        var provider = new KimiProvider(
+            () => null,
+            (_, _) => throw new AssertFailedException("CLI must not be used when App is available"),
+            appIsAvailable: () => true,
+            fetchAppAsync: _ =>
+            {
+                appCalls++;
+                return Task.FromResult(new ProviderSnapshot
+                {
+                    ProviderId = "kimi",
+                    Name = "Kimi",
+                    Primary = new RateWindow { Label = "Total quota", UsedPercent = 59 },
+                });
+            });
+
+        var snapshot = await provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None);
+
+        Assert.AreEqual(1, appCalls);
+        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+    }
+
     // ---- helpers -----------------------------------------------------------
 
     private static KimiProvider Provider(JsonObject creds) => new(
         () => creds,
-        (_, _) => Task.FromResult(UsageResponse()),
-        FailingFallback());
+        (_, _) => Task.FromResult(UsageResponse()));
 
     private static JsonObject FreshCredentials() => new()
     {
@@ -216,28 +242,6 @@ public sealed class KimiProviderTests
     {
         Content = new StringContent(SampleUsageJson, Encoding.UTF8, "application/json"),
     };
-
-    private static FakeProvider FailingFallback() =>
-        new(_ => throw new ProviderException("Login required - click to open Kimi in browser"));
-
-    private sealed class FakeProvider : IProvider
-    {
-        private readonly Func<string, Task<ProviderSnapshot>> _fetch;
-
-        public FakeProvider(Func<string, Task<ProviderSnapshot>> fetch) => _fetch = fetch;
-
-        public int Calls { get; private set; }
-        public string Type => "kimi";
-        public string Name => "Kimi";
-        public string SourceLabel => "Kimi WebView";
-        public Confidence Confidence => Confidence.Official;
-
-        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
-        {
-            Calls++;
-            return _fetch(instanceId);
-        }
-    }
 
     private sealed class EmptyConfig : IConfig
     {
