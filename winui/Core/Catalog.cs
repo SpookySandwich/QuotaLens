@@ -1306,18 +1306,18 @@ public static class Catalog
     public static readonly IReadOnlyDictionary<string, ProviderLaunchTarget> LaunchTargets = new Dictionary<string, ProviderLaunchTarget>
     {
         ["codex-lb"] = new(
-            "Codex",
+            "ChatGPT",
             "codex_lb_app_path",
             new[]
             {
-                @"%ProgramFiles%\WindowsApps\OpenAI.Codex_*\app\Codex.exe",
+                @"%ProgramFiles%\WindowsApps\OpenAI.Codex_*\app\ChatGPT.exe",
+                @"%ProgramFiles%\WindowsApps\OpenAI.ChatGPT_*\ChatGPT.exe",
+                @"%LOCALAPPDATA%\Programs\ChatGPT\ChatGPT.exe",
                 @"%LOCALAPPDATA%\Programs\Codex\Codex.exe",
-                @"%LOCALAPPDATA%\Programs\OpenAI Codex\Codex.exe",
-                @"%ProgramFiles%\Codex\Codex.exe",
             },
-            new[] { "Codex.exe" },
+            new[] { "ChatGPT.exe", "Codex.exe" },
             "OpenAI.Codex_2p2nqsd0c76g0",
-            @"app\Codex.exe"),
+            @"app\ChatGPT.exe"),
         ["claude"] = new(
             "Claude",
             "claude_app_path",
@@ -1332,18 +1332,18 @@ public static class Catalog
             "Claude_pzs8sxrjxfjjc",
             @"app\claude.exe"),
         ["codex"] = new(
-            "Codex",
+            "ChatGPT",
             "codex_app_path",
             new[]
             {
-                @"%ProgramFiles%\WindowsApps\OpenAI.Codex_*\app\Codex.exe",
+                @"%ProgramFiles%\WindowsApps\OpenAI.Codex_*\app\ChatGPT.exe",
+                @"%ProgramFiles%\WindowsApps\OpenAI.ChatGPT_*\ChatGPT.exe",
+                @"%LOCALAPPDATA%\Programs\ChatGPT\ChatGPT.exe",
                 @"%LOCALAPPDATA%\Programs\Codex\Codex.exe",
-                @"%LOCALAPPDATA%\Programs\OpenAI Codex\Codex.exe",
-                @"%ProgramFiles%\Codex\Codex.exe",
             },
-            new[] { "Codex.exe" },
+            new[] { "ChatGPT.exe", "Codex.exe" },
             "OpenAI.Codex_2p2nqsd0c76g0",
-            @"app\Codex.exe"),
+            @"app\ChatGPT.exe"),
         ["antigravity"] = new(
             "Antigravity",
             "antigravity_path",

@@ -97,6 +97,8 @@ public sealed class IdeLauncherTests
         Assert.IsTrue(target.DefaultPaths.Any(path => path.Contains("OpenAI.Codex_", StringComparison.OrdinalIgnoreCase)));
         Assert.IsFalse(target.DefaultPaths.Any(path => path.Contains("CodexLB", StringComparison.OrdinalIgnoreCase)));
         Assert.IsFalse(target.DefaultPaths.Any(path => path.Contains("CodexBar", StringComparison.OrdinalIgnoreCase)));
+        // The Codex desktop app was rebranded to ChatGPT; ChatGPT.exe is the primary entry point.
+        Assert.AreEqual("ChatGPT.exe", target.DirectoryExecutableNames[0]);
         CollectionAssert.Contains(target.DirectoryExecutableNames, "Codex.exe");
         Assert.AreEqual("codex_app_path", target.ConfigKey);
     }
@@ -107,6 +109,7 @@ public sealed class IdeLauncherTests
         var target = Catalog.LaunchTargets["codex-lb"];
 
         Assert.AreEqual("codex_lb_app_path", target.ConfigKey);
+        Assert.AreEqual("ChatGPT.exe", target.DirectoryExecutableNames[0]);
         CollectionAssert.Contains(target.DirectoryExecutableNames, "Codex.exe");
     }
 

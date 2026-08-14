@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Net.Http;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -33,10 +34,11 @@ public sealed class KimiProvider : IProvider
     private readonly Func<JsonObject?> _readCredentials;
     private readonly Func<string, CancellationToken, Task<HttpResponseMessage>> _sendUsageAsync;
     private readonly Func<string, IConfig, CancellationToken, Task<bool>> _refreshViaCliAsync;
+    private readonly Func<CancellationToken, Task<CliUsageDetail?>> _fetchWebTotalQuotaAsync;
     private readonly IProvider _webFallback;
 
     public KimiProvider()
-        : this(ReadCredentials, SendUsageAsync, new WebViewLoginProvider("kimi"), RefreshViaCliAsync)
+        : this(ReadCredentials, SendUsageAsync, new WebViewLoginProvider("kimi"), RefreshViaCliAsync, FetchWebTotalQuotaAsync)
     {
     }
 
@@ -44,12 +46,14 @@ public sealed class KimiProvider : IProvider
         Func<JsonObject?> readCredentials,
         Func<string, CancellationToken, Task<HttpResponseMessage>> sendUsageAsync,
         IProvider webFallback,
-        Func<string, IConfig, CancellationToken, Task<bool>>? refreshViaCliAsync = null)
+        Func<string, IConfig, CancellationToken, Task<bool>>? refreshViaCliAsync = null,
+        Func<CancellationToken, Task<CliUsageDetail?>>? fetchWebTotalQuotaAsync = null)
     {
         _readCredentials = readCredentials;
         _sendUsageAsync = sendUsageAsync;
         _webFallback = webFallback;
         _refreshViaCliAsync = refreshViaCliAsync ?? ((_, _, _) => Task.FromResult(false));
+        _fetchWebTotalQuotaAsync = fetchWebTotalQuotaAsync ?? ((_) => Task.FromResult<CliUsageDetail?>(null));
     }
 
     public string Type => "kimi";
@@ -234,6 +238,96 @@ public sealed class KimiProvider : IProvider
         return await Http.Client.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
     }
 
+    // ---- total-quota enrichment (web billing, via the Kimi desktop app token) --
+
+    private static readonly TimeSpan WebTotalQuotaTimeout = TimeSpan.FromSeconds(5);
+
+    private static async Task<CliUsageDetail?> FetchWebTotalQuotaAsync(CancellationToken ct)
+    {
+        try
+        {
+            var token = ReadKimiDesktopAccessToken();
+            if (string.IsNullOrWhiteSpace(token))
+                return null;
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(WebTotalQuotaTimeout);
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                "https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages")
+            {
+                Content = new StringContent("{\"scope\":[\"FEATURE_CODING\"]}", Encoding.UTF8, "application/json"),
+            };
+            request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+            request.Headers.TryAddWithoutValidation("connect-protocol-version", "1");
+            request.Headers.TryAddWithoutValidation("x-msh-platform", "web");
+
+            using var response = await Http.Client.SendAsync(request, timeout.Token).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
+            return ParseWebTotalQuota(json);
+        }
+        catch
+        {
+            return null; // enrichment is best-effort and must never fail the fetch
+        }
+    }
+
+    private static string? ReadKimiDesktopAccessToken()
+    {
+        try
+        {
+            var path = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "kimi-desktop", "bridge-store", "token-store.json");
+            if (!File.Exists(path))
+                return null;
+
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            if (doc.RootElement.TryGetProperty("tokens", out var tokens)
+                && tokens.ValueKind == JsonValueKind.Object
+                && tokens.TryGetProperty("access_token", out var accessToken)
+                && accessToken.ValueKind == JsonValueKind.String)
+            {
+                return accessToken.GetString();
+            }
+
+            return null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    internal static CliUsageDetail? ParseWebTotalQuota(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("totalQuota", out var totalQuota)
+            || totalQuota.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        static string? Get(JsonElement obj, string key) =>
+            obj.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : null;
+
+        var detail = new CliUsageDetail
+        {
+            Limit = Get(totalQuota, "limit"),
+            Used = Get(totalQuota, "used"),
+            Remaining = Get(totalQuota, "remaining"),
+        };
+        return detail.Limit is null && detail.Used is null && detail.Remaining is null
+            ? null
+            : detail;
+    }
+
     // ---- usage response parsing ----------------------------------------------
 
     private sealed class CliUsageResponse
@@ -267,7 +361,7 @@ public sealed class KimiProvider : IProvider
         [JsonPropertyName("timeUnit")] public string? TimeUnit { get; set; }
     }
 
-    private sealed class CliUsageDetail
+    internal sealed class CliUsageDetail
     {
         [JsonPropertyName("limit")] public string? Limit { get; set; }
         [JsonPropertyName("used")] public string? Used { get; set; }
@@ -289,7 +383,19 @@ public sealed class KimiProvider : IProvider
             throw new ProviderException($"Network error: HTTP {status}");
 
         var json = await resp.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-        return ParseCliUsage(json);
+        var snapshot = ParseCliUsage(json);
+
+        // Best-effort enrichment: the CLI endpoint reports totalQuota as empty for
+        // CLI-auth; the web billing endpoint (using the Kimi desktop app's token) does
+        // report it. Attach it only when the CLI response did not already carry one.
+        if (snapshot.Tertiary is null)
+        {
+            var webTotal = await _fetchWebTotalQuotaAsync(ct).ConfigureAwait(false);
+            if (webTotal is not null)
+                snapshot.Tertiary = BuildWindow("Total quota", webTotal, windowMinutes: null, descriptionPrefix: null);
+        }
+
+        return snapshot;
     }
 
     internal ProviderSnapshot ParseCliUsage(string json)

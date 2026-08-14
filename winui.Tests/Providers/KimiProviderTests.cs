@@ -81,6 +81,25 @@ public sealed class KimiProviderTests
     }
 
     [TestMethod]
+    public void ParseWebTotalQuota_ExtractsLimitUsedRemaining()
+    {
+        var detail = KimiProvider.ParseWebTotalQuota(
+            """{ "usages": [], "totalQuota": { "limit": "100", "used": "59", "remaining": "41" } }""");
+
+        Assert.IsNotNull(detail);
+        Assert.AreEqual("100", detail!.Limit);
+        Assert.AreEqual("59", detail.Used);
+        Assert.AreEqual("41", detail.Remaining);
+    }
+
+    [TestMethod]
+    public void ParseWebTotalQuota_ReturnsNullWhenAbsentOrEmpty()
+    {
+        Assert.IsNull(KimiProvider.ParseWebTotalQuota("""{ "usages": [] }"""));
+        Assert.IsNull(KimiProvider.ParseWebTotalQuota("""{ "totalQuota": {} }"""));
+    }
+
+    [TestMethod]
     public void TierName_MapsKnownLevelsAndPrettifiesUnknown()
     {
         Assert.AreEqual("Andante", KimiProvider.TierName("LEVEL_BASIC"));

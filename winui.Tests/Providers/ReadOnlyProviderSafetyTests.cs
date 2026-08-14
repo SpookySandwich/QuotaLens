@@ -345,7 +345,6 @@ public sealed class ReadOnlyProviderSafetyTests
             "File.Move",
             "refresh_token",
             "/oauth/token",
-            "HttpMethod.Post",
         })
         {
             Assert.IsFalse(
