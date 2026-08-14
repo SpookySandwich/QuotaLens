@@ -578,6 +578,7 @@ public sealed partial class GeminiProvider : IProvider
 
         public string Id => "cli";
         public string Name => "Gemini CLI";
+        public IReadOnlyList<string> ConfigFieldKeys => new[] { "gemini_home", "gemini_path" };
         public bool IsAvailable(string instanceId, IConfig config) => _owner.CliCredentialsExist(instanceId, config);
         public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
             _owner.FetchCliAsync(instanceId, config, ct);
@@ -589,6 +590,7 @@ public sealed partial class GeminiProvider : IProvider
 
         public string Id => "ide";
         public string Name => "Antigravity IDE";
+        public IReadOnlyList<string> ConfigFieldKeys => Array.Empty<string>();
         public bool IsAvailable(string instanceId, IConfig config) => AntigravityProvider.IsRunning();
         public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
             Provider.FetchAsync(instanceId, config, ct);

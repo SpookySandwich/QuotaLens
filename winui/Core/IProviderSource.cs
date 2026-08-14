@@ -13,6 +13,11 @@ public interface IProviderSource
     /// <summary>Human name shown in the source selector, e.g. "App" or "CLI".</summary>
     string Name { get; }
 
+    /// <summary>
+    /// Config field keys this source configures. Empty means auto-detect (no inputs).
+    /// </summary>
+    IReadOnlyList<string> ConfigFieldKeys => Array.Empty<string>();
+
     /// <summary>True when this source's credentials are present and usable.</summary>
     bool IsAvailable(string instanceId, IConfig config);
 

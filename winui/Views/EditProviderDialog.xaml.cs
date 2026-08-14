@@ -1,3 +1,4 @@
+using CommunityToolkit.WinUI.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
@@ -38,6 +39,8 @@ public sealed partial class EditProviderDialog : ContentDialog
     private readonly nint _hwnd;
     private readonly List<(ProviderField Field, Func<string> Read, Action<string> Write, Func<bool> IsValid)> _editors = new();
     private readonly List<(Func<bool> IsValid, FontIcon Icon)> _validations = new();
+    private IReadOnlyList<IProviderSource> _sources = Array.Empty<IProviderSource>();
+    private string? _selectedSourceId;
 
     public EditProviderDialog(IProviderService svc, string instanceId, string providerType, string displayName, nint hwnd)
     {
@@ -52,7 +55,6 @@ public sealed partial class EditProviderDialog : ContentDialog
         CloseButtonText = I18n.T("common.cancel");
 
         BuildFields();
-        ValidateAll();
         PrimaryButtonClick += OnSave;
     }
 
@@ -60,15 +62,22 @@ public sealed partial class EditProviderDialog : ContentDialog
     {
         FieldsPanel.Children.Clear();
         _editors.Clear();
+        _validations.Clear();
 
         if (!Catalog.Fields.TryGetValue(_type, out var fields) || fields.Length == 0) return;
 
         AddSectionHeader("Connection", "Provider-specific account, CLI, or sign-in settings.");
 
-        AddSourceSelector();
+        _sources = ProviderRegistry.Create(_type).Sources;
+        if (_sources.Count > 1)
+            BuildSourceSelector();
 
+        var visibleKeys = VisibleFieldKeys(fields);
         foreach (var field in fields)
         {
+            if (!visibleKeys.Contains(field.Key))
+                continue;
+
             var current = ReadValue(field.Key);
             var automationId = $"Field_{_instanceId}_{field.Key}";
 
@@ -162,6 +171,8 @@ public sealed partial class EditProviderDialog : ContentDialog
             FieldsPanel.Children.Add(wrap);
             _editors.Add((field, read, write, isValid));
         }
+
+        ValidateAll();
     }
 
     private Button BuildBrowseButton(ProviderField field, Action<string> write)
@@ -238,40 +249,48 @@ public sealed partial class EditProviderDialog : ContentDialog
     /// For multi-source providers, a source dropdown (App / CLI) so the user can choose
     /// which data origin this instance uses. Stored per instance as "provider_source".
     /// </summary>
-    private void AddSourceSelector()
+    private void BuildSourceSelector()
     {
-        var sources = ProviderRegistry.Create(_type).Sources;
-        if (sources.Count <= 1)
-            return;
+        var segmented = new Segmented { Header = "Source" };
+        foreach (var source in _sources)
+            segmented.Items.Add(new SegmentedItem { Content = source.Name, Tag = source.Id });
 
-        var combo = new ComboBox
-        {
-            Header = "Source",
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-        };
-        foreach (var source in sources)
-            combo.Items.Add(new ComboBoxItem { Content = source.Name, Tag = source.Id });
-
-        var current = ReadValue("provider_source");
         var selected = 0;
-        for (var index = 0; index < sources.Count; index++)
+        for (var index = 0; index < _sources.Count; index++)
         {
-            if (string.Equals(sources[index].Id, current, StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(_sources[index].Id, _selectedSourceId, StringComparison.OrdinalIgnoreCase))
             {
                 selected = index;
                 break;
             }
         }
-        combo.SelectedIndex = selected;
+        segmented.SelectedIndex = selected;
 
-        AutomationProperties.SetAutomationId(combo, $"Source_{_instanceId}");
-        FieldsPanel.Children.Add(combo);
+        segmented.SelectionChanged += (_, _) =>
+        {
+            _selectedSourceId = (segmented.SelectedItem as SegmentedItem)?.Tag?.ToString();
+            BuildFields();
+        };
+
+        AutomationProperties.SetAutomationId(segmented, $"Source_{_instanceId}");
+        FieldsPanel.Children.Add(segmented);
 
         _editors.Add((
             new ProviderField("provider_source", "Source"),
-            () => (combo.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "",
+            () => (segmented.SelectedItem as SegmentedItem)?.Tag?.ToString() ?? "",
             _ => { },
             () => true));
+    }
+
+    private IReadOnlySet<string> VisibleFieldKeys(ProviderField[] fields)
+    {
+        if (_sources.Count <= 1)
+            return fields.Select(field => field.Key).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var selected = _sources.FirstOrDefault(source =>
+                string.Equals(source.Id, _selectedSourceId, StringComparison.OrdinalIgnoreCase))
+            ?? _sources[0];
+        return selected.ConfigFieldKeys.ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private void AddSectionHeader(string title, string description)
