@@ -4,6 +4,7 @@ using System.Net.Http;
 using System.Text;
 using System.Text.Json;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 using static QuotaLens.Core.JsonUtil;
 using static QuotaLens.Core.StringValues;
 
@@ -107,7 +108,7 @@ public sealed class VertexAIProvider : IProvider
         var usageByKey = AggregateTimeSeries(usageJson, now - CurrentUsageMaxAge);
         var limitByKey = AggregateTimeSeries(limitJson);
         if (usageByKey.Count == 0 || limitByKey.Count == 0)
-            throw new ProviderException("No Vertex AI quota data found for the current project.");
+            throw new ProviderException(I18n.T("quota.noVertexQuota"));
 
         var quotas = new List<VertexQuotaUsage>();
         foreach (var (key, limit) in limitByKey)
@@ -120,7 +121,7 @@ public sealed class VertexAIProvider : IProvider
         }
 
         if (quotas.Count == 0)
-            throw new ProviderException("No Vertex AI quota data found for the current project.");
+            throw new ProviderException(I18n.T("quota.noVertexQuota"));
 
         var ordered = quotas
             .OrderByDescending(quota => quota.UsedPercent)

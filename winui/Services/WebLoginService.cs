@@ -8,6 +8,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.Web.WebView2.Core;
 using QuotaLens.Core;
 using static QuotaLens.Core.TextUtil;
+using QuotaLens.Helpers;
 using QuotaLens.Providers;
 using QuotaLens.Views;
 
@@ -469,9 +470,9 @@ public sealed class WebLoginService
     private async Task CreateWindowAsync(WebLoginCaptureRequest request, bool hidden)
     {
         var definition = Definition(request.ProviderType);
-        var title = $"{Catalog.ProviderName(request.ProviderType)} Login";
+        var title = $"{I18n.ProviderName(request.ProviderType, Catalog.ProviderName(request.ProviderType))} {I18n.T("login.title")}";
         var url = request.LoginUrl;
-        var initScript = definition.InitScript;
+        var initScript = LocalizeLoginScript(definition.InitScript);
         var injectCaptureScript = ShouldInjectCaptureScript(request, hidden);
 
         var window = new ProviderLoginWindow(title);
@@ -1650,7 +1651,7 @@ public sealed class WebLoginService
             tokensTotal = 0.0;
             tokensUsed = 0.0;
             usedPercent = 0.0;
-            comboName = "No Plan";
+            comboName = I18n.T("quota.noPlan");
             endTime = null;
             resetDesc = null;
         }
@@ -1661,14 +1662,14 @@ public sealed class WebLoginService
         var amountOwed = cost?.AmountOwed ?? 0.0;
         var financialBalance = rawBalance - amountOwed;
 
-        var primaryLabel = comboName == "No Plan" ? "Token Quota" : comboName;
+        var primaryLabel = comboName == I18n.T("quota.noPlan") ? I18n.T("quota.tokenQuota") : comboName;
         var quotaUnit = combo?.IsCodingPlan == 1 ? "uses" : "tokens";
 
         return new ProviderSnapshot
         {
             ProviderId = "bayesdl",
             Name = combo is null ? "BayesDL" : $"BayesDL · {comboName}",
-            PlanName = comboName == "No Plan" ? null : comboName,
+            PlanName = comboName == I18n.T("quota.noPlan") ? null : comboName,
             Primary = new RateWindow
             {
                 Label = primaryLabel,
@@ -3110,10 +3111,10 @@ public sealed class WebLoginService
         var secondary = maxRefreshCredits > 0
             ? new RateWindow
             {
-                Label = "Refresh credits",
+                Label = I18n.T("quota.resetCredits"),
                 UsedPercent = Quota.ClampPercent((maxRefreshCredits - refreshCredits) / maxRefreshCredits * 100),
                 ResetsAt = JDateIso(data, "nextRefreshTime"),
-                ResetDescription = $"{DisplayName(JString(data, "refreshInterval")) ?? "Refresh"}: {Fmt0(refreshCredits)} / {Fmt0(maxRefreshCredits)}",
+                ResetDescription = $"{DisplayName(JString(data, "refreshInterval")) ?? I18n.T("quota.refresh")}: {Fmt0(refreshCredits)} / {Fmt0(maxRefreshCredits)}",
             }
             : null;
 
@@ -3465,7 +3466,7 @@ public sealed class WebLoginService
                 Label = "Credits",
                 UsedPercent = Quota.ClampPercent((1 - creditLeft.Value) * 100),
                 ResetsAt = credit is { } creditSource ? StepFunCreditReset(creditSource) : null,
-                ResetDescription = $"{Fmt1(Quota.ClampPercent(creditLeft.Value * 100))}% available",
+                ResetDescription = $"{Fmt1(Quota.ClampPercent(creditLeft.Value * 100))}% {I18n.T("common.available")}",
             };
             secondary = null;
         }
@@ -3479,7 +3480,7 @@ public sealed class WebLoginService
                 Label = "5h Window",
                 UsedPercent = Quota.ClampPercent((1 - fiveHourLeft.Value) * 100),
                 ResetsAt = EpochSecondsToIso(fiveHourReset),
-                ResetDescription = $"{Fmt0(Quota.ClampPercent(fiveHourLeft.Value * 100))}% available",
+                ResetDescription = $"{Fmt0(Quota.ClampPercent(fiveHourLeft.Value * 100))}% {I18n.T("common.available")}",
                 WindowMinutes = 5 * 60,
             };
             secondary = new RateWindow
@@ -3487,7 +3488,7 @@ public sealed class WebLoginService
                 Label = "Weekly Window",
                 UsedPercent = Quota.ClampPercent((1 - weeklyLeft.Value) * 100),
                 ResetsAt = EpochSecondsToIso(weeklyReset),
-                ResetDescription = $"{Fmt0(Quota.ClampPercent(weeklyLeft.Value * 100))}% available",
+                ResetDescription = $"{Fmt0(Quota.ClampPercent(weeklyLeft.Value * 100))}% {I18n.T("common.available")}",
                 WindowMinutes = 7 * 24 * 60,
             };
         }
@@ -5276,6 +5277,75 @@ public sealed class WebLoginService
 })();
 """;
     }
+
+    /// <summary>
+    /// Localizes the injected login-capture script's English status strings when the
+    /// app is in Chinese. Replaces exact phrases inside JS string literals, so the
+    /// capture logic itself is untouched.
+    /// </summary>
+    private static string LocalizeLoginScript(string script)
+    {
+        if (I18n.Current != I18n.Lang.Zh)
+            return script;
+
+        foreach (var (en, zh) in LoginStatusTranslations)
+            script = script.Replace(en, zh, StringComparison.Ordinal);
+
+        return script;
+    }
+
+    // Most specific phrases first; the generic "QuotaLens: " prefix goes last.
+    private static readonly (string En, string Zh)[] LoginStatusTranslations =
+    {
+        ("QuotaLens: login required or usage fetch failed. Retrying...", "QuotaLens：需要登录或用量获取失败，正在重试..."),
+        ("QuotaLens: login required or quota fetch failed. Retrying...", "QuotaLens：需要登录或配额获取失败，正在重试..."),
+        ("QuotaLens: login required. Retrying...", "QuotaLens：需要登录，正在重试..."),
+        ("QuotaLens: not logged in or no data. Retrying...", "QuotaLens：未登录或无数据，正在重试..."),
+        ("QuotaLens: not logged in. Retrying...", "QuotaLens：未登录，正在重试..."),
+        ("QuotaLens: no Kimi quota data yet. Retrying...", "QuotaLens：暂无 Kimi 配额数据，正在重试..."),
+        ("QuotaLens: initializing...", "QuotaLens：正在初始化..."),
+        ("QuotaLens: waiting for Ollama usage data...", "QuotaLens：等待 Ollama 用量数据..."),
+        ("QuotaLens: waiting for Mistral billing usage...", "QuotaLens：等待 Mistral 计费用量..."),
+        ("QuotaLens: waiting for MiniMax coding plan data...", "QuotaLens：等待 MiniMax 套餐数据..."),
+        ("QuotaLens: waiting for Windsurf plan data...", "QuotaLens：等待 Windsurf 套餐数据..."),
+        ("QuotaLens: waiting for Windsurf sign-in...", "QuotaLens：等待 Windsurf 登录..."),
+        ("QuotaLens: waiting for Command Code credits...", "QuotaLens：等待 Command Code 积分..."),
+        ("QuotaLens: waiting for Perplexity credits...", "QuotaLens：等待 Perplexity 积分..."),
+        ("QuotaLens: waiting for OpenCode Go quota...", "QuotaLens：等待 OpenCode Go 配额..."),
+        ("QuotaLens: waiting for OpenCode quota...", "QuotaLens：等待 OpenCode 配额..."),
+        ("QuotaLens: waiting for Abacus AI credits...", "QuotaLens：等待 Abacus AI 积分..."),
+        ("QuotaLens: waiting for StepFun quota...", "QuotaLens：等待 StepFun 配额..."),
+        ("QuotaLens: waiting for Factory usage...", "QuotaLens：等待 Factory 用量..."),
+        ("QuotaLens: waiting for Amp usage data...", "QuotaLens：等待 Amp 用量数据..."),
+        ("QuotaLens: waiting for Cursor usage data...", "QuotaLens：等待 Cursor 用量数据..."),
+        ("QuotaLens: waiting for T3 Chat usage...", "QuotaLens：等待 T3 Chat 用量..."),
+        ("QuotaLens: waiting for Augment credits...", "QuotaLens：等待 Augment 积分..."),
+        ("QuotaLens: waiting for Manus credits...", "QuotaLens：等待 Manus 积分..."),
+        ("QuotaLens: Alibaba Coding Plan data captured", "QuotaLens：已捕获阿里云 Coding Plan 数据"),
+        ("QuotaLens: Alibaba Token Plan data captured", "QuotaLens：已捕获阿里云 Token Plan 数据"),
+        ("QuotaLens: OpenCode Go data captured", "QuotaLens：已捕获 OpenCode Go 数据"),
+        ("QuotaLens: Command Code data captured", "QuotaLens：已捕获 Command Code 数据"),
+        ("QuotaLens: OpenCode data captured", "QuotaLens：已捕获 OpenCode 数据"),
+        ("QuotaLens: Perplexity data captured", "QuotaLens：已捕获 Perplexity 数据"),
+        ("QuotaLens: Abacus AI data captured", "QuotaLens：已捕获 Abacus AI 数据"),
+        ("QuotaLens: MiniMax data captured", "QuotaLens：已捕获 MiniMax 数据"),
+        ("QuotaLens: Windsurf data captured", "QuotaLens：已捕获 Windsurf 数据"),
+        ("QuotaLens: StepFun data captured", "QuotaLens：已捕获 StepFun 数据"),
+        ("QuotaLens: Factory data captured", "QuotaLens：已捕获 Factory 数据"),
+        ("QuotaLens: Augment data captured", "QuotaLens：已捕获 Augment 数据"),
+        ("QuotaLens: Cursor data captured", "QuotaLens：已捕获 Cursor 数据"),
+        ("QuotaLens: Mistral data captured", "QuotaLens：已捕获 Mistral 数据"),
+        ("QuotaLens: Kimi data captured", "QuotaLens：已捕获 Kimi 数据"),
+        ("QuotaLens: MiMo data captured", "QuotaLens：已捕获 MiMo 数据"),
+        ("QuotaLens: Amp data captured", "QuotaLens：已捕获 Amp 数据"),
+        ("QuotaLens: Ollama data captured", "QuotaLens：已捕获 Ollama 数据"),
+        ("QuotaLens: Manus data captured", "QuotaLens：已捕获 Manus 数据"),
+        ("QuotaLens: T3 Chat data captured", "QuotaLens：已捕获 T3 Chat 数据"),
+        ("QuotaLens: cost captured (bal:", "QuotaLens：已捕获费用（余额："),
+        ("QuotaLens: captured ", "QuotaLens：已捕获 "),
+        ("QuotaLens: error - ", "QuotaLens：错误 - "),
+        ("QuotaLens: ", "QuotaLens："),
+    };
 
     private const string BayesdlInitScript = @"
 (function() {

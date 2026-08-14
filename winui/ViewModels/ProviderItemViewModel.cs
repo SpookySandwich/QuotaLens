@@ -34,7 +34,7 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         InstanceId = instance.Id;
         ProviderType = instance.Type;
         DefaultName = string.IsNullOrWhiteSpace(instance.Name)
-            ? Catalog.ProviderName(instance.Type)
+            ? I18n.ProviderName(instance.Type, Catalog.ProviderName(instance.Type))
             : instance.Name;
         Name = DefaultName;
 
@@ -68,6 +68,8 @@ public sealed partial class ProviderItemViewModel : ObservableObject
     public string RefreshAutomationId => $"Refresh_{InstanceId}";
     public string LaunchText => I18n.T("ide.launch");
     public string LaunchAutomationName => I18n.T("ide.launchTitle", "name", IdeName);
+    public string EditToolTip => I18n.T("settings.edit");
+    public string RefreshToolTip => I18n.T("common.refresh");
     public string EditAutomationName => $"{I18n.T("settings.edit")} {Name}";
     public string DeleteAutomationName => I18n.T("provider.removeAutomationName", "name", Name);
     public string RefreshAutomationName => $"{I18n.T("common.refresh")} {Name}";
@@ -292,9 +294,10 @@ public sealed partial class ProviderItemViewModel : ObservableObject
             var err = _isSensitiveHidden
                 ? SensitiveDisplay.MaskEmails(snap.Error!)
                 : snap.Error!;
-            ErrorText = err.Length > 80 ? err[..77] + "..." : err;
+            var localizedError = I18n.LocalizeErrorMessage(err);
+            ErrorText = localizedError.Length > 80 ? localizedError[..77] + "..." : localizedError;
             NeedsLogin = ShouldOfferSignIn(ProviderType, snap.ErrorKind);
-            SignInText = I18n.T("login.withProvider", "name", Catalog.ProviderName(ProviderType));
+            SignInText = I18n.T("login.withProvider", "name", I18n.ProviderName(ProviderType, Catalog.ProviderName(ProviderType)));
             FooterReset = null;
             ClearCollections();
             return;

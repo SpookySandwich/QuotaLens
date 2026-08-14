@@ -91,7 +91,7 @@ public sealed partial class HeroViewModel : ObservableObject
             if (next.Count > 0)
             {
                 HasNext = true;
-                NextText = "Next: " + string.Join(" · ",
+                NextText = I18n.T("summary.nextPrefix") + string.Join(" · ",
                     next.Select(s => $"{SensitiveDisplay.ProviderName(ShortName(s.Snapshot.Name), hideSensitiveInfo)} {Quota.DisplayPct(s.Score.Availability)}"));
             }
             else { HasNext = false; NextText = ""; }

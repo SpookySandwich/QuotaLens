@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net;
 using System.Text.Json;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 using static QuotaLens.Core.JsonUtil;
 
 namespace QuotaLens.Providers;
@@ -222,7 +223,7 @@ public sealed class KiloProvider : IProvider
             UsedPercent = total is not null
                 ? total.Value > 0 ? Quota.ClampPercent(used / total.Value * 100) : 100
                 : 0,
-            ResetDescription = total is not null ? $"{Compact(used)}/{Compact(total.Value)} credits" : "No usage data",
+            ResetDescription = total is not null ? $"{Compact(used)}/{Compact(total.Value)} credits" : I18n.T("quota.noUsageData"),
         };
     }
 

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using CommunityToolkit.Mvvm.Input;
+using QuotaLens.Helpers;
 
 namespace QuotaLens.Services;
 
@@ -83,19 +84,19 @@ public sealed class TrayService : IDisposable
     {
         var showItem = new MenuFlyoutItem
         {
-            Text = "Show Dashboard",
+            Text = I18n.T("tray.showDashboard"),
             Command = new RelayCommand(() => Invoke(_onShow)),
         };
 
         var refreshItem = new MenuFlyoutItem
         {
-            Text = "Refresh All",
+            Text = I18n.T("common.refreshAll"),
             Command = new RelayCommand(() => Invoke(_onRefreshAll)),
         };
 
         var quitItem = new MenuFlyoutItem
         {
-            Text = "Quit",
+            Text = I18n.T("tray.quit"),
             Command = new RelayCommand(() =>
             {
                 // PopupMenu mode executes MenuFlyoutItem.Command, not Click.

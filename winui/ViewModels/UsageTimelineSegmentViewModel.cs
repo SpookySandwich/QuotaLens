@@ -44,8 +44,8 @@ public sealed class UsageTimelineSegmentViewModel
     public bool HasResetText => !string.IsNullOrWhiteSpace(ResetText);
     public bool HasResetFrequencyText => !string.IsNullOrWhiteSpace(ResetFrequencyText);
     public string AutomationName => IsRemainder
-        ? "Used capacity"
+        ? I18n.T("timeline.usedCapacity")
         : string.IsNullOrWhiteSpace(ResetFrequencyText)
-            ? $"{Label}, {AvailableText} available"
-            : $"{Label}, {AvailableText} available, {ResetFrequencyText}";
+            ? $"{Label}, {AvailableText} {I18n.T("common.available")}"
+            : $"{Label}, {AvailableText} {I18n.T("common.available")}, {ResetFrequencyText}";
 }

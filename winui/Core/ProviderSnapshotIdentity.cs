@@ -1,3 +1,5 @@
+using QuotaLens.Helpers;
+
 namespace QuotaLens.Core;
 
 public readonly record struct ProviderPlanIdentity(string? PlanId, string? PlanName)
@@ -28,7 +30,10 @@ public static class ProviderSnapshotIdentity
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
+        // Plan-name matching stays on the stable English catalog name; only the
+        // user-facing title uses the localized provider name.
         var providerName = Catalog.ProviderName(providerType);
+        var displayProviderName = I18n.ProviderName(providerType, providerName);
         var planName = ResolvePlanName(providerName, providerName, snapshot);
 
         if (snapshot.EntitlementStatus == EntitlementStatus.Expired)
@@ -38,7 +43,7 @@ public static class ProviderSnapshotIdentity
         }
 
         snapshot.PlanName = planName;
-        snapshot.Name = ComposeTitle(providerType, providerName, snapshot);
+        snapshot.Name = ComposeTitle(providerType, displayProviderName, snapshot);
     }
 
     public static string ComposeTitle(string instanceName, ProviderSnapshot snapshot)
@@ -52,8 +57,9 @@ public static class ProviderSnapshotIdentity
         ArgumentNullException.ThrowIfNull(snapshot);
 
         var identity = string.IsNullOrWhiteSpace(instanceName)
-            ? Catalog.ProviderName(providerType)
+            ? I18n.ProviderName(providerType, Catalog.ProviderName(providerType))
             : instanceName.Trim();
+        // Plan-name matching stays on the stable English catalog name.
         var providerName = Catalog.ProviderName(providerType);
         var planName = ResolvePlanName(providerName, identity, snapshot);
         return snapshot.EntitlementStatus == EntitlementStatus.Expired

@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 
 namespace QuotaLens.Providers;
 
@@ -373,8 +374,8 @@ public sealed class CodexLbProvider : IProvider
         if (resetCreditCount > 0)
         {
             windows.Add(InformationalWindow(
-                "Reset credits",
-                $"{resetCreditCount.ToString("N0", CultureInfo.InvariantCulture)} available",
+                I18n.T("quota.resetCredits"),
+                $"{resetCreditCount.ToString("N0", CultureInfo.InvariantCulture)} {I18n.T("common.available")}",
                 EarliestDate(accounts
                     .Where(account => account.AvailableResetCredits is > 0)
                     .Select(account => account.ResetCreditNearestExpiresAt))));
@@ -502,7 +503,7 @@ public sealed class CodexLbProvider : IProvider
         var identifier = FirstNonEmpty(quota.LimitName)
             ?? FirstNonEmpty(quota.MeteredFeature)
             ?? quotaKey
-            ?? "Additional quota";
+            ?? I18n.T("quota.additionalQuota");
         if (IsSparkQuota(identifier))
             return "GPT-5.3-Codex-Spark";
 

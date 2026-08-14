@@ -10,7 +10,7 @@ public sealed record ProviderAddOption(
     int AlreadyAddedCount = 0)
 {
     public string Id => Type.Id;
-    public string Name => Type.Name;
+    public string Name => I18n.ProviderName(Type.Id, Type.Name);
     public string Monogram => Brand.Monogram(Id);
     public Brush BrandBrush => Brand.Brush(Id);
     public Brush BrandSoftBrush => Brand.SoftBrush(Id);

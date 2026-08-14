@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 using static QuotaLens.Core.StringValues;
 using static QuotaLens.Core.JsonUtil;
 using static QuotaLens.Core.TextUtil;
@@ -638,7 +639,7 @@ public sealed class SimpleApiProvider : IProvider
                 Label = "API key credit limit",
                 Kind = hasNoKeyLimit ? RateWindowKind.Informational : RateWindowKind.Quota,
                 UsedPercent = usedPercent,
-                ValueText = hasNoKeyLimit ? "No per-key limit" : null,
+                ValueText = hasNoKeyLimit ? I18n.T("quota.noPerKeyLimit") : null,
                 WindowMinutes = hasNoKeyLimit ? null : OpenRouterResetWindowMinutes(resetType),
                 ResetDescription = hasNoKeyLimit
                     ? "Account funding is reported separately"
@@ -818,7 +819,7 @@ public sealed class SimpleApiProvider : IProvider
             ? limit is > 0
                 ? $"${Fmt2(remaining.Value)} of ${Fmt2(limit.Value)} remaining"
                 : $"${Fmt2(remaining.Value)} remaining"
-            : "Limit unavailable";
+            : I18n.T("quota.limitUnavailable");
         var normalizedReset = Clean(resetType)?.Replace('_', ' ').Replace('-', ' ');
         return normalizedReset is null
             ? $"{remainingText} · does not reset"
@@ -923,7 +924,7 @@ public sealed class SimpleApiProvider : IProvider
             total = 0;
             granted = 0;
             usedPercent = 100;
-            description = "No Venice API balance available";
+            description = I18n.T("quota.noVeniceBalance");
         }
 
         return BalanceSnapshot(

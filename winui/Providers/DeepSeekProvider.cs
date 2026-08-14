@@ -3,6 +3,7 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 
 namespace QuotaLens.Providers;
 
@@ -117,7 +118,7 @@ public sealed class DeepSeekProvider : IProvider
                     Label = "Balance",
                     UsedPercent = 0.0,
                     ResetsAt = null,
-                    ResetDescription = "No balance data",
+                    ResetDescription = I18n.T("quota.noBalanceData"),
                     WindowMinutes = null,
                 },
                 Balance = new BalanceInfo { Currency = "USD", Total = 0.0, Paid = 0.0, Granted = 0.0 },

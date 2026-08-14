@@ -146,7 +146,7 @@ public sealed partial class AccountRowViewModel : ObservableObject
         }
         else if (HasSinglePercent)
         {
-            automationParts.Add($"{AvailableText} available");
+            automationParts.Add($"{AvailableText} {I18n.T("common.available")}");
         }
         AutomationName = string.Join(", ", automationParts);
     }

@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 using static QuotaLens.Core.StringValues;
 
 namespace QuotaLens.Providers;
@@ -327,7 +328,7 @@ public sealed class QoderProvider : IProvider
             AddOnQuota = isWebQuotaShape
                 ? ParseQuotaBucket(sharedSummary)
                 : ParseQuotaBucket(GetObject(data, "addOnQuota", "add_on_quota", "addonQuota", "addon_quota")),
-            AddOnQuotaLabel = isWebQuotaShape ? "Shared Add-on Credits" : "Add-on Credits",
+            AddOnQuotaLabel = isWebQuotaShape ? I18n.T("quota.sharedAddonCredits") : I18n.T("quota.addonCredits"),
             OrgResourcePackage = ParseOrgResourcePackage(GetObject(data, "orgResourcePackage", "org_resource_package")),
         };
     }
@@ -605,7 +606,7 @@ public sealed class QoderProvider : IProvider
         [JsonPropertyName("userQuota")] public QoderQuota? UserQuota { get; set; }
         public string UserQuotaLabel { get; set; } = "Plan Credits";
         [JsonPropertyName("addOnQuota")] public QoderQuota? AddOnQuota { get; set; }
-        public string AddOnQuotaLabel { get; set; } = "Add-on Credits";
+        public string AddOnQuotaLabel { get; set; } = I18n.T("quota.addonCredits");
         [JsonPropertyName("orgResourcePackage")] public QoderOrgResourcePackage? OrgResourcePackage { get; set; }
     }
 

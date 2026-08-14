@@ -67,7 +67,7 @@ public sealed partial class EditProviderDialog : ContentDialog
 
         if (!Catalog.Fields.TryGetValue(_type, out var fields) || fields.Length == 0) return;
 
-        AddSectionHeader("Connection", "Provider-specific account, CLI, or sign-in settings.");
+        AddSectionHeader(I18n.T("editProvider.connection"), I18n.T("editProvider.connectionHint"));
 
         _sources = ProviderRegistry.Create(_type).Sources;
         if (_sources.Count > 1)
@@ -86,7 +86,7 @@ public sealed partial class EditProviderDialog : ContentDialog
             {
                 var toggle = new ToggleSwitch
                 {
-                    Header = field.Label,
+                    Header = I18n.FieldLabel(field.Label),
                     IsOn = IsTruthy(current),
                 };
                 AutomationProperties.SetAutomationId(toggle, automationId);
@@ -114,7 +114,7 @@ public sealed partial class EditProviderDialog : ContentDialog
             {
                 var box = new PasswordBox
                 {
-                    Header = field.Label,
+                    Header = I18n.FieldLabel(field.Label),
                     Password = current,
                     PlaceholderText = placeholder,
                 };
@@ -127,7 +127,7 @@ public sealed partial class EditProviderDialog : ContentDialog
             {
                 var box = new TextBox
                 {
-                    Header = field.Label,
+                    Header = I18n.FieldLabel(field.Label),
                     Text = current,
                     PlaceholderText = placeholder,
                 };
@@ -306,7 +306,7 @@ public sealed partial class EditProviderDialog : ContentDialog
     /// </summary>
     private void BuildSourceSelector()
     {
-        var segmented = new Segmented { Header = "Source" };
+        var segmented = new Segmented { Header = I18n.T("editProvider.source") };
         foreach (var source in _sources)
             segmented.Items.Add(new SegmentedItem { Content = source.Name, Tag = source.Id });
 
@@ -331,7 +331,7 @@ public sealed partial class EditProviderDialog : ContentDialog
         FieldsPanel.Children.Add(segmented);
 
         _editors.Add((
-            new ProviderField("provider_source", "Source"),
+            new ProviderField("provider_source", I18n.T("editProvider.source")),
             () => (segmented.SelectedItem as SegmentedItem)?.Tag?.ToString() ?? "",
             _ => { }));
     }

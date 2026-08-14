@@ -1,3 +1,5 @@
+using QuotaLens.Helpers;
+
 namespace QuotaLens.Core;
 
 /// <summary>How a provider window should be interpreted and rendered.</summary>
@@ -179,7 +181,7 @@ public sealed class ProviderSnapshot
     {
         ProviderId = providerId,
         Name = name,
-        Primary = new RateWindow { Label = "Error", UsedPercent = 0, ResetDescription = error },
+        Primary = new RateWindow { Label = I18n.T("quota.errorLabel"), UsedPercent = 0, ResetDescription = error },
         SourceLabel = sourceLabel,
         Error = error,
     };

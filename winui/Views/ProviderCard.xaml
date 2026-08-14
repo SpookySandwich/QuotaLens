@@ -91,7 +91,7 @@
                             Visibility="{x:Bind HasSettings, Converter={StaticResource BoolToVis}}"
                             AutomationProperties.AutomationId="{x:Bind EditAutomationId}"
                             AutomationProperties.Name="{x:Bind EditAutomationName, Mode=OneWay}"
-                            ToolTipService.ToolTip="Edit"
+                            ToolTipService.ToolTip="{x:Bind EditToolTip}"
                             Style="{StaticResource CardIconButton}">
                         <FontIcon FontSize="14" Glyph="&#xE70F;" />
                     </Button>
@@ -107,7 +107,7 @@
                     <Button Command="{x:Bind RefreshCommand}"
                             AutomationProperties.AutomationId="{x:Bind RefreshAutomationId}"
                             AutomationProperties.Name="{x:Bind RefreshAutomationName, Mode=OneWay}"
-                            ToolTipService.ToolTip="Refresh"
+                            ToolTipService.ToolTip="{x:Bind RefreshToolTip}"
                             Style="{StaticResource CardIconButton}">
                         <FontIcon FontSize="14" Glyph="&#xE72C;" />
                     </Button>

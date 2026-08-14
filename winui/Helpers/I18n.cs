@@ -145,6 +145,8 @@ public static class I18n
         // Privacy
         ["privacy.hideSensitive"] = "Hide sensitive info",
         ["privacy.showSensitive"] = "Show sensitive info",
+        ["privacy.balanceHidden"] = "Balance hidden",
+        ["privacy.account"] = "Account {n}",
         // Sorting
         ["sort.title"] = "Sort",
         ["sort.planValue"] = "Plan value",
@@ -186,6 +188,32 @@ public static class I18n
         ["common.cancel"] = "Cancel",
         ["common.verify"] = "Verify",
         ["common.done"] = "Done",
+        ["tray.showDashboard"] = "Show Dashboard",
+        ["tray.quit"] = "Quit",
+        ["summary.nextPrefix"] = "Next: ",
+        ["login.title"] = "Login",
+        ["editProvider.connection"] = "Connection",
+        ["editProvider.connectionHint"] = "Provider-specific account, CLI, or sign-in settings.",
+        ["editProvider.source"] = "Source",
+        ["quota.resetsSoon"] = "Resets soon",
+        ["quota.resetsInHM"] = "Resets in {h}h {m}m",
+        ["quota.resetsInM"] = "Resets in {m}m",
+        ["quota.resetCredits"] = "Reset credits",
+        ["quota.additionalQuota"] = "Additional quota",
+        ["quota.noBalanceData"] = "No balance data",
+        ["quota.noPerKeyLimit"] = "No per-key limit",
+        ["quota.addonCredits"] = "Add-on Credits",
+        ["quota.sharedAddonCredits"] = "Shared Add-on Credits",
+        ["quota.nextRefill"] = "Next refill",
+        ["quota.noPlan"] = "No Plan",
+        ["quota.tokenQuota"] = "Token Quota",
+        ["quota.noUsageData"] = "No usage data",
+        ["quota.noVeniceBalance"] = "No Venice API balance available",
+        ["quota.errorLabel"] = "Error",
+        ["quota.refresh"] = "Refresh",
+        ["quota.noVertexQuota"] = "No Vertex AI quota data found for the current project.",
+        ["quota.limitUnavailable"] = "Limit unavailable",
+        ["timeline.usedCapacity"] = "Used capacity",
         ["editProvider.required"] = "Required",
         ["editProvider.fileNotFound"] = "File not found",
         ["common.remove"] = "Remove",
@@ -253,6 +281,8 @@ public static class I18n
         ["provider.claude"] = "Claude Code",
         ["provider.deepseek"] = "DeepSeek",
         ["provider.kiro"] = "Kiro",
+        ["provider.bedrock"] = "AWS Bedrock",
+        ["provider.vertexai"] = "Vertex AI",
         ["provider.alibaba"] = "阿里云",
         ["provider.alibabacloud"] = "阿里云云账户",
         ["provider.alibabatokenplan"] = "阿里云 Token Plan",
@@ -277,9 +307,9 @@ public static class I18n
         ["provider.warp"] = "Warp",
         ["provider.codebuff"] = "Codebuff",
         ["provider.synthetic"] = "Synthetic",
-        ["provider.zai"] = "z.ai",
+        ["provider.zai"] = "智谱",
         ["provider.llmproxy"] = "LLM Proxy",
-        ["provider.doubao"] = "Doubao",
+        ["provider.doubao"] = "豆包",
         ["provider.groq"] = "Groq",
         ["provider.deepgram"] = "Deepgram",
         ["provider.grok"] = "Grok",
@@ -292,7 +322,7 @@ public static class I18n
         ["provider.commandcode"] = "Command Code",
         ["provider.ollama"] = "Ollama",
         ["provider.abacus"] = "Abacus AI",
-        ["provider.stepfun"] = "StepFun",
+        ["provider.stepfun"] = "阶跃星辰",
         ["provider.opencode"] = "OpenCode",
         ["provider.opencodego"] = "OpenCode Go",
         ["provider.mistral"] = "Mistral",
@@ -357,6 +387,8 @@ public static class I18n
         // Privacy
         ["privacy.hideSensitive"] = "隐藏敏感信息",
         ["privacy.showSensitive"] = "显示敏感信息",
+        ["privacy.balanceHidden"] = "余额已隐藏",
+        ["privacy.account"] = "账户 {n}",
         // Sorting
         ["sort.title"] = "排序",
         ["sort.planValue"] = "计划价值",
@@ -398,6 +430,32 @@ public static class I18n
         ["common.cancel"] = "取消",
         ["common.verify"] = "验证",
         ["common.done"] = "完成",
+        ["tray.showDashboard"] = "显示仪表盘",
+        ["tray.quit"] = "退出",
+        ["summary.nextPrefix"] = "接下来：",
+        ["login.title"] = "登录",
+        ["editProvider.connection"] = "连接",
+        ["editProvider.connectionHint"] = "平台相关的账号、CLI 或登录设置。",
+        ["editProvider.source"] = "数据源",
+        ["quota.resetsSoon"] = "即将重置",
+        ["quota.resetsInHM"] = "{h}小时 {m}分后重置",
+        ["quota.resetsInM"] = "{m}分钟后重置",
+        ["quota.resetCredits"] = "重置积分",
+        ["quota.additionalQuota"] = "额外配额",
+        ["quota.noBalanceData"] = "无余额数据",
+        ["quota.noPerKeyLimit"] = "无单密钥限制",
+        ["quota.addonCredits"] = "附加积分",
+        ["quota.sharedAddonCredits"] = "共享附加积分",
+        ["quota.nextRefill"] = "下次补充",
+        ["quota.noPlan"] = "无套餐",
+        ["quota.tokenQuota"] = "Token 配额",
+        ["quota.noUsageData"] = "无用量数据",
+        ["quota.noVeniceBalance"] = "无 Venice API 余额可用",
+        ["quota.errorLabel"] = "错误",
+        ["quota.refresh"] = "刷新",
+        ["quota.noVertexQuota"] = "当前项目没有 Vertex AI 配额数据。",
+        ["quota.limitUnavailable"] = "限额不可用",
+        ["timeline.usedCapacity"] = "已使用容量",
         ["editProvider.required"] = "必填",
         ["editProvider.fileNotFound"] = "文件不存在",
         ["common.remove"] = "移除",
@@ -465,6 +523,109 @@ public static class I18n
             return Lang.En;
         }
     }
+
+    /// <summary>
+    /// Localized provider display name. Falls back to the catalog name when the
+    /// provider has no translation entry, so unknown providers still render.
+    /// </summary>
+    public static string ProviderName(string type, string fallback)
+    {
+        var key = "provider." + type;
+        var localized = T(key);
+        return string.Equals(localized, key, StringComparison.Ordinal) ? fallback : localized;
+    }
+
+    /// <summary>
+    /// Localizes the standardized prefix of provider error messages ("Login
+    /// required: …") while leaving the dynamic detail as-is.
+    /// </summary>
+    public static string LocalizeErrorMessage(string message)
+    {
+        if (Current == Lang.En)
+            return message;
+
+        foreach (var (prefix, zh) in ErrorMessagePrefixes)
+        {
+            if (message.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                return zh + message[prefix.Length..];
+        }
+
+        return message;
+    }
+
+    private static readonly (string Prefix, string Zh)[] ErrorMessagePrefixes =
+    {
+        ("Login required: ", "需要登录："),
+        ("Login required - ", "需要登录 - "),
+        ("Not available: ", "不可用："),
+        ("Not configured: ", "未配置："),
+        ("Parse error: ", "解析错误："),
+        ("Not available - ", "不可用 - "),
+        ("Login required", "需要登录"),
+    };
+
+    /// <summary>Localized label for a provider field; English labels pass through.</summary>
+    public static string FieldLabel(string label) =>
+        Current == Lang.Zh && FieldLabelZh.TryGetValue(label, out var zh) ? zh : label;
+
+    private static readonly Dictionary<string, string> FieldLabelZh = new()
+    {
+        ["API Key"] = "API 密钥",
+        ["API base URL"] = "API 基础地址",
+        ["API version"] = "API 版本",
+        ["ARM access token"] = "ARM 访问令牌",
+        ["AWS CLI"] = "AWS CLI",
+        ["AWS profile"] = "AWS 配置文件",
+        ["Access key ID"] = "访问密钥 ID",
+        ["AccessKey ID"] = "AccessKey ID",
+        ["AccessKey Secret"] = "AccessKey Secret",
+        ["Account"] = "账户",
+        ["ADC credentials"] = "ADC 凭证",
+        ["Anti-Gravity app path"] = "Anti-Gravity 应用路径",
+        ["Auth mode"] = "认证方式",
+        ["Azure CLI path"] = "Azure CLI 路径",
+        ["Azure location"] = "Azure 区域",
+        ["Azure subscription ID"] = "Azure 订阅 ID",
+        ["Base URL"] = "基础地址",
+        ["CLI auth file"] = "CLI 认证文件",
+        ["CLI location"] = "CLI 位置",
+        ["ChatGPT base URL"] = "ChatGPT 基础地址",
+        ["Claude Code executable"] = "Claude Code 可执行文件",
+        ["Codex home"] = "Codex 数据目录",
+        ["Coding Plan URL"] = "Coding Plan 地址",
+        ["Cost Explorer URL"] = "Cost Explorer 地址",
+        ["Enterprise host"] = "企业主机",
+        ["Gemini CLI data directory"] = "Gemini CLI 数据目录",
+        ["Gemini CLI executable"] = "Gemini CLI 可执行文件",
+        ["GitHub token"] = "GitHub 令牌",
+        ["Grok CLI location"] = "Grok CLI 位置",
+        ["IDE config folder"] = "IDE 配置文件夹",
+        ["Kimi CLI path"] = "Kimi CLI 路径",
+        ["Kimi app path"] = "Kimi 应用路径",
+        ["Legacy deployment"] = "旧版部署",
+        ["Legacy resource API key"] = "旧版资源 API 密钥",
+        ["Legacy resource endpoint"] = "旧版资源端点",
+        ["Login URL"] = "登录地址",
+        ["Management Key"] = "管理密钥",
+        ["Monthly budget"] = "每月预算",
+        ["OpenCode CLI path"] = "OpenCode CLI 路径",
+        ["Organization Admin Key"] = "组织管理员密钥",
+        ["Organization ID"] = "组织 ID",
+        ["Personal access token"] = "个人访问令牌",
+        ["Platform user token"] = "平台用户令牌",
+        ["Project ID"] = "项目 ID",
+        ["Project IDs"] = "项目 ID 列表",
+        ["Qoder CLI location"] = "Qoder CLI 位置",
+        ["Quota URL"] = "配额地址",
+        ["Region"] = "区域",
+        ["Secret access key"] = "秘密访问密钥",
+        ["Session token"] = "会话令牌",
+        ["Show Other model group"] = "显示其他模型分组",
+        ["Workspace ID"] = "工作区 ID",
+        ["arkcli location"] = "arkcli 位置",
+        ["gcloud CLI"] = "gcloud CLI",
+        ["gcloud config directory"] = "gcloud 配置目录",
+    };
 
     private static Dictionary<string, string> Table => Current == Lang.Zh ? Zh : En;
 

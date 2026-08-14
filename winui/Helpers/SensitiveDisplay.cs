@@ -5,7 +5,7 @@ namespace QuotaLens.Helpers;
 public static partial class SensitiveDisplay
 {
     public const string HiddenText = "••••";
-    public const string HiddenBalanceText = "Balance hidden";
+    public static string HiddenBalanceText => I18n.T("privacy.balanceHidden");
 
     public static string ProviderName(string name, bool hidden) =>
         hidden ? RemoveEmails(name) : name;
@@ -14,7 +14,7 @@ public static partial class SensitiveDisplay
         !string.IsNullOrWhiteSpace(value) && EmailRegex().IsMatch(value);
 
     public static string AccountName(string name, int index, bool hidden) =>
-        hidden ? $"Account {index + 1}" : name;
+        hidden ? I18n.T("privacy.account", "n", (index + 1).ToString()) : name;
 
     public static string BalanceAmount(string value, bool hidden) =>
         hidden ? HiddenText : value;

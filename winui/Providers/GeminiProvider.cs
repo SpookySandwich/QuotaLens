@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 
 namespace QuotaLens.Providers;
 
@@ -531,10 +532,16 @@ public sealed partial class GeminiProvider : IProvider
 
         var interval = reset - DateTimeOffset.UtcNow;
         if (interval <= TimeSpan.Zero)
-            return "Resets soon";
+            return I18n.T("quota.resetsSoon");
         return interval.TotalHours >= 1
-            ? $"Resets in {(int)interval.TotalHours}h {interval.Minutes}m"
-            : $"Resets in {Math.Max(0, interval.Minutes)}m";
+            ? I18n.T("quota.resetsInHM",
+                new Dictionary<string, string>
+                {
+                    ["h"] = ((int)interval.TotalHours).ToString(),
+                    ["m"] = interval.Minutes.ToString(),
+                })
+            : I18n.T("quota.resetsInM",
+                "m", Math.Max(0, interval.Minutes).ToString());
     }
 
     private static string? Clean(string? value) => ProviderConfig.Clean(value);

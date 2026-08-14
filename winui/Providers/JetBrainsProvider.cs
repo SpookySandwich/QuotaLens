@@ -3,6 +3,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using QuotaLens.Core;
+using QuotaLens.Helpers;
 using static QuotaLens.Core.JsonUtil;
 using static QuotaLens.Core.TextUtil;
 
@@ -128,7 +129,7 @@ public sealed partial class JetBrainsProvider : IProvider
                 ? null
                 : new RateWindow
                 {
-                    Label = "Next refill",
+                    Label = I18n.T("quota.nextRefill"),
                     UsedPercent = 0,
                     ResetsAt = refillAt,
                     ResetDescription = refillDescription,

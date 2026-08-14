@@ -64,4 +64,74 @@ public class I18nTests
             I18n.SetLanguage(original == I18n.Lang.Zh ? "zh" : "en");
         }
     }
+
+    [TestMethod]
+    public void ProviderName_ReturnsLocalizedOrFallback()
+    {
+        var original = I18n.Current;
+        try
+        {
+            I18n.SetLanguage("zh");
+            Assert.AreEqual("阿里云", I18n.ProviderName("alibaba", "Alibaba"));
+            Assert.AreEqual("DeepSeek", I18n.ProviderName("deepseek", "DeepSeek"));
+            Assert.AreEqual("UnknownX", I18n.ProviderName("unknownx", "UnknownX"),
+                "Unknown providers fall back to the catalog name.");
+
+            I18n.SetLanguage("en");
+            Assert.AreEqual("Alibaba", I18n.ProviderName("alibaba", "Alibaba"));
+        }
+        finally
+        {
+            I18n.SetLanguage(original == I18n.Lang.Zh ? "zh" : "en");
+        }
+    }
+
+    [TestMethod]
+    public void LocalizeErrorMessage_TranslatesKnownPrefixesOnly()
+    {
+        var original = I18n.Current;
+        try
+        {
+            I18n.SetLanguage("zh");
+            Assert.AreEqual(
+                "需要登录：CLI is not signed in.",
+                I18n.LocalizeErrorMessage("Login required: CLI is not signed in."));
+            Assert.AreEqual(
+                "未配置：credentials missing",
+                I18n.LocalizeErrorMessage("Not configured: credentials missing"));
+            Assert.AreEqual(
+                "Something else entirely",
+                I18n.LocalizeErrorMessage("Something else entirely"));
+
+            I18n.SetLanguage("en");
+            Assert.AreEqual(
+                "Login required: CLI",
+                I18n.LocalizeErrorMessage("Login required: CLI"),
+                "English messages pass through unchanged.");
+        }
+        finally
+        {
+            I18n.SetLanguage(original == I18n.Lang.Zh ? "zh" : "en");
+        }
+    }
+
+    [TestMethod]
+    public void FieldLabel_ReturnsLocalizedOrEnglish()
+    {
+        var original = I18n.Current;
+        try
+        {
+            I18n.SetLanguage("zh");
+            Assert.AreEqual("API 密钥", I18n.FieldLabel("API Key"));
+            Assert.AreEqual("AccessKey ID", I18n.FieldLabel("AccessKey ID"));
+
+            I18n.SetLanguage("en");
+            Assert.AreEqual("API Key", I18n.FieldLabel("API Key"));
+            Assert.AreEqual("Some custom label", I18n.FieldLabel("Some custom label"));
+        }
+        finally
+        {
+            I18n.SetLanguage(original == I18n.Lang.Zh ? "zh" : "en");
+        }
+    }
 }
