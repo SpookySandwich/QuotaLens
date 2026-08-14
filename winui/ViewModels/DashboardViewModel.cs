@@ -245,6 +245,26 @@ public sealed partial class DashboardViewModel : ObservableObject
             provider.RefreshLaunchAvailability();
     }
 
+    /// <summary>Re-evaluates every i18n-derived property after the language changes.</summary>
+    public void RefreshLanguageTexts()
+    {
+        OnPropertyChanged(nameof(AppTitle));
+        OnPropertyChanged(nameof(FooterQuotaBars));
+        OnPropertyChanged(nameof(FooterBalances));
+        OnPropertyChanged(nameof(SettingsTitle));
+        OnPropertyChanged(nameof(RefreshAllTitle));
+        OnPropertyChanged(nameof(SensitiveInfoTitle));
+        OnPropertyChanged(nameof(SensitiveInfoGlyph));
+        OnPropertyChanged(nameof(AddProviderTitle));
+        OnPropertyChanged(nameof(SortTitle));
+        OnPropertyChanged(nameof(SortByPlanValueTitle));
+        OnPropertyChanged(nameof(SortByResetFrequencyTitle));
+        OnPropertyChanged(nameof(SortByNextResetTitle));
+        OnPropertyChanged(nameof(CurrentSortTitle));
+        BuildItems();
+        UpdateHero();
+    }
+
     public void RefreshSortPriority()
     {
         _sortPriorityOrder = ProviderSortPriorityOrder.FromConfig(_svc.Config);

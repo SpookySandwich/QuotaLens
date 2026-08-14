@@ -103,40 +103,9 @@ public sealed partial class MainWindow : Window
         SizeChanged += (_, _) => QueueAdaptiveLayoutUpdate();
         AppWindow.Changed += OnAppWindowChanged;
 
-        Title = I18n.T("app.title");
-
-        // ===== Title + settings-page strings =====
-        TitleText.Text = Vm.AppTitle;
-        SettingsHeading.Text = I18n.T("settings.global");
-        SettingsRowTitle.Text = I18n.T("settings.refreshInterval");
-        SettingsHint.Text = I18n.T("settings.refreshIntervalHint");
-        ThresholdRowTitle.Text = I18n.T("settings.emptyThreshold");
-        ThresholdHint.Text = I18n.T("settings.emptyThresholdHint");
-        DeprioritizeEmptyRowTitle.Text = I18n.T("settings.deprioritizeEmptyProviders");
-        DeprioritizeEmptyHint.Text = I18n.T("settings.deprioritizeEmptyProvidersHint");
-        LaunchAtStartupRowTitle.Text = I18n.T("settings.launchAtStartup");
-        LaunchAtStartupHint.Text = I18n.T("settings.launchAtStartupHint");
-        StartHiddenAtStartupRowTitle.Text = I18n.T("settings.startHiddenAtStartup");
-        StartHiddenAtStartupHint.Text = I18n.T("settings.startHiddenAtStartupHint");
-        SortPriorityRowTitle.Text = I18n.T("settings.sortPriority");
-        SortPriorityHint.Text = I18n.T("settings.sortPriorityHint");
-        PlanValueRulesRowTitle.Text = I18n.T("settings.planValueRules");
-        PlanValueRulesHint.Text = I18n.T("settings.planValueRulesHint");
-        DefaultLaunchEditorRowTitle.Text = I18n.T("settings.defaultLaunchEditor");
-        DefaultLaunchEditorHint.Text = I18n.T("settings.defaultLaunchEditorHint");
-        DefaultLaunchEditorBox.PlaceholderText = I18n.T("settings.defaultLaunchEditorPlaceholder");
-        AutomationProperties.SetName(BackButton, I18n.T("settings.close"));
-        BackButtonToolTipText.Text = I18n.T("settings.close");
-        AutomationProperties.SetName(BrowseDefaultLaunchEditorButton, I18n.T("settings.browseDefaultLaunchEditor"));
-        BrowseDefaultLaunchEditorToolTipText.Text = I18n.T("settings.browse");
-        LaunchPathsTitle.Text = I18n.T("settings.launchPaths");
-        LaunchPathsHint.Text = I18n.T("settings.launchPathsHint");
+        RenderStaticTexts();
         RenderLaunchPathRows();
-        LanguageRowTitle.Text = I18n.T("settings.language");
-        LanguageHint.Text = I18n.T("settings.languageHint");
         BuildLanguageOptions();
-        SaveSettingsButton.Content = I18n.T("settings.save");
-        CancelSettingsButton.Content = I18n.T("settings.close");
 
         // ===== Dialog + toast wiring =====
         Vm.SettingsRequested += OnSettingsRequested;
@@ -758,6 +727,60 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// All chrome strings that are set from code (not x:Bind): the window title, the
+    /// title-bar label and every settings-page row. Re-run after a language change.
+    /// </summary>
+    private void RenderStaticTexts()
+    {
+        Title = I18n.T("app.title");
+        TitleText.Text = Vm.AppTitle;
+        SettingsHeading.Text = I18n.T("settings.global");
+        SettingsRowTitle.Text = I18n.T("settings.refreshInterval");
+        SettingsHint.Text = I18n.T("settings.refreshIntervalHint");
+        ThresholdRowTitle.Text = I18n.T("settings.emptyThreshold");
+        ThresholdHint.Text = I18n.T("settings.emptyThresholdHint");
+        DeprioritizeEmptyRowTitle.Text = I18n.T("settings.deprioritizeEmptyProviders");
+        DeprioritizeEmptyHint.Text = I18n.T("settings.deprioritizeEmptyProvidersHint");
+        LaunchAtStartupRowTitle.Text = I18n.T("settings.launchAtStartup");
+        LaunchAtStartupHint.Text = I18n.T("settings.launchAtStartupHint");
+        StartHiddenAtStartupRowTitle.Text = I18n.T("settings.startHiddenAtStartup");
+        StartHiddenAtStartupHint.Text = I18n.T("settings.startHiddenAtStartupHint");
+        SortPriorityRowTitle.Text = I18n.T("settings.sortPriority");
+        SortPriorityHint.Text = I18n.T("settings.sortPriorityHint");
+        PlanValueRulesRowTitle.Text = I18n.T("settings.planValueRules");
+        PlanValueRulesHint.Text = I18n.T("settings.planValueRulesHint");
+        DefaultLaunchEditorRowTitle.Text = I18n.T("settings.defaultLaunchEditor");
+        DefaultLaunchEditorHint.Text = I18n.T("settings.defaultLaunchEditorHint");
+        DefaultLaunchEditorBox.PlaceholderText = I18n.T("settings.defaultLaunchEditorPlaceholder");
+        AutomationProperties.SetName(BackButton, I18n.T("settings.close"));
+        BackButtonToolTipText.Text = I18n.T("settings.close");
+        AutomationProperties.SetName(BrowseDefaultLaunchEditorButton, I18n.T("settings.browseDefaultLaunchEditor"));
+        BrowseDefaultLaunchEditorToolTipText.Text = I18n.T("settings.browse");
+        LaunchPathsTitle.Text = I18n.T("settings.launchPaths");
+        LaunchPathsHint.Text = I18n.T("settings.launchPathsHint");
+        LanguageRowTitle.Text = I18n.T("settings.language");
+        LanguageHint.Text = I18n.T("settings.languageHint");
+        SaveSettingsButton.Content = I18n.T("settings.apply");
+        CancelSettingsButton.Content = I18n.T("common.cancel");
+    }
+
+    /// <summary>
+    /// Re-renders every visible string after the language preference changes, so the
+    /// switch is immediate instead of requiring a restart.
+    /// </summary>
+    private void RefreshUiLanguage()
+    {
+        RenderStaticTexts();
+        BuildLanguageOptions();
+        SelectLanguageOption(_svc.Config.Get("language"));
+        RenderLaunchPathRows();
+        LoadSortPrioritySettings();
+        LoadPlanValueRulesSettings();
+        Vm.RefreshLanguageTexts();
+        TitleText.Text = SettingsRoot.Visibility == Visibility.Visible ? Vm.SettingsTitle : Vm.AppTitle;
+    }
+
     private void BuildLanguageOptions()
     {
         LanguageBox.Items.Clear();
@@ -829,7 +852,9 @@ public sealed partial class MainWindow : Window
         _svc.Config.Set(ProviderSortPolicy.DeprioritizeEmptyProvidersConfigKey, DeprioritizeEmptyToggle.IsOn ? "true" : "false");
         _startupLaunch.SetEnabled(LaunchAtStartupToggle.IsOn, StartHiddenAtStartupToggle.IsOn);
         _svc.Config.Set(Catalog.DefaultLaunchEditorPathKey, DefaultLaunchEditorBox.Text);
-        _svc.Config.Set("language", (LanguageBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "");
+        var previousLanguage = _svc.Config.Get("language");
+        var selectedLanguage = (LanguageBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "";
+        _svc.Config.Set("language", selectedLanguage);
         SaveLaunchPaths();
         _svc.Config.Set(ProviderSortPriorityOrder.ConfigKey, ProviderSortPriorityOrder.Serialize(_sortPriorityTerms));
         SavePlanValueRulesSettings();
@@ -838,6 +863,14 @@ public sealed partial class MainWindow : Window
         Vm.RefreshLaunchAvailability();
         Vm.RefreshSortPriority();
         _ = _svc.RefreshAllAsync();
+
+        // Switch language immediately: re-render every visible string in place.
+        if (!string.Equals(previousLanguage, selectedLanguage, StringComparison.OrdinalIgnoreCase))
+        {
+            I18n.SetLanguage(selectedLanguage);
+            RefreshUiLanguage();
+        }
+
         OnCloseSettings(sender, e);
     }
 
@@ -874,7 +907,7 @@ public sealed partial class MainWindow : Window
 
             var box = new TextBox
             {
-                PlaceholderText = "Auto-detect",
+                PlaceholderText = I18n.T("settings.autoDetect"),
                 MinWidth = 220,
             };
             AutomationProperties.SetName(box, target.DisplayName + " app path");

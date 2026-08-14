@@ -112,6 +112,11 @@ public sealed partial class HeroViewModel : ObservableObject
         else { OnlineDetail = I18n.T("summary.allChecked"); OnlineSeverity = Severity.Good; }
 
         BuildUsageTimeline(svc, present, recommendedPriorityOrder, hideSensitiveInfo);
+
+        // Computed i18n strings: re-notify so OneWay bindings refresh on language change.
+        OnPropertyChanged(nameof(Eyebrow));
+        OnPropertyChanged(nameof(OnlineLabel));
+        OnPropertyChanged(nameof(UsageTimelineAutomationName));
     }
 
     internal static string BuildPickDetail(

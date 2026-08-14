@@ -74,7 +74,7 @@
                 <Button x:Name="RefreshButton"
                         Command="{x:Bind Vm.RefreshAllCommand}"
                         AutomationProperties.AutomationId="RefreshAllButton"
-                        AutomationProperties.Name="{x:Bind Vm.RefreshAllTitle}"
+                        AutomationProperties.Name="{x:Bind Vm.RefreshAllTitle, Mode=OneWay}"
                         Style="{StaticResource CardIconButton}">
                     <Grid>
                         <ProgressRing Width="16" Height="16"
@@ -84,17 +84,17 @@
                                   Visibility="{Binding IsRefreshingAll, Converter={StaticResource BoolToVis}, ConverterParameter=invert}" />
                     </Grid>
                     <ToolTipService.ToolTip>
-                        <TextBlock Text="{x:Bind Vm.RefreshAllTitle}" />
+                        <TextBlock Text="{x:Bind Vm.RefreshAllTitle, Mode=OneWay}" />
                     </ToolTipService.ToolTip>
                 </Button>
                 <Button x:Name="SettingsButton"
                         Command="{x:Bind Vm.OpenSettingsCommand}"
                         AutomationProperties.AutomationId="SettingsButton"
-                        AutomationProperties.Name="{x:Bind Vm.SettingsTitle}"
+                        AutomationProperties.Name="{x:Bind Vm.SettingsTitle, Mode=OneWay}"
                         Style="{StaticResource CardIconButton}">
                     <FontIcon FontSize="16" Glyph="&#xE713;" />
                     <ToolTipService.ToolTip>
-                        <TextBlock Text="{x:Bind Vm.SettingsTitle}" />
+                        <TextBlock Text="{x:Bind Vm.SettingsTitle, Mode=OneWay}" />
                     </ToolTipService.ToolTip>
                 </Button>
             </StackPanel>
@@ -121,7 +121,7 @@
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock Text="{x:Bind Vm.Hero.Eyebrow}" Style="{StaticResource HeroEyebrowText}" />
+                            <TextBlock Text="{x:Bind Vm.Hero.Eyebrow, Mode=OneWay}" Style="{StaticResource HeroEyebrowText}" />
 
                             <!-- The recommendation: which platform to use right now. -->
                             <Grid Grid.Row="1" ColumnSpacing="10"
@@ -166,7 +166,7 @@
                                            Visibility="{Binding Hero.HasNext, Converter={StaticResource BoolToVis}}" />
 
                                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="{x:Bind Vm.Hero.OnlineLabel}" Style="{StaticResource CaptionText}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{x:Bind Vm.Hero.OnlineLabel, Mode=OneWay}" Style="{StaticResource CaptionText}" VerticalAlignment="Center" />
                                     <TextBlock Text="{x:Bind Vm.Hero.OnlineValue, Mode=OneWay}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center"
                                                Foreground="{Binding Hero.OnlineSeverity, Converter={StaticResource SeverityToBrush}}" />
                                     <TextBlock Text="{x:Bind Vm.Hero.OnlineDetail, Mode=OneWay}" Style="{StaticResource CaptionText}" VerticalAlignment="Center"
@@ -180,7 +180,7 @@
                 <Border Style="{StaticResource CardStyle}"
                         Padding="16,14,16,12"
                         AutomationProperties.AutomationId="UsageTimelineCard"
-                        AutomationProperties.Name="{x:Bind Vm.Hero.UsageTimelineAutomationName}"
+                        AutomationProperties.Name="{x:Bind Vm.Hero.UsageTimelineAutomationName, Mode=OneWay}"
                         Visibility="{Binding IsUsageTimelineVisible, Converter={StaticResource BoolToVis}}">
                     <views:UsageCylinder x:Name="UsageTimeline"
                                          Segments="{x:Bind Vm.Hero.UsageTimelineSegments, Mode=OneWay}"
@@ -196,21 +196,21 @@
                                 Spacing="8"
                                 HorizontalAlignment="Right"
                                 VerticalAlignment="Center">
-                        <TextBlock Text="{x:Bind Vm.SortTitle}"
+                        <TextBlock Text="{x:Bind Vm.SortTitle, Mode=OneWay}"
                                    Style="{StaticResource CaptionText}"
                                    VerticalAlignment="Center" />
                         <controls:SelectorBar x:Name="SortSelector"
                                               SelectionChanged="OnSortSelectorSelectionChanged"
                                               AutomationProperties.AutomationId="SortSelector">
                             <controls:SelectorBarItem x:Name="SortByPlanValueItem"
-                                                      Text="{x:Bind Vm.SortByPlanValueTitle}"
+                                                      Text="{x:Bind Vm.SortByPlanValueTitle, Mode=OneWay}"
                                                       IsSelected="True"
                                                       AutomationProperties.AutomationId="SortByPlanValueItem" />
                             <controls:SelectorBarItem x:Name="SortByResetFrequencyItem"
-                                                      Text="{x:Bind Vm.SortByResetFrequencyTitle}"
+                                                      Text="{x:Bind Vm.SortByResetFrequencyTitle, Mode=OneWay}"
                                                       AutomationProperties.AutomationId="SortByResetFrequencyItem" />
                             <controls:SelectorBarItem x:Name="SortByNextResetItem"
-                                                      Text="{x:Bind Vm.SortByNextResetTitle}"
+                                                      Text="{x:Bind Vm.SortByNextResetTitle, Mode=OneWay}"
                                                       AutomationProperties.AutomationId="SortByNextResetItem" />
                         </controls:SelectorBar>
                     </StackPanel>
@@ -235,11 +235,11 @@
                 <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
                         Command="{x:Bind Vm.AddProviderCommand}"
                         AutomationProperties.AutomationId="AddProviderButton"
-                        AutomationProperties.Name="{x:Bind Vm.AddProviderTitle}"
+                        AutomationProperties.Name="{x:Bind Vm.AddProviderTitle, Mode=OneWay}"
                         Style="{StaticResource SubtleButtonStyle}" CornerRadius="8" Padding="0,10">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon FontSize="14" Glyph="&#xE710;" />
-                        <TextBlock Text="{x:Bind Vm.AddProviderTitle}" />
+                        <TextBlock Text="{x:Bind Vm.AddProviderTitle, Mode=OneWay}" />
                     </StackPanel>
                 </Button>
 
