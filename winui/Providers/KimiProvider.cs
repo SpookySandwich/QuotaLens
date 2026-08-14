@@ -395,6 +395,10 @@ public sealed class KimiProvider : IProvider
                 snapshot.Tertiary = BuildWindow("Total quota", webTotal, windowMinutes: null, descriptionPrefix: null);
         }
 
+        // "Total quota" is the headline when available; otherwise weekly stays primary.
+        if (snapshot.Tertiary is not null)
+            (snapshot.Primary, snapshot.Secondary, snapshot.Tertiary) = (snapshot.Tertiary, snapshot.Primary, snapshot.Secondary);
+
         return snapshot;
     }
 
