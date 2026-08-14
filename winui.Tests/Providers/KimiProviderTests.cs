@@ -53,6 +53,16 @@ public sealed class KimiProviderTests
         Assert.AreEqual(66.0, snapshot.Secondary.UsedPercent);
         Assert.AreEqual(300, snapshot.Secondary.WindowMinutes);
         Assert.AreEqual("Rate: 66% used", snapshot.Secondary.ResetDescription);
+
+        Assert.IsNotNull(snapshot.Tertiary);
+        Assert.AreEqual("Total quota", snapshot.Tertiary!.Label);
+        Assert.AreEqual(1.0, snapshot.Tertiary.UsedPercent);
+        Assert.AreEqual("1% used", snapshot.Tertiary.ResetDescription);
+
+        Assert.AreEqual(1, snapshot.AdditionalWindows.Count);
+        Assert.AreEqual("Concurrency", snapshot.AdditionalWindows[0].Label);
+        Assert.AreEqual(RateWindowKind.Informational, snapshot.AdditionalWindows[0].Kind);
+        Assert.AreEqual("20 concurrent", snapshot.AdditionalWindows[0].ValueText);
     }
 
     [TestMethod]

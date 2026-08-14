@@ -244,6 +244,8 @@ public sealed class KimiProvider : IProvider
         [JsonPropertyName("user")] public CliUser? User { get; set; }
         [JsonPropertyName("usage")] public CliUsageDetail? Usage { get; set; }
         [JsonPropertyName("limits")] public List<CliUsageLimit>? Limits { get; set; }
+        [JsonPropertyName("totalQuota")] public CliUsageDetail? TotalQuota { get; set; }
+        [JsonPropertyName("parallel")] public CliParallel? Parallel { get; set; }
     }
 
     private sealed class CliUser
@@ -276,6 +278,11 @@ public sealed class KimiProvider : IProvider
         [JsonPropertyName("resetTime")] public string? ResetTime { get; set; }
     }
 
+    private sealed class CliParallel
+    {
+        [JsonPropertyName("limit")] public string? Limit { get; set; }
+    }
+
     private async Task<ProviderSnapshot> ParseUsageResponseAsync(HttpResponseMessage resp, CancellationToken ct)
     {
         var status = (int)resp.StatusCode;
@@ -305,20 +312,44 @@ public sealed class KimiProvider : IProvider
 
         var primary = BuildWindow("Weekly", weekly, windowMinutes: 10080, descriptionPrefix: null);
 
-        // Shortest additional window (observed: a single 300-minute rolling limit).
-        var rateLimit = data.Limits?
+        // Every rate-limit window the API reports, shortest first (observed: a single
+        // 300-minute rolling limit, but other accounts can report several).
+        var rateLimits = (data.Limits ?? new List<CliUsageLimit>())
             .Where(l => l.Detail is not null)
             .OrderBy(l => WindowMinutesFor(l.Window) ?? long.MaxValue)
-            .FirstOrDefault();
+            .ToList();
         RateWindow? secondary = null;
-        if (rateLimit?.Detail is not null)
+        var additional = new List<RateWindow>();
+        foreach (var (rateLimit, index) in rateLimits.Select((limit, index) => (limit, index)))
         {
             var minutes = WindowMinutesFor(rateLimit.Window);
-            secondary = BuildWindow(
+            var window = BuildWindow(
                 minutes == 300 ? "5h Rate Limit" : "Rate Limit",
-                rateLimit.Detail,
+                rateLimit.Detail!,
                 windowMinutes: minutes,
                 descriptionPrefix: "Rate: ");
+            if (index == 0) secondary = window;
+            else additional.Add(window);
+        }
+
+        // Total quota ("总额度") is present for some accounts and empty for others.
+        var tertiary = data.TotalQuota is { } totalQuota
+            && (ParseLong(totalQuota.Limit) is not null
+                || ParseLong(totalQuota.Remaining) is not null
+                || ParseLong(totalQuota.Used) is not null)
+            ? BuildWindow("Total quota", totalQuota, windowMinutes: null, descriptionPrefix: null)
+            : null;
+
+        // Concurrency is informational, not a quota denominator.
+        var parallel = ParseLong(data.Parallel?.Limit);
+        if (parallel is > 0)
+        {
+            additional.Add(new RateWindow
+            {
+                Label = "Concurrency",
+                Kind = RateWindowKind.Informational,
+                ValueText = $"{parallel} concurrent",
+            });
         }
 
         var tier = TierName(data.User?.Membership?.Level);
@@ -329,6 +360,8 @@ public sealed class KimiProvider : IProvider
             PlanName = tier,
             Primary = primary,
             Secondary = secondary,
+            Tertiary = tertiary,
+            AdditionalWindows = additional,
             SourceLabel = SourceLabel,
             Confidence = Confidence,
             UpdatedAt = DateTimeOffset.UtcNow,
