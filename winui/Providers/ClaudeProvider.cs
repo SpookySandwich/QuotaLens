@@ -272,7 +272,6 @@ public sealed class ClaudeProvider : IProvider
                 Label = "5h Pool",
                 UsedPercent = Quota.UtilizationToUsedPercent(fh.Utilization),
                 ResetsAt = fh.ResetsAt,
-                ResetDescription = fh.ResetsAt is null ? null : $"resets {fh.ResetsAt}",
                 WindowMinutes = 300,
             };
         }
@@ -283,7 +282,7 @@ public sealed class ClaudeProvider : IProvider
                 Label = "5h Pool",
                 UsedPercent = 0.0,
                 ResetsAt = null,
-                ResetDescription = null,
+                DetailText = null,
                 WindowMinutes = null,
             };
         }
@@ -297,7 +296,6 @@ public sealed class ClaudeProvider : IProvider
                 Label = "7d Pool",
                 UsedPercent = Quota.UtilizationToUsedPercent(sd.Utilization),
                 ResetsAt = sd.ResetsAt,
-                ResetDescription = sd.ResetsAt is null ? null : $"resets {sd.ResetsAt}",
                 WindowMinutes = 10080,
             };
         }
@@ -361,7 +359,6 @@ public sealed class ClaudeProvider : IProvider
                 Label = $"{displayName} only",
                 UsedPercent = usedPercent,
                 ResetsAt = resetsAt,
-                ResetDescription = resetsAt is null ? null : $"resets {resetsAt}",
                 WindowMinutes = 10080,
             });
         }
@@ -398,7 +395,6 @@ public sealed class ClaudeProvider : IProvider
             Label = label,
             UsedPercent = Quota.UtilizationToUsedPercent(utilization),
             ResetsAt = data.ResetsAt,
-            ResetDescription = data.ResetsAt is null ? null : $"resets {data.ResetsAt}",
             WindowMinutes = 10080,
         });
     }

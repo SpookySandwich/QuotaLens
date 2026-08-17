@@ -146,7 +146,7 @@ public sealed class QoderProvider : IProvider
             ProviderId = "qoder",
             Name = plan is null ? "Qoder" : $"Qoder · {plan}",
             PlanName = plan,
-            Primary = ToRateWindow(aggregate, resetsAt, usage.IsQuotaExceeded),
+            Primary = ToRateWindow(aggregate, resetsAt, usage.IsQuotaExceeded, windowMinutes: 30 * 24 * 60),
             AdditionalWindows = showBreakdown
                 ? buckets.Select(bucket => ToRateWindow(bucket, resetsAt: null, forceExhausted: false)).ToList()
                 : new List<RateWindow>(),
@@ -176,7 +176,11 @@ public sealed class QoderProvider : IProvider
             yield return UsageBucket.FromOrgPackage("Organization Credits", orgQuota);
     }
 
-    private static RateWindow ToRateWindow(UsageBucket bucket, string? resetsAt, bool forceExhausted)
+    private static RateWindow ToRateWindow(
+        UsageBucket bucket,
+        string? resetsAt,
+        bool forceExhausted,
+        long? windowMinutes = null)
     {
         var hasCapacity = bucket.Total > 0.0 || bucket.Remaining > 0.0;
         var usedPercent = forceExhausted || !hasCapacity
@@ -190,8 +194,8 @@ public sealed class QoderProvider : IProvider
             Label = bucket.Label,
             UsedPercent = usedPercent,
             ResetsAt = resetsAt,
-            ResetDescription = $"{Fmt0(bucket.Used)}/{Fmt0(bucket.Total)} {bucket.Unit} ({Fmt0(bucket.Remaining)} left)",
-            WindowMinutes = null,
+            DetailText = $"{Fmt0(bucket.Used)}/{Fmt0(bucket.Total)} {bucket.Unit} ({Fmt0(bucket.Remaining)} left)",
+            WindowMinutes = windowMinutes,
             CountsForAvailability = false,
         };
     }

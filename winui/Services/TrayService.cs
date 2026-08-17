@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media.Imaging;
 using CommunityToolkit.Mvvm.Input;
+using QuotaLens.Core;
 using QuotaLens.Helpers;
 
 namespace QuotaLens.Services;
@@ -131,7 +132,14 @@ public sealed class TrayService : IDisposable
 
         // ForceCreate makes the icon appear immediately even though it lives in code
         // (not in a XAML resource tree) and the window may start hidden.
-        _trayIcon.ForceCreate(enablesEfficiencyMode: false);
+        try
+        {
+            _trayIcon.ForceCreate(enablesEfficiencyMode: false);
+        }
+        catch (Exception e)
+        {
+            AppLog.Warn($"Tray icon creation failed: {e.Message}");
+        }
     }
 
     private void WireCloseToTray(Window window)

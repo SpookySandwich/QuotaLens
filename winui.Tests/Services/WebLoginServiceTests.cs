@@ -50,12 +50,12 @@ public sealed class WebLoginServiceTests
         Assert.AreEqual("Kimi · Moderato", snapshot.Name);
         Assert.AreEqual("Weekly Requests", snapshot.Primary.Label);
         Assert.AreEqual(214d / 2048d * 100d, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("214/2048 requests", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("214/2048 requests", snapshot.Primary.DetailText);
         Assert.IsNotNull(snapshot.Secondary);
         Assert.AreEqual("5h Rate Limit", snapshot.Secondary!.Label);
         Assert.AreEqual(139d / 200d * 100d, snapshot.Secondary.UsedPercent, 0.001);
         Assert.AreEqual(300, snapshot.Secondary.WindowMinutes);
-        Assert.AreEqual("Rate: 139/200 per 5 hours", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("Rate: 139/200 per 5 hours", snapshot.Secondary.DetailText);
         Assert.AreEqual("Kimi WebView", snapshot.SourceLabel);
     }
 
@@ -77,7 +77,7 @@ public sealed class WebLoginServiceTests
         Assert.AreEqual("Amp · Free", snapshot.Name);
         Assert.AreEqual("Amp Free", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("25.0/100.0 credits", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("25.0/100.0 credits", snapshot.Primary.DetailText);
         Assert.AreEqual(24L * 60L, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("Amp WebView", snapshot.SourceLabel);
     }
@@ -171,7 +171,7 @@ public sealed class WebLoginServiceTests
         Assert.AreEqual("Alibaba Token Plan · Token Plan", snapshot.Name);
         Assert.AreEqual("Credits", snapshot.Primary.Label);
         Assert.AreEqual(75, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("25,000 / 100,000 credits left", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("25,000 / 100,000 credits left", snapshot.Primary.DetailText);
         Assert.AreEqual(30L * 24L * 60L, snapshot.Primary.WindowMinutes);
         Assert.IsNotNull(snapshot.Balance);
         Assert.AreEqual("credits", snapshot.Balance!.Currency);
@@ -192,7 +192,7 @@ public sealed class WebLoginServiceTests
         var snapshot = WebLoginService.ParseAlibabaTokenPlan(json);
 
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("50 / 200 credits used", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("50 / 200 credits used", snapshot.Primary.DetailText);
         Assert.IsFalse(string.IsNullOrWhiteSpace(snapshot.Primary.ResetsAt));
     }
 
@@ -206,12 +206,12 @@ public sealed class WebLoginServiceTests
         Assert.AreEqual("5h Window", snapshot.Primary.Label);
         Assert.AreEqual(0.09973083333333333, snapshot.Primary.UsedPercent, 0.000000001);
         Assert.AreEqual(5 * 60, snapshot.Primary.WindowMinutes);
-        Assert.AreEqual("11.97 / 12,000 credits used", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("11.97 / 12,000 credits used", snapshot.Primary.DetailText);
         Assert.IsNotNull(snapshot.Secondary);
         Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
         Assert.AreEqual(0.03014725, snapshot.Secondary.UsedPercent, 0.000000001);
         Assert.AreEqual(7 * 24 * 60, snapshot.Secondary.WindowMinutes);
-        Assert.AreEqual("12.06 / 40,000 credits used", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("12.06 / 40,000 credits used", snapshot.Secondary.DetailText);
     }
 
     [TestMethod]
@@ -274,9 +274,9 @@ public sealed class WebLoginServiceTests
         Assert.AreEqual("MiniMax · Plus", snapshot.Name);
         Assert.AreEqual("General", snapshot.Primary.Label);
         Assert.AreEqual(1, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("2/200 prompts · 5 hours", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("2/200 prompts · 5 hours", snapshot.Primary.DetailText);
         Assert.IsNotNull(snapshot.Secondary);
-        Assert.AreEqual("Unlimited", snapshot.Secondary!.ResetDescription);
+        Assert.AreEqual("Unlimited", snapshot.Secondary!.DetailText);
         Assert.AreEqual(0, snapshot.Secondary.UsedPercent, 0.001);
         Assert.IsNull(snapshot.Tertiary);
     }
@@ -301,7 +301,7 @@ public sealed class WebLoginServiceTests
 
         Assert.AreEqual("Credits", snapshot.Primary.Label);
         Assert.AreEqual(42.5, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("57.5% available", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("57.5% available", snapshot.Primary.DetailText);
         Assert.IsNull(snapshot.Secondary);
     }
 
@@ -491,8 +491,8 @@ public sealed class WebLoginServiceTests
         Assert.AreEqual("BayesDL · Token Standard 标准包", snapshot.Name);
         Assert.AreEqual("Token Standard 标准包", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("Token Standard 标准包 (2500000/10000000 tokens) | ¥15.25 bal / ¥3.25 owed", snapshot.Primary.ResetDescription);
-        Assert.AreEqual("Active resets 2030-01-01T00:00:00Z", snapshot.Secondary!.ResetDescription);
+        Assert.AreEqual("Token Standard 标准包 (2500000/10000000 tokens) | ¥15.25 bal / ¥3.25 owed", snapshot.Primary.DetailText);
+        Assert.AreEqual("Active resets 2030-01-01T00:00:00Z", snapshot.Secondary!.DetailText);
         Assert.AreEqual(15.25, snapshot.Balance!.Total, 0.001);
     }
 
@@ -519,7 +519,7 @@ public sealed class WebLoginServiceTests
 
         Assert.AreEqual("BayesDL · Coding Pro 进阶包", snapshot.Name);
         Assert.AreEqual(5, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("Coding Pro 进阶包 (900/18000 uses) | ¥0.00 bal / ¥0.00 owed", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("Coding Pro 进阶包 (900/18000 uses) | ¥0.00 bal / ¥0.00 owed", snapshot.Primary.DetailText);
     }
 
     [TestMethod]
@@ -627,7 +627,7 @@ public sealed class WebLoginServiceTests
         Assert.AreEqual("Alibaba · Active Pro", snapshot.Name);
         Assert.AreEqual("5h Pool", snapshot.Primary.Label);
         Assert.AreEqual(5.2, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("52 / 1000 used", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("52 / 1000 used", snapshot.Primary.DetailText);
         Assert.AreEqual(300, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
         Assert.AreEqual(16, snapshot.Secondary.UsedPercent, 0.001);
@@ -667,7 +667,7 @@ public sealed class WebLoginServiceTests
         Assert.AreEqual("Alibaba · Coding Plan Pro", snapshot.Name);
         Assert.AreEqual("5h Pool", snapshot.Primary.Label);
         Assert.AreEqual(10, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("10 / 100 used", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("10 / 100 used", snapshot.Primary.DetailText);
         Assert.IsNotNull(snapshot.Secondary);
         Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
         Assert.AreEqual(25, snapshot.Secondary.UsedPercent, 0.001);
@@ -764,7 +764,7 @@ public sealed class WebLoginServiceTests
 
         Assert.AreEqual("Alibaba · Coding Plan Lite", snapshot.Name);
         Assert.AreEqual("Coding plan", snapshot.Primary.Label);
-        Assert.AreEqual("Plan active", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("Plan active", snapshot.Primary.DetailText);
     }
 
     [TestMethod]

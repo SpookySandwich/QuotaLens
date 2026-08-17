@@ -70,12 +70,12 @@ public sealed class GrokProviderTests
         Assert.AreEqual("grok", snapshot.ProviderId);
         Assert.AreEqual("Weekly included", snapshot.Primary.Label);
         Assert.AreEqual(42.5, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("42.5% of included allowance used", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("42.5% of included allowance used", snapshot.Primary.DetailText);
         Assert.AreEqual("2026-08-18T00:00:00.0000000+00:00", snapshot.Primary.ResetsAt);
         Assert.AreEqual(7L * 24L * 60L, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("On-demand", snapshot.Secondary!.Label);
         Assert.AreEqual(6, snapshot.Secondary.UsedPercent, 0.001);
-        Assert.AreEqual("$3.00 / $50.00 cap", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("$3.00 / $50.00 cap", snapshot.Secondary.DetailText);
         Assert.AreEqual(12.5, snapshot.Balance!.Total, 0.001);
         Assert.AreEqual("SuperGrok", snapshot.PlanName);
         Assert.AreEqual("grok.com billing", snapshot.SourceLabel);
@@ -104,7 +104,7 @@ public sealed class GrokProviderTests
 
         Assert.AreEqual("Monthly included", snapshot.Primary.Label);
         Assert.AreEqual(0, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("$0.00 used", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$0.00 used", snapshot.Primary.DetailText);
         Assert.IsNull(snapshot.Secondary);
         Assert.IsNull(snapshot.Balance); // zero prepaid balance is not a balance
     }
@@ -127,7 +127,7 @@ public sealed class GrokProviderTests
 
         Assert.AreEqual("Credits", snapshot.Primary.Label);
         Assert.AreEqual(1000d / 3000d * 100d, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("$10.00 / $30.00 included", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$10.00 / $30.00 included", snapshot.Primary.DetailText);
         Assert.AreEqual(20, snapshot.Balance!.Total, 0.001);
     }
 

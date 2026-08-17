@@ -23,6 +23,7 @@ public sealed class ConfigService : IConfigService
     private const string InstancesExplicitConfigKey = "provider_instances_explicit";
     private const string ScopedProviderConfigMigrationKey = "provider_scoped_config_v2";
     private const string InternalProviderAliasesMigrationKey = "provider_internal_aliases_v1";
+    private const string ConfigKeyAliasesMigrationKey = "config_key_aliases_v1";
 
     /// Default refresh interval when min_refresh_interval_secs is unset (seconds).
     private const int DefaultRefreshSecs = 1800;
@@ -223,6 +224,10 @@ public sealed class ConfigService : IConfigService
         var shouldMigrateInternalProviderAliases = !IsTrue(_config.GetValueOrDefault(InternalProviderAliasesMigrationKey));
         var migratedInternalProviderAliases = shouldMigrateInternalProviderAliases && MigrateInternalProviderAliases();
 
+        var loadedConfig = (IReadOnlyDictionary<string, string>?)stored ?? migrated?.Config;
+        var shouldMigrateConfigKeyAliases = !IsTrue(_config.GetValueOrDefault(ConfigKeyAliasesMigrationKey));
+        var migratedConfigKeyAliases = shouldMigrateConfigKeyAliases && MigrateConfigKeyAliases(loadedConfig);
+
         var shouldMigrateScopedProviderConfig = !IsTrue(_config.GetValueOrDefault(ScopedProviderConfigMigrationKey));
         if (shouldMigrateScopedProviderConfig)
             MigrateLegacyBareProviderConfigToScoped();
@@ -234,12 +239,16 @@ public sealed class ConfigService : IConfigService
         // not recreate catalog instances after the user removes them.
         if (shouldMigrateInternalProviderAliases)
             _config[InternalProviderAliasesMigrationKey] = "true";
+        if (shouldMigrateConfigKeyAliases)
+            _config[ConfigKeyAliasesMigrationKey] = "true";
 
         if (!configExisted
             || shouldMigrateImplicitDefaults
             || migratedInternalProviderAliases
+            || migratedConfigKeyAliases
             || shouldMigrateScopedProviderConfig
-            || shouldMigrateInternalProviderAliases)
+            || shouldMigrateInternalProviderAliases
+            || shouldMigrateConfigKeyAliases)
         {
             _config[InstancesExplicitConfigKey] = "true";
             _config[ScopedProviderConfigMigrationKey] = "true";
@@ -360,6 +369,33 @@ public sealed class ConfigService : IConfigService
         }
 
         _config[ScopedProviderConfigMigrationKey] = "true";
+    }
+
+    private bool MigrateConfigKeyAliases(IReadOnlyDictionary<string, string>? loadedConfig)
+    {
+        var changed = false;
+        foreach (var key in _config.Keys.ToArray())
+        {
+            foreach (var (oldKey, newKey) in Catalog.ConfigKeyAliases)
+            {
+                var isBare = string.Equals(key, oldKey, StringComparison.OrdinalIgnoreCase);
+                var suffix = "." + oldKey;
+                if (!isBare && !key.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                var prefixLength = isBare ? 0 : key.Length - oldKey.Length;
+                var replacement = key[..prefixLength] + newKey;
+                var replacementWasExplicit = loadedConfig?.ContainsKey(replacement) == true;
+                if (!replacementWasExplicit)
+                    _config[replacement] = _config[key];
+
+                _config.Remove(key);
+                changed = true;
+                break;
+            }
+        }
+
+        return changed;
     }
 
     private void MigrateLegacyBareKey(string instanceId, string key)

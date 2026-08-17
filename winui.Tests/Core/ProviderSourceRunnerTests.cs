@@ -24,26 +24,51 @@ public sealed class ProviderSourceRunnerTests
             CancellationToken.None);
 
         Assert.AreEqual("web-data", snapshot.Name);
+        Assert.AreEqual("web", snapshot.SourceState?.RequestedSourceId);
+        Assert.AreEqual("web", snapshot.SourceState?.EffectiveSourceId);
+        Assert.IsFalse(snapshot.SourceState!.UsedFallback);
     }
 
     [TestMethod]
-    public async Task FetchAsync_FallsThroughWhenSelectedSourceIsUnsigned()
+    public async Task FetchAsync_SelectedUnavailableSource_DoesNotFallThrough()
     {
         var web = new FakeSource("web", available: true, label: "web-data");
-        var app = new FakeSource("app", available: false, label: "app-data");
+        var recovery = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "source.note");
+        var app = new FakeSource("app", available: false, label: "app-data", recovery: recovery);
         var config = new MapConfig(new Dictionary<string, string>
         {
             ["kimi.provider_source"] = "app",
         });
 
+        var error = await Assert.ThrowsExactlyAsync<ProviderException>(() =>
+            ProviderSourceRunner.FetchAsync(
+                new UnusedProvider(),
+                new IProviderSource[] { app, web },
+                "kimi",
+                config,
+                CancellationToken.None));
+
+        Assert.AreEqual(recovery, error.RecoveryAction);
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_AutomaticModeFallsThroughToFirstAvailableSource()
+    {
+        var app = new FakeSource("app", available: false, label: "app-data");
+        var web = new FakeSource("web", available: true, label: "web-data");
+
         var snapshot = await ProviderSourceRunner.FetchAsync(
             new UnusedProvider(),
             new IProviderSource[] { app, web },
             "kimi",
-            config,
+            new EmptyConfig(),
             CancellationToken.None);
 
         Assert.AreEqual("web-data", snapshot.Name);
+        Assert.IsNull(snapshot.SourceState?.RequestedSourceId);
+        Assert.AreEqual("web", snapshot.SourceState?.EffectiveSourceId);
+        Assert.IsTrue(snapshot.SourceState!.UsedFallback);
+        Assert.IsNull(snapshot.RecoveryAction);
     }
 
     [TestMethod]
@@ -71,23 +96,70 @@ public sealed class ProviderSourceRunnerTests
         StringAssert.Contains(error.Message, "401");
     }
 
+    [TestMethod]
+    public async Task FetchAsync_WithoutAvailableSource_CarriesPreferredSourceRecovery()
+    {
+        var recovery = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "source.note");
+        var app = new FakeSource("app", available: false, recovery: recovery);
+
+        var error = await Assert.ThrowsExactlyAsync<ProviderException>(() =>
+            ProviderSourceRunner.FetchAsync(
+                new UnusedProvider(),
+                new IProviderSource[] { app },
+                "kimi",
+                new EmptyConfig(),
+                CancellationToken.None));
+
+        Assert.AreEqual(recovery, error.RecoveryAction);
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_AuthenticationFailure_CarriesSourceRecovery()
+    {
+        var recovery = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "source.note");
+        var app = new FakeSource(
+            "app",
+            available: true,
+            fail: new ProviderException("Login required", ProviderErrorKind.AuthenticationRequired),
+            recovery: recovery);
+
+        var error = await Assert.ThrowsExactlyAsync<ProviderException>(() =>
+            ProviderSourceRunner.FetchAsync(
+                new UnusedProvider(),
+                new IProviderSource[] { app },
+                "kimi",
+                new EmptyConfig(),
+                CancellationToken.None));
+
+        Assert.AreEqual(recovery, error.RecoveryAction);
+        Assert.AreEqual(ProviderErrorKind.AuthenticationRequired, error.Kind);
+    }
+
     private sealed class FakeSource : IProviderSource
     {
         private readonly bool _available;
         private readonly string _label;
         private readonly Exception? _fail;
+        private readonly ProviderRecoveryAction? _recovery;
 
-        public FakeSource(string id, bool available, string label = "", Exception? fail = null)
+        public FakeSource(
+            string id,
+            bool available,
+            string label = "",
+            Exception? fail = null,
+            ProviderRecoveryAction? recovery = null)
         {
             Id = id;
             Name = id;
             _available = available;
             _label = label;
             _fail = fail;
+            _recovery = recovery;
         }
 
         public string Id { get; }
         public string Name { get; }
+        public ProviderRecoveryAction? UnavailableRecovery => _recovery;
         public bool IsAvailable(string instanceId, IConfig config) => _available;
 
         public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)

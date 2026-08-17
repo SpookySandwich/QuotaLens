@@ -281,7 +281,7 @@ public sealed class CodexLbProviderTests
         var snapshot = await provider.FetchAsync("codex-lb", new UrlConfig(), CancellationToken.None);
 
         Assert.AreEqual(weeklyReset, snapshot.Primary.ResetsAt);
-        Assert.AreEqual("next increase in", snapshot.Primary.ResetDescription);
+        Assert.IsNull(snapshot.Primary.DetailText);
     }
 
     [TestMethod]

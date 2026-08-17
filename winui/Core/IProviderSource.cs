@@ -18,6 +18,24 @@ public interface IProviderSource
     /// </summary>
     IReadOnlyList<string> ConfigFieldKeys => Array.Empty<string>();
 
+    /// <summary>
+    /// I18n key of a caveat shown as a hover hint on this source in the source
+    /// selector (e.g. "only works while the app is in use"). Null = nothing to flag.
+    /// </summary>
+    string? AttentionNote => null;
+
+    /// <summary>
+    /// Recovery offered when this source cannot provide data. The shared source
+    /// runner carries it to an error snapshot; the UI never re-probes this source.
+    /// </summary>
+    ProviderRecoveryAction? UnavailableRecovery => null;
+
+    /// <summary>
+    /// Credential/session files whose changes make this source worth refetching.
+    /// The refresh service watches these declaratively for every provider.
+    /// </summary>
+    IReadOnlyList<string> WatchPaths(string instanceId, IConfig config) => Array.Empty<string>();
+
     /// <summary>True when this source's credentials are present and usable.</summary>
     bool IsAvailable(string instanceId, IConfig config);
 

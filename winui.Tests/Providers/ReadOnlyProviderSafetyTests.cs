@@ -107,7 +107,7 @@ public sealed class ReadOnlyProviderSafetyTests
 
         Assert.AreEqual("Coding Plan", snapshot.Primary.AvailabilityGroup);
         Assert.AreEqual("Agent Plan", snapshot.Tertiary!.AvailabilityGroup);
-        Assert.AreEqual(60, Quota.ProviderAvailability("doubao", snapshot), 0.001);
+        Assert.AreEqual(60, Quota.ProviderAvailability(snapshot), 0.001);
     }
 
     [TestMethod]
@@ -299,7 +299,7 @@ public sealed class ReadOnlyProviderSafetyTests
         Assert.AreEqual(75, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(RateWindowKind.Informational, snapshot.Primary.Kind);
         Assert.AreEqual("15 of 20 CountPerMinute allocated", snapshot.Primary.ValueText);
-        Assert.AreEqual("Regional capacity allocation; not live request consumption", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("Regional capacity allocation; not live request consumption", snapshot.Primary.DetailText);
         Assert.AreEqual("Tokens per minute", snapshot.Secondary!.Label);
         Assert.AreEqual("Deployments", snapshot.Tertiary!.Label);
         Assert.HasCount(1, snapshot.AdditionalWindows);
@@ -310,7 +310,7 @@ public sealed class ReadOnlyProviderSafetyTests
         Assert.AreEqual(ProviderAvailabilityKind.Unknown, snapshot.AvailabilityKind);
         Assert.AreEqual(
             ProviderAvailabilityKind.Unknown,
-            Quota.ProviderAvailabilityState("azureopenai", snapshot).Kind);
+            Quota.ProviderAvailabilityState(snapshot).Kind);
         Assert.AreEqual(updatedAt, snapshot.UpdatedAt);
     }
 
@@ -350,6 +350,34 @@ public sealed class ReadOnlyProviderSafetyTests
             Assert.IsFalse(
                 source.Contains(forbidden, StringComparison.Ordinal),
                 $"Kimi refresh must remain read-only and cannot contain '{forbidden}'.");
+        }
+    }
+
+    [TestMethod]
+    public void ZcodeCredentialStore_DoesNotMutateTheStoreOrRefreshTokens()
+    {
+        var files = new[]
+        {
+            FindRepositoryFile("winui", "Providers", "ZcodeCredentials.cs"),
+            FindRepositoryFile("winui", "Providers", "ZaiProvider.cs"),
+        };
+
+        foreach (var forbidden in new[]
+        {
+            "File.WriteAllText",
+            "File.WriteAllBytes",
+            "File.Move",
+            "File.Delete",
+            "oauth/token",
+            "RefreshToken",
+        })
+        {
+            foreach (var file in files)
+            {
+                Assert.IsFalse(
+                    File.ReadAllText(file).Contains(forbidden, StringComparison.Ordinal),
+                    $"ZCode credential access must remain read-only and cannot contain '{forbidden}' ({Path.GetFileName(file)}).");
+            }
         }
     }
 

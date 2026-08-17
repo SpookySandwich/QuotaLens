@@ -57,7 +57,7 @@ public sealed class BedrockProvider : IProvider
                 UsedPercent = usedPercent,
                 ValueText = hasBudget ? null : spendText,
                 ResetsAt = endOfMonth.ToString("O", CultureInfo.InvariantCulture),
-                ResetDescription = hasBudget ? spendText : null,
+                DetailText = hasBudget ? spendText : null,
                 WindowMinutes = null,
             },
             Balance = hasBudget

@@ -45,7 +45,7 @@ public sealed class OpenCodeGoLocalUsageProviderTests
         Assert.AreEqual("Go", snapshot.PlanName);
         Assert.AreEqual("5h Window", snapshot.Primary.Label);
         Assert.AreEqual(50, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("$6 of $12", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$6 of $12", snapshot.Primary.DetailText);
         Assert.AreEqual("2026-08-12T13:00:00.0000000+00:00", snapshot.Primary.ResetsAt);
         Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
         Assert.AreEqual(30, snapshot.Secondary.UsedPercent, 0.001);

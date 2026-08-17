@@ -168,7 +168,7 @@ public sealed class AlibabaProvider : IProvider
                 Label = "Account Balance",
                 UsedPercent = 0.0,
                 ResetsAt = null,
-                ResetDescription = desc,
+                DetailText = desc,
                 WindowMinutes = null,
             },
             Secondary = null,

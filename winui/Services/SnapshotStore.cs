@@ -11,7 +11,7 @@ namespace QuotaLens.Services;
 /// </summary>
 public sealed class SnapshotStore
 {
-    private const int Version = 1;
+    private const int Version = 2;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -35,6 +35,9 @@ public sealed class SnapshotStore
 
             var envelope = JsonSerializer.Deserialize<Envelope>(File.ReadAllText(path), JsonOptions);
             if (envelope?.Snapshot?.Primary is null)
+                return null;
+
+            if (envelope.Version != Version)
                 return null;
 
             // A card re-pointed at a different provider type must not inherit the old cache.

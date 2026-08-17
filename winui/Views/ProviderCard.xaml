@@ -126,6 +126,16 @@
                     <TextBlock Style="{StaticResource CaptionText}">
                         <Run Text="{x:Bind UpdatedLabel}" /><Run Text=" " /><Run Text="{x:Bind FooterTime, Mode=OneWay}" />
                     </TextBlock>
+                    <!-- Open the app to renew a stale source session (e.g. Kimi App) -->
+                    <Button Visibility="{x:Bind CanRenewSession, Converter={StaticResource BoolToVis}, Mode=OneWay}"
+                            Command="{x:Bind RenewSessionCommand, Mode=OneWay}"
+                            AutomationProperties.AutomationId="{x:Bind RenewSessionAutomationId}"
+                            AutomationProperties.Name="{x:Bind RenewSessionText, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind RenewSessionToolTip, Mode=OneWay}"
+                            Style="{StaticResource CardActionButton}"
+                            Margin="-8,-4,0,-4">
+                        <TextBlock Text="{x:Bind RenewSessionText, Mode=OneWay}" FontSize="11" />
+                    </Button>
                     <Border Visibility="{x:Bind IsStale, Converter={StaticResource BoolToVis}, Mode=OneWay}"
                             Background="{ThemeResource SystemFillColorCautionBackgroundBrush}"
                             CornerRadius="4" Padding="6,1">
@@ -194,7 +204,7 @@
             </StackPanel>
         </DataTemplate>
 
-        <!-- ============ Antigravity family group ============ -->
+        <!-- ============ Model family group ============ -->
         <DataTemplate x:Key="FamilyTemplate" x:DataType="vm:FamilyGroupViewModel">
             <StackPanel Spacing="2" Margin="0,2">
                 <TextBlock Text="{x:Bind Family}" FontSize="10" FontWeight="SemiBold"
@@ -410,7 +420,7 @@
                                     Content="{x:Bind}"
                                     ContentTemplate="{StaticResource HeaderTemplate}" />
 
-                    <!-- Family groups (Antigravity) -->
+                    <!-- Provider-declared model family groups -->
                     <ItemsControl ItemsSource="{x:Bind Families}"
                                   ItemTemplate="{StaticResource FamilyTemplate}"
                                   Visibility="{x:Bind HasFamilies, Converter={StaticResource BoolToVis}, Mode=OneWay}" />

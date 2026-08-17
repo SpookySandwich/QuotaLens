@@ -25,6 +25,15 @@ namespace QuotaLens.Providers;
 /// has expired this reports "login required" and defers to the WebView session or a
 /// manual 'kimi login'; running the CLI refreshes the token for us.
 /// Enforced by ReadOnlyProviderSafetyTests.
+///
+/// The App source reads the desktop app's Electron safeStorage token store, whose access token also
+/// lives ~15 minutes and is renewed ONLY while the desktop app is actively used
+/// (verified against the app's logs: renewal rides along with real API activity,
+/// there is no timer). The same rotation risk rules out refreshing it ourselves, so
+/// an expired App token makes the source unavailable. Automatic source selection may
+/// fall back to CLI/Web, while an explicitly selected App source remains invalid and
+/// offers its declared recovery action. The declared file watch refreshes the card the
+/// moment the app renews the token.
 /// </summary>
 public sealed class KimiProvider : IProvider
 {
@@ -84,6 +93,10 @@ public sealed class KimiProvider : IProvider
 
     private sealed class KimiAppSource : IProviderSource
     {
+        private static readonly ProviderRecoveryAction Recovery = new(
+            ProviderRecoveryKind.LaunchApp,
+            "kimi.appSourceNote");
+
         private readonly Func<bool> _isAvailable;
         private readonly Func<CancellationToken, Task<ProviderSnapshot>> _fetch;
 
@@ -96,6 +109,10 @@ public sealed class KimiProvider : IProvider
         public string Id => "app";
         public string Name => "App";
         public IReadOnlyList<string> ConfigFieldKeys => new[] { "kimi_app_path" };
+        public string? AttentionNote => "kimi.appSourceNote";
+        public ProviderRecoveryAction? UnavailableRecovery => Recovery;
+        public IReadOnlyList<string> WatchPaths(string instanceId, IConfig config) =>
+            new[] { DesktopTokenStorePath(), DesktopLocalStatePath() };
         public bool IsAvailable(string instanceId, IConfig config) => _isAvailable();
         public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) => _fetch(ct);
     }
@@ -308,15 +325,29 @@ public sealed class KimiProvider : IProvider
 
     private static readonly TimeSpan WebTotalQuotaTimeout = TimeSpan.FromSeconds(5);
 
-    private static bool AppIsAvailable() => ReadKimiDesktopAccessToken() is not null;
+    /// <summary>
+    /// The App source counts as available only while its token is actually usable:
+    /// the desktop app renews the token only while in use, so an expired token must
+    /// let automatic source selection fall back to CLI/Web. An explicit App selection
+    /// remains strict and produces the shared invalid/recovery state.
+    /// </summary>
+    private static bool AppIsAvailable() =>
+        DesktopSessionIsUsable(ReadKimiDesktopAccessToken(), DateTimeOffset.UtcNow);
+
+    internal static bool DesktopSessionIsUsable(string? token, DateTimeOffset now) =>
+        token is not null && !IsJwtExpired(token, now);
 
     private static async Task<ProviderSnapshot> FetchAppAsync(CancellationToken ct)
     {
         var token = ReadKimiDesktopAccessToken()
-            ?? throw new ProviderException("Not available: Kimi desktop app has no session. Open the Kimi app.");
+            ?? throw new ProviderException(
+                "Not available: Kimi desktop app has no session. Open the Kimi app.",
+                ProviderErrorKind.AuthenticationRequired);
 
         if (IsJwtExpired(token, DateTimeOffset.UtcNow))
-            throw new ProviderException("Not available: Kimi desktop session expired. Open the Kimi app.");
+            throw new ProviderException(
+                "Not available: Kimi desktop session expired. Open the Kimi app.",
+                ProviderErrorKind.AuthenticationRequired);
 
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(WebTotalQuotaTimeout);
@@ -331,7 +362,9 @@ public sealed class KimiProvider : IProvider
 
         using var response = await Http.Client.SendAsync(request, timeout.Token).ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new ProviderException("Not available: Kimi desktop session was rejected. Open the Kimi app.");
+            throw new ProviderException(
+                "Not available: Kimi desktop session was rejected. Open the Kimi app.",
+                ProviderErrorKind.AuthenticationRequired);
 
         var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
         return ParseAppUsage(json);
@@ -395,32 +428,60 @@ public sealed class KimiProvider : IProvider
             ? value.GetString()
             : null;
 
-    private static string? ReadKimiDesktopAccessToken()
+    private static string? ReadKimiDesktopAccessToken() =>
+        ReadKimiDesktopAccessToken(DesktopTokenStorePath(), DesktopLocalStatePath());
+
+    internal static string? ReadKimiDesktopAccessToken(
+        string tokenStorePath,
+        string localStatePath,
+        Func<byte[], byte[]>? unprotectKey = null)
     {
         try
         {
-            var path = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "kimi-desktop", "bridge-store", "token-store.json");
-            if (!File.Exists(path))
+            if (!File.Exists(tokenStorePath))
                 return null;
 
-            using var doc = JsonDocument.Parse(File.ReadAllText(path));
-            if (doc.RootElement.TryGetProperty("tokens", out var tokens)
-                && tokens.ValueKind == JsonValueKind.Object
-                && tokens.TryGetProperty("access_token", out var accessToken)
-                && accessToken.ValueKind == JsonValueKind.String)
-            {
-                return accessToken.GetString();
-            }
+            using var doc = JsonDocument.Parse(File.ReadAllText(tokenStorePath));
+            if (AccessToken(doc.RootElement) is { } legacyToken)
+                return legacyToken;
 
-            return null;
+            if (!doc.RootElement.TryGetProperty("encryption", out var encryption)
+                || encryption.GetString() != "safeStorage.v1"
+                || !doc.RootElement.TryGetProperty("data", out var data)
+                || data.ValueKind != JsonValueKind.String)
+                return null;
+
+            var plaintext = ElectronSafeStorage.TryDecryptString(
+                data.GetString(),
+                localStatePath,
+                unprotectKey);
+            if (plaintext is null)
+                return null;
+
+            using var decrypted = JsonDocument.Parse(plaintext);
+            return AccessToken(decrypted.RootElement);
         }
         catch
         {
             return null;
         }
     }
+
+    internal static string DesktopTokenStorePath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "kimi-desktop", "bridge-store", "token-store.json");
+
+    internal static string DesktopLocalStatePath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "kimi-desktop", "Local State");
+
+    private static string? AccessToken(JsonElement root) =>
+        root.TryGetProperty("tokens", out var tokens)
+        && tokens.ValueKind == JsonValueKind.Object
+        && tokens.TryGetProperty("access_token", out var accessToken)
+        && accessToken.ValueKind == JsonValueKind.String
+            ? accessToken.GetString()
+            : null;
 
     internal static CliUsageDetail? ParseWebTotalQuota(string json)
     {
@@ -688,7 +749,7 @@ public sealed class KimiProvider : IProvider
             Label = label,
             UsedPercent = usedPercent,
             ResetsAt = detail.ResetTime,
-            ResetDescription = description,
+            DetailText = description,
             WindowMinutes = windowMinutes,
         };
     }

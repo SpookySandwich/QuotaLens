@@ -1,10 +1,12 @@
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json.Nodes;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using QuotaLens.Core;
 using QuotaLens.Providers;
+using QuotaLens.Tests.Core;
 
 namespace QuotaLens.Tests.Providers;
 
@@ -46,18 +48,18 @@ public sealed class KimiProviderTests
         Assert.AreEqual(16.0, snapshot.Primary.UsedPercent);
         Assert.AreEqual(10080, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("2026-07-22T16:39:20.750079Z", snapshot.Primary.ResetsAt);
-        Assert.AreEqual("16% used", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("16% used", snapshot.Primary.DetailText);
 
         Assert.IsNotNull(snapshot.Secondary);
         Assert.AreEqual("5h Rate Limit", snapshot.Secondary!.Label);
         Assert.AreEqual(66.0, snapshot.Secondary.UsedPercent);
         Assert.AreEqual(300, snapshot.Secondary.WindowMinutes);
-        Assert.AreEqual("Rate: 66% used", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("Rate: 66% used", snapshot.Secondary.DetailText);
 
         Assert.IsNotNull(snapshot.Tertiary);
         Assert.AreEqual("Total quota", snapshot.Tertiary!.Label);
         Assert.AreEqual(1.0, snapshot.Tertiary.UsedPercent);
-        Assert.AreEqual("1% used", snapshot.Tertiary.ResetDescription);
+        Assert.AreEqual("1% used", snapshot.Tertiary.DetailText);
 
         Assert.AreEqual(1, snapshot.AdditionalWindows.Count);
         Assert.AreEqual("Concurrency", snapshot.AdditionalWindows[0].Label);
@@ -75,7 +77,7 @@ public sealed class KimiProviderTests
             """);
 
         Assert.AreEqual(25.0, snapshot.Primary.UsedPercent);
-        Assert.AreEqual("512/2048 requests", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("512/2048 requests", snapshot.Primary.DetailText);
         Assert.AreEqual("Kimi", snapshot.Name);
         Assert.IsNull(snapshot.Secondary);
     }
@@ -279,6 +281,96 @@ public sealed class KimiProviderTests
 
         Assert.IsTrue(KimiProvider.IsJwtExpired(expired, DateTimeOffset.UtcNow));
         Assert.IsFalse(KimiProvider.IsJwtExpired(fresh, DateTimeOffset.UtcNow));
+    }
+
+    [TestMethod]
+    public void DesktopSessionIsUsable_RequiresUnexpiredToken()
+    {
+        // An expired desktop token must make the App source unavailable so the
+        // runner falls back to CLI/Web instead of failing the card.
+        var now = DateTimeOffset.UtcNow;
+
+        Assert.IsFalse(KimiProvider.DesktopSessionIsUsable(null, now));
+        Assert.IsFalse(KimiProvider.DesktopSessionIsUsable(
+            FakeJwt(new Dictionary<string, object> { ["exp"] = now.ToUnixTimeSeconds() - 120 }), now));
+        Assert.IsTrue(KimiProvider.DesktopSessionIsUsable(
+            FakeJwt(new Dictionary<string, object> { ["exp"] = now.ToUnixTimeSeconds() + 600 }), now));
+    }
+
+    [TestMethod]
+    public void AppSource_CarriesAttentionNoteForSelector()
+    {
+        var provider = Provider(FreshCredentials());
+
+        Assert.AreEqual("kimi.appSourceNote", provider.Sources.Single(s => s.Id == "app").AttentionNote);
+        Assert.IsNull(provider.Sources.Single(s => s.Id == "cli").AttentionNote);
+    }
+
+    [TestMethod]
+    public void AppSource_CarriesDeclarativeRecoveryForCardAction()
+    {
+        var provider = Provider(FreshCredentials());
+
+        Assert.AreEqual("kimi.appSourceNote", provider.Sources.Single(s => s.Id == "app").UnavailableRecovery?.DescriptionKey);
+        Assert.IsNull(provider.Sources.Single(s => s.Id == "cli").UnavailableRecovery);
+        Assert.IsNull(provider.Sources.Single(s => s.Id == "web").UnavailableRecovery);
+    }
+
+    [TestMethod]
+    public void ReadKimiDesktopAccessToken_DecryptsSafeStorageV1()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "quotelens-kimi-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var masterKey = RandomNumberGenerator.GetBytes(32);
+            var protectedKey = RandomNumberGenerator.GetBytes(24);
+            var localState = ElectronSafeStorageTests.WriteLocalState(directory, protectedKey);
+            var encrypted = ElectronSafeStorageTests.EncryptV10(
+                "{\"tokens\":{\"access_token\":\"app-token-fixture\"}}",
+                masterKey);
+            var tokenStore = Path.Combine(directory, "token-store.json");
+            File.WriteAllText(tokenStore, System.Text.Json.JsonSerializer.Serialize(new
+            {
+                encryption = "safeStorage.v1",
+                data = encrypted,
+            }));
+
+            var token = KimiProvider.ReadKimiDesktopAccessToken(
+                tokenStore,
+                localState,
+                wrapped =>
+                {
+                    CollectionAssert.AreEqual(protectedKey, wrapped);
+                    return masterKey.ToArray();
+                });
+
+            Assert.AreEqual("app-token-fixture", token);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
+    }
+
+    [TestMethod]
+    public void ReadKimiDesktopAccessToken_KeepsLegacyPlaintextCompatibility()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "quotelens-kimi-store-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            var tokenStore = Path.Combine(directory, "token-store.json");
+            File.WriteAllText(tokenStore, "{\"tokens\":{\"access_token\":\"legacy-token-fixture\"}}");
+
+            Assert.AreEqual(
+                "legacy-token-fixture",
+                KimiProvider.ReadKimiDesktopAccessToken(tokenStore, Path.Combine(directory, "missing-state")));
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     private static string FakeJwt(IReadOnlyDictionary<string, object> claims)

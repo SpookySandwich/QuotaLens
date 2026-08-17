@@ -28,7 +28,12 @@ public sealed class RateWindow
     public string? ValueText { get; set; }
     /// ISO-8601 reset time, or null. Kept as string to mirror the original; UI parses.
     public string? ResetsAt { get; set; }
-    public string? ResetDescription { get; set; }
+    /// <summary>
+    /// Provider-reported detail that is not reset presentation (usage counts, balance,
+    /// status, or cadence when no reset instant exists). A valid <see cref="ResetsAt"/>
+    /// is always rendered by the shared reset formatter instead of this text.
+    /// </summary>
+    public string? DetailText { get; set; }
     public long? WindowMinutes { get; set; }
     /// Optional windows are informational unless a provider marks them as gating overall use.
     public bool CountsForAvailability { get; set; }
@@ -132,6 +137,24 @@ public enum ProviderAvailabilityKind
     Unlimited,
 }
 
+/// <summary>How a failed data source can be recovered without provider checks in the UI.</summary>
+public enum ProviderRecoveryKind
+{
+    LaunchApp,
+}
+
+/// <summary>Declarative recovery action carried from a source failure to the card.</summary>
+public sealed record ProviderRecoveryAction(
+    ProviderRecoveryKind Kind,
+    string DescriptionKey,
+    int RetryDelaySeconds = 8);
+
+/// <summary>Which source was requested and which source actually produced the snapshot.</summary>
+public sealed record ProviderSourceState(
+    string? RequestedSourceId,
+    string EffectiveSourceId,
+    bool UsedFallback);
+
 /// <summary>
 /// One provider's snapshot for the dashboard. Mirrors the Rust ProviderSnapshot
 /// so behavior/parsing stays faithful across the port.
@@ -165,6 +188,8 @@ public sealed class ProviderSnapshot
     public ProviderContractStability ContractStability { get; set; } = ProviderContractStability.Unknown;
     public EntitlementStatus EntitlementStatus { get; set; } = EntitlementStatus.Unknown;
     public ProviderAvailabilityKind AvailabilityKind { get; set; } = ProviderAvailabilityKind.Unknown;
+    /// <summary>Resolution metadata supplied by the shared multi-source runner.</summary>
+    public ProviderSourceState? SourceState { get; set; }
     /// Non-null when the fetch failed; the UI renders this as the error/needs-attention state.
     public string? Error { get; set; }
 
@@ -176,12 +201,18 @@ public sealed class ProviderSnapshot
     /// </summary>
     public ProviderErrorKind ErrorKind { get; set; } = ProviderErrorKind.Unknown;
 
+    /// <summary>
+    /// Action that can recover an invalid/no-data snapshot. Healthy snapshots never
+    /// carry this action, even when the requested source fell back to another source.
+    /// </summary>
+    public ProviderRecoveryAction? RecoveryAction { get; set; }
+
     /// <summary>Build an error snapshot for a provider (mirrors fetch_all error mapping).</summary>
     public static ProviderSnapshot ForError(string providerId, string name, string sourceLabel, string error) => new()
     {
         ProviderId = providerId,
         Name = name,
-        Primary = new RateWindow { Label = I18n.T("quota.errorLabel"), UsedPercent = 0, ResetDescription = error },
+        Primary = new RateWindow { Label = I18n.T("quota.errorLabel"), UsedPercent = 0, DetailText = error },
         SourceLabel = sourceLabel,
         Error = error,
     };

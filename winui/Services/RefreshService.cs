@@ -23,6 +23,7 @@ public sealed class RefreshService : IProviderService
     // Web-login providers share one WebView2 profile → never run them concurrently.
     private static readonly SemaphoreSlim _webviewGate = new(1, 1);
     private readonly CliTokenKeepAliveService _keepAlive;
+    private readonly List<ProviderSourceFileWatcher> _sourceWatchers = new();
     private DispatcherQueueTimer? _timer;
 
     public IConfigService Config { get; }
@@ -48,9 +49,11 @@ public sealed class RefreshService : IProviderService
             _snapshots[inst.Id] = store.Load(inst.Id, inst.Type);
     }
 
-    private static string DefaultSnapshotDirectory() =>
+    internal static string DefaultSnapshotDirectory(string? localAppData = null) =>
         System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            localAppData
+                ?? Environment.GetEnvironmentVariable("LOCALAPPDATA")
+                ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "QuotaLens", "Snapshots");
 
     public IReadOnlyList<ProviderInstance> Instances => Config.Instances;
@@ -177,7 +180,8 @@ public sealed class RefreshService : IProviderService
                         inst,
                         provider,
                         ex.Message,
-                        ex is ProviderException providerError ? providerError.Kind : ProviderErrorKind.Unknown));
+                        ex is ProviderException providerError ? providerError.Kind : ProviderErrorKind.Unknown,
+                        ex is ProviderException sourceError ? sourceError.RecoveryAction : null));
                     return;
                 }
             }
@@ -198,6 +202,8 @@ public sealed class RefreshService : IProviderService
         OnUi(() => InstancesChanged?.Invoke(this, EventArgs.Empty));
         if (refreshImmediately)
             _ = RefreshAsync(inst.Id);
+        if (_timer is not null)
+            RestartSourceWatchers();
         return inst;
     }
 
@@ -209,6 +215,8 @@ public sealed class RefreshService : IProviderService
         _store.Delete(instanceId);
         if (instance is not null && WebLoginService.IsSupported(instance.Type))
             WebLoginService.Instance?.RemoveInstanceData(instance.Id, instance.Type);
+        if (_timer is not null)
+            RestartSourceWatchers();
         OnUi(() => InstancesChanged?.Invoke(this, EventArgs.Empty));
     }
 
@@ -325,13 +333,44 @@ public sealed class RefreshService : IProviderService
 
         // First keep-alive check runs immediately at startup, not after one interval.
         _ = _keepAlive.RunDueAsync();
+
+        RestartSourceWatchers();
+    }
+
+    private void RestartSourceWatchers()
+    {
+        foreach (var watcher in _sourceWatchers)
+            watcher.Dispose();
+        _sourceWatchers.Clear();
+
+        var watchedSources = Instances
+            .Where(instance => _byType.ContainsKey(instance.Type))
+            .SelectMany(instance => _byType[instance.Type].Sources.SelectMany(source =>
+                source.WatchPaths(instance.Id, Config)
+                    .Where(path => !string.IsNullOrWhiteSpace(path))
+                    .Select(path => (Path: Path.GetFullPath(path), InstanceId: instance.Id))))
+            .GroupBy(item => item.Path, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in watchedSources)
+        {
+            var instanceIds = group.Select(item => item.InstanceId).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            var watcher = new ProviderSourceFileWatcher(group.Key, () =>
+                _ui.TryEnqueue(() =>
+                {
+                    foreach (var instanceId in instanceIds)
+                        _ = RefreshAsync(instanceId);
+                }));
+            watcher.Start();
+            _sourceWatchers.Add(watcher);
+        }
     }
 
     internal static ProviderSnapshot ErrorSnapshotFor(
         ProviderInstance instance,
         IProvider provider,
         string error,
-        ProviderErrorKind errorKind = ProviderErrorKind.Unknown)
+        ProviderErrorKind errorKind = ProviderErrorKind.Unknown,
+        ProviderRecoveryAction? recoveryAction = null)
     {
         var name = string.IsNullOrWhiteSpace(instance.Name)
             ? Catalog.ProviderName(instance.Type)
@@ -345,6 +384,7 @@ public sealed class RefreshService : IProviderService
                 error));
         snapshot.Name = ProviderSnapshotIdentity.ComposeTitle(instance.Type, name, snapshot);
         snapshot.ErrorKind = errorKind;
+        snapshot.RecoveryAction = recoveryAction;
         return snapshot;
     }
 

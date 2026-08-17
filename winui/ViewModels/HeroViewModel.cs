@@ -267,7 +267,7 @@ public sealed partial class HeroViewModel : ObservableObject
             bool hideSensitiveInfo)
         {
             var providerType = Catalog.ProviderTypeForInstance(candidate.Id, config);
-            var reset = TimelineReset.For(providerType, candidate.Snapshot);
+            var reset = TimelineReset.For(candidate.Snapshot);
             var label = SensitiveDisplay.ProviderName(candidate.Snapshot.Name, hideSensitiveInfo);
             var weeklyTokens = PlanTokenRules.EstimateWeeklyTokensMillions(
                 providerType,
@@ -297,10 +297,10 @@ public sealed partial class HeroViewModel : ObservableObject
         double FrequencyMinutes,
         string? FrequencyText)
     {
-        public static TimelineReset For(string providerType, ProviderSnapshot snapshot)
+        public static TimelineReset For(ProviderSnapshot snapshot)
         {
-            var candidates = ResetCandidates(providerType, snapshot)
-                .Select(window => ResetCandidate.From(providerType, window))
+            var candidates = ResetCandidates(snapshot)
+                .Select(ResetCandidate.From)
                 .Where(candidate => candidate is not null)
                 .Select(candidate => candidate!)
                 .ToList();
@@ -321,9 +321,9 @@ public sealed partial class HeroViewModel : ObservableObject
                 selected.FrequencyText);
         }
 
-        private static IEnumerable<SnapshotRateWindow> ResetCandidates(string providerType, ProviderSnapshot snapshot)
+        private static IEnumerable<SnapshotRateWindow> ResetCandidates(ProviderSnapshot snapshot)
         {
-            if (providerType == "antigravity" && snapshot.ModelQuotas.Count > 0)
+            if (snapshot.ModelQuotas.Count > 0)
             {
                 var modelCandidates = snapshot.ModelQuotas
                     .Where(ModelQuotaPolicy.CountsForProviderAvailability)
@@ -347,7 +347,7 @@ public sealed partial class HeroViewModel : ObservableObject
         string? ToolTip,
         string? FrequencyText)
     {
-        public static ResetCandidate? From(string providerType, SnapshotRateWindow window)
+        public static ResetCandidate? From(SnapshotRateWindow window)
         {
             var minutesUntil = double.PositiveInfinity;
             string? displayText = null;
@@ -360,7 +360,7 @@ public sealed partial class HeroViewModel : ObservableObject
                     out var when))
             {
                 minutesUntil = Math.Max(0, (when - DateTimeOffset.UtcNow).TotalMinutes);
-                var resetText = Quota.FmtReset(window.ResetsAt);
+                var resetText = ResetFormatter.FormatDurationUntil(window.ResetsAt);
                 if (!string.IsNullOrWhiteSpace(resetText))
                 {
                     displayText = resetText is "now" or "< 1h"
@@ -370,7 +370,7 @@ public sealed partial class HeroViewModel : ObservableObject
                 }
             }
 
-            var windowSortMinutes = ResolveWindowSortMinutes(providerType, window, minutesUntil);
+            var windowSortMinutes = ResolveWindowSortMinutes(window, minutesUntil);
             return new ResetCandidate(
                 windowSortMinutes,
                 minutesUntil,
@@ -405,10 +405,7 @@ public sealed partial class HeroViewModel : ObservableObject
             return I18n.T("timeline.resetEveryM", "n", minutes.ToString("0", CultureInfo.InvariantCulture));
         }
 
-        private static double ResolveWindowSortMinutes(
-            string providerType,
-            SnapshotRateWindow window,
-            double minutesUntil)
+        private static double ResolveWindowSortMinutes(SnapshotRateWindow window, double minutesUntil)
         {
             if (window.WindowMinutes is > 0)
                 return window.WindowMinutes.Value;
@@ -435,12 +432,6 @@ public sealed partial class HeroViewModel : ObservableObject
                 || label.Contains("credit", StringComparison.Ordinal)
                 || label.Contains("token plan", StringComparison.Ordinal)
                 || label.Contains("compensation", StringComparison.Ordinal))
-            {
-                return 30 * 24 * 60;
-            }
-
-            if (string.Equals(providerType, "mimo", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(providerType, "qoder", StringComparison.OrdinalIgnoreCase))
             {
                 return 30 * 24 * 60;
             }

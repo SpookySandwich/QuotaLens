@@ -13,7 +13,6 @@ public sealed partial class QuotaRowViewModel : ObservableObject
     public QuotaRowViewModel(
         RateWindow window,
         bool prominent = false,
-        string? resetPrefix = null,
         bool hideSensitive = false)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -22,7 +21,7 @@ public sealed partial class QuotaRowViewModel : ObservableObject
         IsQuota = window.Kind == RateWindowKind.Quota;
         var rawValueText = IsQuota
             ? ""
-            : window.ValueText ?? window.ResetDescription ?? I18n.T("common.notAvailable");
+            : window.ValueText ?? window.DetailText ?? I18n.T("common.notAvailable");
         IsValueHidden = hideSensitive && window.Sensitivity != RateWindowSensitivity.None;
         ValueText = IsValueHidden
             ? window.Sensitivity == RateWindowSensitivity.Financial
@@ -32,12 +31,7 @@ public sealed partial class QuotaRowViewModel : ObservableObject
         AvailablePercent = Quota.AvailablePct(window.UsedPercent);
         Severity = Quota.SeverityForAvailable(AvailablePercent);
         AvailableText = Quota.DisplayPct(AvailablePercent);
-        var reset = Quota.FmtReset(window.ResetsAt);
-        ResetText = reset is not null
-            ? $"{resetPrefix ?? I18n.T(IsQuota ? "card.resetsIn" : "card.periodEndsIn")} {reset}"
-            : IsQuota && !string.IsNullOrWhiteSpace(window.ResetDescription)
-                ? window.ResetDescription
-                : null;
+        ResetText = ResetFormatter.FormatCaption(window);
         IsProminent = prominent;
         AutomationId = $"MetricRow_{new string(Label.Select(character => char.IsLetterOrDigit(character) ? character : '_').ToArray())}";
         AutomationName = IsQuota
@@ -49,8 +43,7 @@ public sealed partial class QuotaRowViewModel : ObservableObject
         string label,
         double usedPercent,
         string? resetsAt,
-        bool prominent = false,
-        string? resetPrefix = null)
+        bool prominent = false)
         : this(
             new RateWindow
             {
@@ -58,8 +51,7 @@ public sealed partial class QuotaRowViewModel : ObservableObject
                 UsedPercent = usedPercent,
                 ResetsAt = resetsAt,
             },
-            prominent,
-            resetPrefix)
+            prominent)
     {
     }
 
@@ -79,7 +71,7 @@ public sealed partial class QuotaRowViewModel : ObservableObject
     public string AvailableSuffix => I18n.T("common.available");
 }
 
-/// <summary>An Antigravity family group ("Claude"/"Gemini"/"Other") + its best row.</summary>
+/// <summary>A provider-agnostic model family plus its most available quota row.</summary>
 public sealed partial class FamilyGroupViewModel : ObservableObject
 {
     public FamilyGroupViewModel(string family, QuotaRowViewModel best)
@@ -92,7 +84,7 @@ public sealed partial class FamilyGroupViewModel : ObservableObject
     public QuotaRowViewModel Best { get; }
 }
 
-/// <summary>A pooled-account row (codex-lb / antigravity accounts breakdown).</summary>
+/// <summary>A pooled-account quota breakdown.</summary>
 public sealed partial class AccountRowViewModel : ObservableObject
 {
     public AccountRowViewModel(AccountInfo account, int index, bool hideSensitive = false)
@@ -178,13 +170,13 @@ public sealed partial class AccountRowViewModel : ObservableObject
 
     private static string? FormatReset(string? resetsAt)
     {
-        return Quota.FmtReset(resetsAt);
+        return ResetFormatter.FormatDurationUntil(resetsAt);
     }
 
     private static string? FormatResetToolTip(string label, string? resetText)
     {
         return string.IsNullOrWhiteSpace(resetText)
             ? null
-            : $"{label} {I18n.T("card.resetsIn")} {resetText}";
+            : $"{label} {I18n.T("quota.resetsInCompact", "duration", resetText)}";
     }
 }

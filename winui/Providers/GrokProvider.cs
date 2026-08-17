@@ -400,7 +400,7 @@ public sealed class GrokProvider : IProvider
                     ? Quota.ClampPercent((double)onDemandUsed / onDemandCap * 100.0)
                     : onDemandUsed > 0 ? 100 : 0,
                 ResetsAt = resetsAt?.ToString("O", CultureInfo.InvariantCulture),
-                ResetDescription = onDemandCap > 0
+                DetailText = onDemandCap > 0
                     ? $"{Usd(onDemandUsed)} / {Usd(onDemandCap)} cap"
                     : $"{Usd(onDemandUsed)} used",
                 WindowMinutes = windowMinutes,
@@ -440,7 +440,7 @@ public sealed class GrokProvider : IProvider
                 Label = label,
                 UsedPercent = usedPercent,
                 ResetsAt = resetsAt?.ToString("O", CultureInfo.InvariantCulture),
-                ResetDescription = resetDescription,
+                DetailText = resetDescription,
                 WindowMinutes = windowMinutes,
             },
             Secondary = secondary,
@@ -497,7 +497,7 @@ public sealed class GrokProvider : IProvider
                     ? Quota.ClampPercent((double)onDemandUsedCents / onDemandCapCents.Value * 100.0)
                     : onDemandUsedCents > 0 ? 100 : 0,
                 ResetsAt = resetsAt?.ToString("O", CultureInfo.InvariantCulture),
-                ResetDescription = onDemandCapCents is > 0
+                DetailText = onDemandCapCents is > 0
                     ? $"{Usd(onDemandUsedCents)} / {Usd(onDemandCapCents.Value)} cap"
                     : $"{Usd(onDemandUsedCents)} used",
                 WindowMinutes = windowMinutes,
@@ -513,7 +513,7 @@ public sealed class GrokProvider : IProvider
                 Label = "Monthly included",
                 UsedPercent = usedPercent,
                 ResetsAt = resetsAt?.ToString("O", CultureInfo.InvariantCulture),
-                ResetDescription = primaryDescription,
+                DetailText = primaryDescription,
                 WindowMinutes = windowMinutes,
             },
             Secondary = secondary,
@@ -662,6 +662,7 @@ public sealed class GrokProvider : IProvider
             // Shared CLI launch path: resolves the configured/PATH binary including
             // .cmd/.bat shims, exactly like the other CLI-backed providers.
             var startInfo = HiddenCliProcess.CreateStartInfo(_binary, new[] { "agent", "stdio" });
+            startInfo.RedirectStandardInput = true;
             startInfo.StandardInputEncoding = Encoding.UTF8;
             startInfo.StandardOutputEncoding = Encoding.UTF8;
             startInfo.StandardErrorEncoding = Encoding.UTF8;

@@ -60,6 +60,108 @@ public sealed class ProviderItemViewModelTests
     }
 
     [TestMethod]
+    public void Update_WhenInvalidSnapshotCarriesLaunchRecovery_ShowsRenewAction()
+    {
+        var executable = TempExecutablePath();
+        var service = new FakeProviderService(new ProviderInstance("kimi", "kimi", "Kimi"));
+        service.Config.Set("kimi_app_path", executable);
+
+        try
+        {
+            File.WriteAllText(executable, "");
+            var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+            viewModel.Update(new ProviderSnapshot
+            {
+                ProviderId = "kimi",
+                Name = "Kimi",
+                Error = "Not available",
+                RecoveryAction = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "kimi.appSourceNote"),
+            }, refreshing: false);
+
+            Assert.IsTrue(viewModel.CanRenewSession);
+            StringAssert.Contains(viewModel.RenewSessionText, "Kimi");
+            StringAssert.Contains(viewModel.RenewSessionToolTip, "Kimi");
+        }
+        finally
+        {
+            File.Delete(executable);
+        }
+    }
+
+    [TestMethod]
+    public void Update_WhenHealthyFallbackDataExists_HidesRenewAction()
+    {
+        var executable = TempExecutablePath();
+        var service = new FakeProviderService(new ProviderInstance("kimi", "kimi", "Kimi"));
+        service.Config.Set("kimi_app_path", executable);
+
+        try
+        {
+            File.WriteAllText(executable, "");
+            var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+            viewModel.Update(new ProviderSnapshot
+            {
+                ProviderId = "kimi",
+                Name = "Kimi",
+                Primary = new RateWindow { Label = "Weekly", UsedPercent = 20 },
+                SourceState = new ProviderSourceState("app", "cli", UsedFallback: true),
+                SourceLabel = "Kimi Code CLI",
+            }, refreshing: false);
+
+            Assert.IsFalse(viewModel.CanRenewSession);
+        }
+        finally
+        {
+            File.Delete(executable);
+        }
+    }
+
+    [TestMethod]
+    public void Update_WhenAppCannotLaunch_HidesRenewAction()
+    {
+        var service = new FakeProviderService(new ProviderInstance("kimi", "kimi", "Kimi"));
+        service.Config.Set("kimi_app_path", @"C:missingKimi.exe");
+
+        var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+        viewModel.Update(new ProviderSnapshot
+        {
+            ProviderId = "kimi",
+            Name = "Kimi",
+            Error = "Not available",
+            RecoveryAction = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "kimi.appSourceNote"),
+        }, refreshing: false);
+
+        Assert.IsFalse(viewModel.CanRenewSession);
+    }
+
+    [TestMethod]
+    public void Update_WhenHealthySnapshotIncorrectlyCarriesRecovery_HidesRenewAction()
+    {
+        var executable = TempExecutablePath();
+        var service = new FakeProviderService(new ProviderInstance("kimi", "kimi", "Kimi"));
+        service.Config.Set("kimi_app_path", executable);
+
+        try
+        {
+            File.WriteAllText(executable, "");
+            var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+            viewModel.Update(new ProviderSnapshot
+            {
+                ProviderId = "kimi",
+                Name = "Kimi",
+                Primary = new RateWindow { Label = "Weekly", UsedPercent = 20 },
+                RecoveryAction = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "kimi.appSourceNote"),
+            }, refreshing: false);
+
+            Assert.IsFalse(viewModel.CanRenewSession);
+        }
+        finally
+        {
+            File.Delete(executable);
+        }
+    }
+
+    [TestMethod]
     public void Constructor_WhenLaunchExecutableIsMissing_HidesLaunchButton()
     {
         var service = new FakeProviderService(new ProviderInstance("qoder", "qoder", "Qoder"));
@@ -319,11 +421,25 @@ public sealed class ProviderItemViewModelTests
         {
             Label = "Monthly limit",
             UsedPercent = 25,
-            ResetDescription = "$75 of $100 remaining · resets monthly",
+            DetailText = "$75 of $100 remaining · resets monthly",
         });
 
         Assert.IsTrue(row.IsQuota);
         Assert.AreEqual("$75 of $100 remaining · resets monthly", row.ResetText);
+    }
+
+    [TestMethod]
+    public void QuotaRow_WithResetTime_UsesCanonicalResetInsteadOfProviderProse()
+    {
+        var row = new QuotaRowViewModel(new RateWindow
+        {
+            Label = "Weekly limit",
+            UsedPercent = 25,
+            ResetsAt = DateTimeOffset.UtcNow.AddHours(3).AddMinutes(13).ToString("O"),
+            DetailText = "You have used some of your weekly limit, it will fully refresh later.",
+        });
+
+        StringAssert.StartsWith(row.ResetText, "resets in 3h 12m");
     }
 
     [TestMethod]

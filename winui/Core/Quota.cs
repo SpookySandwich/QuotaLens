@@ -1,5 +1,3 @@
-using System.Globalization;
-
 namespace QuotaLens.Core;
 
 public enum Severity { Good, Busy, Warning, Critical }
@@ -42,19 +40,6 @@ public static class Quota
         : availablePct <= 50 ? Severity.Busy
         : Severity.Good;
 
-    /// <summary>"now" / "&lt; 1h" / "3h" / "2d 4h" — mirrors fmtReset.</summary>
-    public static string? FmtReset(string? iso)
-    {
-        if (string.IsNullOrEmpty(iso)) return null;
-        if (!DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var when))
-            return null;
-        var ms = (when - DateTimeOffset.UtcNow).TotalMilliseconds;
-        if (ms <= 0) return "now";
-        var h = (int)Math.Floor(ms / 3_600_000.0);
-        if (h < 1) return "< 1h";
-        return h > 24 ? $"{h / 24}d {h % 24}h" : $"{h}h";
-    }
-
     /// <summary>Stale when older than 2x the refresh interval (min 60s floor).</summary>
     public static bool IsStale(DateTimeOffset updatedAt, double refreshMs)
     {
@@ -63,16 +48,12 @@ public static class Quota
         return ageMs > Math.Max(60_000.0, refreshMs) * 2.0;
     }
 
-    /// <summary>Headline available % for sorting/hero — antigravity uses its priority families.</summary>
-    public static double ProviderAvailability(string id, ProviderSnapshot s, IConfig? config = null)
-        => ProviderAvailabilityState(id, s, config).Percent;
+    /// <summary>Headline available percentage derived only from structured snapshot data.</summary>
+    public static double ProviderAvailability(ProviderSnapshot snapshot)
+        => ProviderAvailabilityState(snapshot).Percent;
 
-    public static ProviderAvailability ProviderAvailabilityState(
-        string id,
-        ProviderSnapshot s,
-        IConfig? config = null)
+    public static ProviderAvailability ProviderAvailabilityState(ProviderSnapshot s)
     {
-        var providerType = Catalog.ProviderTypeForInstance(id, config);
         // An explicit provider-level unlimited contract is authoritative. Usage,
         // activity, or bonus windows can still be displayed, but cannot turn an
         // unlimited entitlement into a finite one.
@@ -94,15 +75,12 @@ public static class Quota
                 groupedWindows.Max());
         }
 
-        if (providerType == "antigravity")
+        var priority = s.ModelQuotas.Where(ModelQuotaPolicy.CountsForProviderAvailability).ToList();
+        if (priority.Count > 0)
         {
-            var priority = s.ModelQuotas.Where(ModelQuotaPolicy.CountsForProviderAvailability).ToList();
-            if (priority.Count > 0)
-            {
-                return new ProviderAvailability(
-                    ProviderAvailabilityKind.Finite,
-                    priority.Max(quota => ClampPercent(quota.RemainingPercent)));
-            }
+            return new ProviderAvailability(
+                ProviderAvailabilityKind.Finite,
+                priority.Max(quota => ClampPercent(quota.RemainingPercent)));
         }
 
         var windows = ProviderSnapshotWindows

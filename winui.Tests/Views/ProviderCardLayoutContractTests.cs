@@ -36,6 +36,23 @@ public sealed class ProviderCardLayoutContractTests
             "HasSecondaryWindow");
     }
 
+    [TestMethod]
+    public void SessionRecoveryAction_UsesOneShotButtonSemantics()
+    {
+        var document = XDocument.Load(FindProviderCardXaml());
+        XNamespace presentation = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+
+        var action = document
+            .Descendants(presentation + "Button")
+            .Single(element => ((string?)element.Attribute("AutomationProperties.AutomationId"))
+                ?.Contains("RenewSessionAutomationId", StringComparison.Ordinal) == true);
+
+        Assert.AreEqual("{StaticResource CardActionButton}", (string?)action.Attribute("Style"));
+        Assert.IsFalse(document.Descendants(presentation + "HyperlinkButton").Any(element =>
+            ((string?)element.Attribute("AutomationProperties.AutomationId"))
+                ?.Contains("RenewSessionAutomationId", StringComparison.Ordinal) == true));
+    }
+
     private static string FindProviderCardXaml()
     {
         for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)

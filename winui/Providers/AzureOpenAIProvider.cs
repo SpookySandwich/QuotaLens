@@ -104,7 +104,7 @@ public sealed class AzureOpenAIProvider : IProvider
                 Kind = RateWindowKind.Informational,
                 UsedPercent = Quota.ClampPercent(current.Value / limit.Value * 100),
                 ValueText = $"{Format(current.Value)} of {Format(limit.Value)}{UnitSuffix(unit)} allocated",
-                ResetDescription = "Regional capacity allocation; not live request consumption",
+                DetailText = "Regional capacity allocation; not live request consumption",
                 CountsForAvailability = false,
             });
         }

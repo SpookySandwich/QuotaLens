@@ -118,6 +118,67 @@ public sealed class ConfigServiceTests
     }
 
     [TestMethod]
+    public void Load_WithRenamedScopedConfigKey_MigratesThroughCatalogAlias()
+    {
+        var dir = NewTempDir();
+
+        try
+        {
+            WriteConfig(dir, new Dictionary<string, string>
+            {
+                ["provider_instances_explicit"] = "true",
+                ["provider_scoped_config_v2"] = "true",
+                ["antigravity.show_antigravity_other_quotas"] = "true",
+            });
+            WriteInstances(dir, new[]
+            {
+                new ProviderInstance("antigravity", "antigravity", "Antigravity"),
+            });
+
+            var config = new ConfigService(dir, () => null);
+
+            Assert.AreEqual("true", config.GetScoped("antigravity", "show_other_quota_groups"));
+            Assert.AreEqual("", config.GetScoped("antigravity", "show_antigravity_other_quotas"));
+            Assert.AreEqual("true", config.Get("config_key_aliases_v1"));
+            Assert.IsFalse(ReadConfig(dir).ContainsKey("antigravity.show_antigravity_other_quotas"));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    [TestMethod]
+    public void Load_WhenRenamedAndCurrentConfigKeysBothExist_PreservesCurrentValue()
+    {
+        var dir = NewTempDir();
+
+        try
+        {
+            WriteConfig(dir, new Dictionary<string, string>
+            {
+                ["provider_instances_explicit"] = "true",
+                ["provider_scoped_config_v2"] = "true",
+                ["antigravity.show_antigravity_other_quotas"] = "true",
+                ["antigravity.show_other_quota_groups"] = "false",
+            });
+            WriteInstances(dir, new[]
+            {
+                new ProviderInstance("antigravity", "antigravity", "Antigravity"),
+            });
+
+            var config = new ConfigService(dir, () => null);
+
+            Assert.AreEqual("false", config.GetScoped("antigravity", "show_other_quota_groups"));
+            Assert.IsFalse(ReadConfig(dir).ContainsKey("antigravity.show_antigravity_other_quotas"));
+        }
+        finally
+        {
+            DeleteTempDir(dir);
+        }
+    }
+
+    [TestMethod]
     public async Task Remove_ConfigKey_RemovesPersistedOverride()
     {
         var dir = NewTempDir();

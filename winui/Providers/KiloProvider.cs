@@ -124,7 +124,7 @@ public sealed class KiloProvider : IProvider
                 {
                     Label = string.IsNullOrWhiteSpace(organizationId) ? "Activity" : "Organization",
                     UsedPercent = 0,
-                    ResetDescription = string.IsNullOrWhiteSpace(organizationId)
+                    DetailText = string.IsNullOrWhiteSpace(organizationId)
                         ? string.Join(" · ", planParts)
                         : $"{organizationId} · {string.Join(" · ", planParts)}",
                 }
@@ -223,7 +223,7 @@ public sealed class KiloProvider : IProvider
             UsedPercent = total is not null
                 ? total.Value > 0 ? Quota.ClampPercent(used / total.Value * 100) : 100
                 : 0,
-            ResetDescription = total is not null ? $"{Compact(used)}/{Compact(total.Value)} credits" : I18n.T("quota.noUsageData"),
+            DetailText = total is not null ? $"{Compact(used)}/{Compact(total.Value)} credits" : I18n.T("quota.noUsageData"),
         };
     }
 
@@ -245,7 +245,7 @@ public sealed class KiloProvider : IProvider
             Label = "Kilo Pass",
             UsedPercent = total.Value > 0 ? Quota.ClampPercent(used / total.Value * 100) : 100,
             ResetsAt = usage.PassResetsAt,
-            ResetDescription = detail,
+            DetailText = detail,
         };
     }
 

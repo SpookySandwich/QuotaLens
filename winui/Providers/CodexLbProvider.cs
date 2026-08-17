@@ -195,7 +195,6 @@ public sealed class CodexLbProvider : IProvider
                 Label = "Effective Usage",
                 UsedPercent = effectiveUsed,
                 ResetsAt = aggregate.NextIncrementAt,
-                ResetDescription = aggregate.NextIncrementAt is null ? null : "next increase in",
                 WindowMinutes = null,
             },
             Secondary = null,

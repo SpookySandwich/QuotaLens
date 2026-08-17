@@ -21,13 +21,13 @@ public sealed class AntigravityProviderTests
 
         Assert.AreEqual("antigravity-main", snapshot.ProviderId);
         CollectionAssert.AreEqual(
-            new[] { "Gemini 5-hour", "Gemini weekly", "Claude/GPT 5-hour", "Claude/GPT weekly" },
+            new[] { "Gemini weekly", "Gemini 5-hour", "Claude/GPT weekly", "Claude/GPT 5-hour" },
             windows.Select(window => window.Label).ToArray());
         CollectionAssert.AreEqual(
-            new long?[] { 300, 10080, 300, 10080 },
+            new long?[] { 10080, 300, 10080, 300 },
             windows.Select(window => window.WindowMinutes).ToArray());
         CollectionAssert.AreEqual(
-            new[] { 9d, 18d, 27d, 36d },
+            new[] { 18d, 9d, 36d, 27d },
             windows.Select(window => window.UsedPercent).ToArray());
     }
 
@@ -60,7 +60,7 @@ public sealed class AntigravityProviderTests
 
         Assert.AreEqual("Gemini", snapshot.Primary.AvailabilityGroup);
         Assert.AreEqual("Claude/GPT", snapshot.Tertiary!.AvailabilityGroup);
-        Assert.AreEqual(60, Quota.ProviderAvailability("antigravity", snapshot), 0.001);
+        Assert.AreEqual(60, Quota.ProviderAvailability(snapshot), 0.001);
     }
 
     [TestMethod]
@@ -137,6 +137,30 @@ public sealed class AntigravityProviderTests
         Assert.HasCount(1, snapshot.AdditionalWindows);
         Assert.AreEqual("Claude / GPT quota", snapshot.AdditionalWindows[0].Label);
         Assert.IsNull(snapshot.AdditionalWindows[0].WindowMinutes);
+    }
+
+    [TestMethod]
+    public async Task Live_Discover_ReturnsSuccessfully()
+    {
+        var provider = new AntigravityProvider();
+        try
+        {
+            var snapshot = await provider.FetchAsync("antigravity", new EmptyConfig(), CancellationToken.None);
+            Assert.IsNotNull(snapshot);
+            Assert.IsNotNull(snapshot.Primary);
+        }
+        catch (ProviderException error) when (error.Message.Contains("must already be running", StringComparison.OrdinalIgnoreCase))
+        {
+            Assert.Inconclusive("Live Antigravity integration is unavailable because the app is not running.");
+        }
+    }
+
+    private sealed class EmptyConfig : IConfig
+    {
+        public string Get(string key, string fallback = "") => fallback;
+        public string GetScoped(string instanceId, string key, string fallback = "") => fallback;
+        public bool HasScoped(string instanceId, string key) => false;
+        public bool GetBool(string key, bool fallback = false) => fallback;
     }
 
     private const string QuotaSummaryJson =

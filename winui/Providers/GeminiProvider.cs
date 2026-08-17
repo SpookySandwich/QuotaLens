@@ -28,8 +28,8 @@ public sealed partial class GeminiProvider : IProvider
     {
         _sources = new IProviderSource[]
         {
-            new GeminiCliSource(this),
             new AntigravityIdeSource(),
+            new GeminiCliSource(this),
         };
     }
 
@@ -100,24 +100,95 @@ public sealed partial class GeminiProvider : IProvider
         try
         {
             using var doc = JsonDocument.Parse(json);
-            if (!doc.RootElement.TryGetProperty("buckets", out var buckets) || buckets.ValueKind != JsonValueKind.Array)
+            var root = doc.RootElement;
+            var payload = FirstObject(root, "response", "summary") ?? root;
+
+            if (payload.TryGetProperty("groups", out var groups) && groups.ValueKind == JsonValueKind.Array)
+            {
+                var summarySnapshot = AntigravityProvider.ParseQuotaSummary("gemini", json, DateTimeOffset.UtcNow);
+                var windows = ProviderSnapshotWindows.AllWindows(summarySnapshot).ToList();
+                return new GeminiUsage(Array.Empty<GeminiModelQuota>(), email, null, windows);
+            }
+
+            if (!payload.TryGetProperty("buckets", out var buckets) || buckets.ValueKind != JsonValueKind.Array)
                 throw new ProviderException("Parse error: Gemini quota response did not include buckets");
 
+            var cadenceWindows = new List<(int GroupRank, int CadenceRank, RateWindow Window)>();
             var byModel = new Dictionary<string, GeminiModelQuota>(StringComparer.OrdinalIgnoreCase);
+
             foreach (var bucket in buckets.EnumerateArray())
             {
-                var model = StringValue(bucket, "modelId", "model_id", "model");
-                var remainingFraction = DoubleValue(bucket, "remainingFraction", "remaining_fraction");
-                if (string.IsNullOrWhiteSpace(model) || remainingFraction is null)
+                if (bucket.ValueKind != JsonValueKind.Object)
                     continue;
 
-                var quota = new GeminiModelQuota(
-                    model,
-                    Quota.ClampPercent(remainingFraction.Value * 100),
-                    IsoValue(bucket, "resetTime", "reset_time"),
-                    ResetDescription(IsoValue(bucket, "resetTime", "reset_time")));
-                if (!byModel.TryGetValue(model, out var existing) || quota.PercentLeft < existing.PercentLeft)
-                    byModel[model] = quota;
+                var bucketId = StringValue(bucket, "bucketId", "bucket_id")?.Trim();
+                var displayName = StringValue(bucket, "displayName", "display_name");
+                var model = StringValue(bucket, "modelId", "model_id", "model");
+                var remainingFraction = DoubleValue(bucket, "remainingFraction", "remaining_fraction");
+
+                if (remainingFraction is null)
+                    continue;
+
+                var cadence = AntigravityProvider.QuotaCadence(bucketId ?? "", displayName ?? model ?? "");
+                if (cadence != AntigravityProvider.QuotaCadenceKind.Other)
+                {
+                    var family = AntigravityProvider.QuotaFamily(bucketId ?? displayName ?? model ?? "Gemini");
+                    if (string.Equals(family, "Quota", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(family, displayName, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(family, bucketId, StringComparison.OrdinalIgnoreCase))
+                    {
+                        family = "Gemini";
+                    }
+
+                    var label = cadence switch
+                    {
+                        AntigravityProvider.QuotaCadenceKind.Weekly => $"{family} weekly",
+                        AntigravityProvider.QuotaCadenceKind.FiveHour => $"{family} 5-hour",
+                        _ => $"{family} {displayName ?? bucketId}",
+                    };
+                    var reset = IsoValue(bucket, "resetTime", "reset_time") ?? StringValue(bucket, "resetTime", "reset_time");
+                    cadenceWindows.Add((
+                        AntigravityProvider.GroupRank(family),
+                        cadence switch
+                        {
+                            AntigravityProvider.QuotaCadenceKind.Weekly => 0,
+                            AntigravityProvider.QuotaCadenceKind.FiveHour => 1,
+                            _ => 2,
+                        },
+                        new RateWindow
+                        {
+                            Label = label,
+                            AvailabilityGroup = family,
+                            UsedPercent = Quota.UsedPercentFromRemaining(Quota.ClampPercent(remainingFraction.Value * 100)),
+                            ResetsAt = reset,
+                            WindowMinutes = cadence switch
+                            {
+                                AntigravityProvider.QuotaCadenceKind.Weekly => 7 * 24 * 60,
+                                AntigravityProvider.QuotaCadenceKind.FiveHour => 5 * 60,
+                                _ => null,
+                            },
+                        }));
+                }
+
+                if (!string.IsNullOrWhiteSpace(model))
+                {
+                    var quota = new GeminiModelQuota(
+                        model,
+                        Quota.ClampPercent(remainingFraction.Value * 100),
+                        IsoValue(bucket, "resetTime", "reset_time"));
+                    if (!byModel.TryGetValue(model, out var existing) || quota.PercentLeft < existing.PercentLeft)
+                        byModel[model] = quota;
+                }
+            }
+
+            if (cadenceWindows.Count > 0)
+            {
+                var ordered = cadenceWindows
+                    .OrderBy(item => item.GroupRank)
+                    .ThenBy(item => item.CadenceRank)
+                    .Select(item => item.Window)
+                    .ToList();
+                return new GeminiUsage(byModel.Values.OrderBy(quota => quota.ModelId, StringComparer.OrdinalIgnoreCase).ToArray(), email, null, ordered);
             }
 
             if (byModel.Count == 0)
@@ -133,25 +204,68 @@ public sealed partial class GeminiProvider : IProvider
 
     internal static ProviderSnapshot Snapshot(GeminiUsage usage, DateTimeOffset? updatedAt = null)
     {
+        var plan = string.IsNullOrWhiteSpace(usage.AccountPlan) ? "" : $" · {usage.AccountPlan}";
+
+        if (usage.Windows is not null && usage.Windows.Count > 0)
+        {
+            var primary = usage.Windows[0];
+            var secondary = usage.Windows.ElementAtOrDefault(1);
+            var tertiary = usage.Windows.ElementAtOrDefault(2);
+            var additional = usage.Windows.Skip(3).ToList();
+
+            return new ProviderSnapshot
+            {
+                ProviderId = "gemini",
+                Name = $"Gemini{plan}",
+                PlanName = usage.AccountPlan,
+                Primary = primary,
+                Secondary = secondary,
+                Tertiary = tertiary,
+                AdditionalWindows = additional,
+                Accounts = string.IsNullOrWhiteSpace(usage.AccountEmail) && string.IsNullOrWhiteSpace(usage.AccountPlan)
+                    ? new List<AccountInfo>()
+                    : new List<AccountInfo>
+                    {
+                        new()
+                        {
+                            Email = usage.AccountEmail,
+                            Plan = usage.AccountPlan,
+                        },
+                    },
+                ModelQuotas = usage.Quotas.Select(quota => new ModelQuota
+                {
+                    Model = quota.ModelId,
+                    Family = GeminiFamily(quota.ModelId),
+                    FamilyKind = ModelQuotaFamilyKind.Gemini,
+                    WindowType = "Daily",
+                    RemainingPercent = quota.PercentLeft,
+                    UsedPercent = Quota.ClampPercent(100 - quota.PercentLeft),
+                    ResetsAt = quota.ResetsAt,
+                }).ToList(),
+                SourceLabel = "Gemini OAuth",
+                Confidence = Confidence.SemiOfficial,
+                UpdatedAt = updatedAt ?? DateTimeOffset.UtcNow,
+            };
+        }
+
         var lower = usage.Quotas.Select(quota => (Model: quota.ModelId.ToLowerInvariant(), Quota: quota)).ToArray();
         var pro = lower.Where(item => item.Model.Contains("pro", StringComparison.Ordinal)).Select(item => item.Quota).MinBy(item => item.PercentLeft);
         var flashLite = lower.Where(item => item.Model.Contains("flash-lite", StringComparison.Ordinal)).Select(item => item.Quota).MinBy(item => item.PercentLeft);
         var flash = lower.Where(item => item.Model.Contains("flash", StringComparison.Ordinal) && !item.Model.Contains("flash-lite", StringComparison.Ordinal)).Select(item => item.Quota).MinBy(item => item.PercentLeft);
         var fallback = usage.Quotas.MinBy(item => item.PercentLeft);
 
-        var primary = ToWindow("Pro", pro ?? fallback)!;
-        var secondary = ToWindow("Flash", flash);
-        var tertiary = ToWindow("Flash Lite", flashLite);
-        var plan = string.IsNullOrWhiteSpace(usage.AccountPlan) ? "" : $" · {usage.AccountPlan}";
+        var primaryFallback = ToWindow("Pro", pro ?? fallback)!;
+        var secondaryFallback = ToWindow("Flash", flash);
+        var tertiaryFallback = ToWindow("Flash Lite", flashLite);
 
         return new ProviderSnapshot
         {
             ProviderId = "gemini",
             Name = $"Gemini{plan}",
             PlanName = usage.AccountPlan,
-            Primary = primary,
-            Secondary = secondary,
-            Tertiary = tertiary,
+            Primary = primaryFallback,
+            Secondary = secondaryFallback,
+            Tertiary = tertiaryFallback,
             Accounts = string.IsNullOrWhiteSpace(usage.AccountEmail) && string.IsNullOrWhiteSpace(usage.AccountPlan)
                 ? new List<AccountInfo>()
                 : new List<AccountInfo>
@@ -188,7 +302,6 @@ public sealed partial class GeminiProvider : IProvider
             Label = label,
             UsedPercent = Quota.ClampPercent(100 - quota.PercentLeft),
             ResetsAt = quota.ResetsAt,
-            ResetDescription = quota.ResetDescription,
             WindowMinutes = 24 * 60,
         };
     }
@@ -472,6 +585,17 @@ public sealed partial class GeminiProvider : IProvider
         };
     }
 
+    private static JsonElement? FirstObject(JsonElement parent, params string[] names)
+    {
+        foreach (var name in names)
+        {
+            if (parent.TryGetProperty(name, out var element) && element.ValueKind == JsonValueKind.Object)
+                return element;
+        }
+
+        return null;
+    }
+
     private static string? StringValue(JsonElement obj, params string[] keys)
     {
         foreach (var key in keys)
@@ -522,35 +646,17 @@ public sealed partial class GeminiProvider : IProvider
             : null;
     }
 
-    private static string? ResetDescription(string? iso)
-    {
-        if (string.IsNullOrWhiteSpace(iso)
-            || !DateTimeOffset.TryParse(iso, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var reset))
-        {
-            return null;
-        }
-
-        var interval = reset - DateTimeOffset.UtcNow;
-        if (interval <= TimeSpan.Zero)
-            return I18n.T("quota.resetsSoon");
-        return interval.TotalHours >= 1
-            ? I18n.T("quota.resetsInHM",
-                new Dictionary<string, string>
-                {
-                    ["h"] = ((int)interval.TotalHours).ToString(),
-                    ["m"] = interval.Minutes.ToString(),
-                })
-            : I18n.T("quota.resetsInM",
-                "m", Math.Max(0, interval.Minutes).ToString());
-    }
-
     private static string? Clean(string? value) => ProviderConfig.Clean(value);
 
     private static string JsonEscape(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
 
-    internal sealed record GeminiUsage(IReadOnlyList<GeminiModelQuota> Quotas, string? AccountEmail, string? AccountPlan);
-    internal sealed record GeminiModelQuota(string ModelId, double PercentLeft, string? ResetsAt, string? ResetDescription);
+    internal sealed record GeminiUsage(
+        IReadOnlyList<GeminiModelQuota> Quotas,
+        string? AccountEmail,
+        string? AccountPlan,
+        IReadOnlyList<RateWindow>? Windows = null);
+    internal sealed record GeminiModelQuota(string ModelId, double PercentLeft, string? ResetsAt);
     private sealed record OAuthCredentials(
         string? AccessToken,
         string? IdToken,
@@ -599,8 +705,14 @@ public sealed partial class GeminiProvider : IProvider
         public string Name => "Antigravity IDE";
         public IReadOnlyList<string> ConfigFieldKeys => new[] { "gemini_app_path" };
         public bool IsAvailable(string instanceId, IConfig config) => AntigravityProvider.IsRunning();
-        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
-            Provider.FetchAsync(instanceId, config, ct);
+        public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
+        {
+            var snap = await Provider.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
+            snap.ProviderId = instanceId;
+            snap.Name = "Gemini" + (string.IsNullOrWhiteSpace(snap.PlanName) ? "" : $" · {snap.PlanName}");
+            snap.SourceLabel = "Antigravity local probe";
+            return snap;
+        }
     }
 
 }

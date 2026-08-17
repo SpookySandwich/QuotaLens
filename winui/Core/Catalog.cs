@@ -327,6 +327,17 @@ public static class Catalog
 
     public static IReadOnlyDictionary<string, string> DefaultConfig => DefaultConfigValue.Value;
 
+    /// <summary>
+    /// Renamed configuration fields. ConfigService applies these aliases generically
+    /// to both global and instance-scoped keys, so compatibility does not leak into
+    /// provider or view-model code.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> ConfigKeyAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["show_antigravity_other_quotas"] = "show_other_quota_groups",
+        };
+
     private static readonly IReadOnlyDictionary<string, string> GlobalDefaultConfig = new Dictionary<string, string>
     {
         [DefaultLaunchEditorPathKey] = "",
@@ -362,8 +373,17 @@ public static class Catalog
     private static readonly IReadOnlyDictionary<string, string> FieldDefaultOverrides = new Dictionary<string, string>
     {
         ["codex_lb_url"] = "http://127.0.0.1:2455",
-        ["show_antigravity_other_quotas"] = "false",
+        ["show_other_quota_groups"] = "false",
     };
+
+    private static readonly IReadOnlyDictionary<string, string> PlanValueOverrideKeys =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["codex-lb"] = "codex_lb_value",
+        };
+
+    public static string? PlanValueOverrideKeyFor(string providerType) =>
+        PlanValueOverrideKeys.TryGetValue(providerType, out var key) ? key : null;
 
     public static readonly IReadOnlySet<string> SensitiveKeys = new HashSet<string>
     {
@@ -404,9 +424,9 @@ public static class Catalog
         },
         ["gemini"] = new[]
         {
-            new ProviderField("gemini_app_path", "Anti-Gravity app path", @"%LOCALAPPDATA%\Programs\Antigravity IDE\Antigravity IDE.exe",
+            new ProviderField("gemini_app_path", "Desktop app path", "",
                 IsFilePath: true, IsGlobal: true,
-                Description: "Anti-Gravity desktop app executable. Leave empty to auto-detect the installed app."),
+                Description: "Optional desktop app or editor executable to launch from the card. Leave empty to use default editor or disable the launch button."),
             new ProviderField("gemini_home", "Gemini CLI data directory", @"%USERPROFILE%\.gemini",
                 Description: "Directory where the Gemini CLI stores its OAuth credentials (oauth_creds.json). Leave empty to use the .gemini directory under your user profile."),
             new ProviderField("gemini_path", "Gemini CLI executable", "gemini", IsFilePath: true,
@@ -485,7 +505,7 @@ public static class Catalog
         ["antigravity"] = new[]
         {
 
-            new ProviderField("show_antigravity_other_quotas", "Show Other model group", IsToggle: true,
+            new ProviderField("show_other_quota_groups", "Show Other model group", IsToggle: true,
                 Description: "Include non-Claude and non-Gemini Antigravity model quotas in the card."),
         },
         ["bayesdl"] = new[]
@@ -619,11 +639,16 @@ public static class Catalog
         },
         ["zai"] = new[]
         {
-            new ProviderField("zai_key", "API Key", "...", IsPassword: true, IsRequired: true),
+            new ProviderField("zai_key", "API Key", "...", IsPassword: true,
+                Description: "z.ai API key for the API Key source. Leave empty when using the local ZCode login (ZCode source) — the two measure different pools."),
             new ProviderField("zai_base_url", "API base URL", "https://api.z.ai",
                 Description: "Optional z.ai API base URL. Use https://open.bigmodel.cn for BigModel CN accounts."),
             new ProviderField("zai_quota_url", "Quota URL", "https://api.z.ai/api/monitor/usage/quota/limit",
                 Description: "Optional full quota URL. Leave empty to derive it from the base URL."),
+            new ProviderField("zai_home", "ZCode data folder", @"%USERPROFILE%\.zcode", IsFilePath: true,
+                Description: "Where ZCode keeps its signed-in session (credentials live under v2). Set this if ZCode stores its data somewhere other than the default."),
+            new ProviderField("zai_app_path", "ZCode app location", @"%LOCALAPPDATA%\Programs\ZCode\ZCode.exe", IsFilePath: true,
+                Description: "Only needed if ZCode is installed outside the default location."),
         },
         ["llmproxy"] = new[]
         {
@@ -1399,16 +1424,10 @@ public static class Catalog
             },
             new[] { "Kimi.exe", "kimi.exe" }),
         ["gemini"] = new(
-            "Anti-Gravity",
+            "Gemini",
             "gemini_app_path",
-            new[]
-            {
-                @"%LOCALAPPDATA%\Programs\Antigravity IDE\Antigravity IDE.exe",
-                @"%LOCALAPPDATA%\Programs\Antigravity\Antigravity.exe",
-                @"%ProgramFiles%\Antigravity IDE\Antigravity IDE.exe",
-                @"%ProgramFiles%\Antigravity\Antigravity.exe",
-            },
-            new[] { "Antigravity IDE.exe", "Antigravity.exe" }),
+            Array.Empty<string>(),
+            Array.Empty<string>()),
         ["openai"] = new(
             "ChatGPT",
             "openai_app_path",

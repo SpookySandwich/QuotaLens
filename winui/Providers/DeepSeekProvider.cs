@@ -118,7 +118,7 @@ public sealed class DeepSeekProvider : IProvider
                     Label = "Balance",
                     UsedPercent = 0.0,
                     ResetsAt = null,
-                    ResetDescription = I18n.T("quota.noBalanceData"),
+                    DetailText = I18n.T("quota.noBalanceData"),
                     WindowMinutes = null,
                 },
                 Balance = new BalanceInfo { Currency = "USD", Total = 0.0, Paid = 0.0, Granted = 0.0 },
@@ -154,7 +154,7 @@ public sealed class DeepSeekProvider : IProvider
                 Label = "Balance",
                 UsedPercent = (total <= 0.0 || !data.IsAvailable) ? 100.0 : 0.0,
                 ResetsAt = null,
-                ResetDescription = desc,
+                DetailText = desc,
                 WindowMinutes = null,
             },
             Balance = new BalanceInfo

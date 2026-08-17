@@ -173,7 +173,7 @@ public sealed class KiroProvider : IProvider
                 Label = "Monthly credits",
                 UsedPercent = Quota.ClampPercent(percent ?? 0),
                 ResetsAt = reset,
-                ResetDescription = description,
+                DetailText = description,
             },
             Secondary = bonus is null || bonus.Value.Total <= 0
                 ? null
@@ -182,7 +182,7 @@ public sealed class KiroProvider : IProvider
                     Label = "Bonus credits",
                     UsedPercent = Quota.ClampPercent(bonus.Value.Used / bonus.Value.Total * 100),
                     ResetsAt = bonusReset,
-                    ResetDescription = $"{bonus.Value.Used.ToString("0.##", CultureInfo.InvariantCulture)} / " +
+                    DetailText = $"{bonus.Value.Used.ToString("0.##", CultureInfo.InvariantCulture)} / " +
                         $"{bonus.Value.Total.ToString("0.##", CultureInfo.InvariantCulture)} credits",
                 },
             Accounts = new List<AccountInfo>
@@ -237,7 +237,7 @@ public sealed class KiroProvider : IProvider
     {
         Label = label,
         UsedPercent = Quota.ClampPercent(usedPercent),
-        ResetDescription = "Current conversation context",
+        DetailText = "Current conversation context",
         CountsForAvailability = false,
     };
 

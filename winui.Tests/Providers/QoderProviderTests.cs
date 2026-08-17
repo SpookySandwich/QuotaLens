@@ -37,8 +37,9 @@ public sealed class QoderProviderTests
 
         Assert.AreEqual("Plan Credits", snapshot.Primary.Label);
         Assert.AreEqual(0.0, snapshot.Primary.UsedPercent);
-        Assert.AreEqual("0/300 credits (300 left)", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("0/300 credits (300 left)", snapshot.Primary.DetailText);
         Assert.IsNotNull(snapshot.Primary.ResetsAt);
+        Assert.AreEqual(30 * 24 * 60, snapshot.Primary.WindowMinutes);
 
         Assert.IsNotNull(snapshot.Balance);
         Assert.AreEqual("credits", snapshot.Balance!.Currency);
@@ -64,7 +65,7 @@ public sealed class QoderProviderTests
 
         Assert.AreEqual("Qoder · Pro", snapshot.Name);
         Assert.AreEqual(25.0, snapshot.Primary.UsedPercent);
-        Assert.AreEqual("75/300 credits (225 left)", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("75/300 credits (225 left)", snapshot.Primary.DetailText);
     }
 
     [TestMethod]
@@ -99,7 +100,7 @@ public sealed class QoderProviderTests
 
         Assert.AreEqual("Total Credits", snapshot.Primary.Label);
         Assert.AreEqual(62.0, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("620/1000 credits (380 left)", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("620/1000 credits (380 left)", snapshot.Primary.DetailText);
         Assert.IsNull(snapshot.Secondary);
         Assert.IsNull(snapshot.Tertiary);
         Assert.HasCount(3, snapshot.AdditionalWindows);
@@ -151,7 +152,7 @@ public sealed class QoderProviderTests
 
         Assert.AreEqual("Qoder · Standard", snapshot.Name);
         Assert.AreEqual(100.0, snapshot.Primary.UsedPercent);
-        Assert.AreEqual("0/0 credits (0 left)", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("0/0 credits (0 left)", snapshot.Primary.DetailText);
         Assert.IsNull(snapshot.Primary.ResetsAt);
         Assert.AreEqual(0.0, snapshot.Balance!.Total);
     }

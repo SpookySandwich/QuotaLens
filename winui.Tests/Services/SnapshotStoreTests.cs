@@ -24,6 +24,7 @@ public sealed class SnapshotStoreTests
                 ProviderId = "grok-abc",
                 Name = "Grok",
                 Primary = new RateWindow { Label = "Weekly included", UsedPercent = 42.5 },
+                SourceState = new ProviderSourceState("app", "cli", UsedFallback: true),
                 UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-5),
             });
 
@@ -31,6 +32,8 @@ public sealed class SnapshotStoreTests
             Assert.IsNotNull(loaded);
             Assert.AreEqual("Weekly included", loaded!.Primary.Label);
             Assert.AreEqual(42.5, loaded.Primary.UsedPercent);
+            Assert.AreEqual("cli", loaded.SourceState?.EffectiveSourceId);
+            Assert.IsTrue(loaded.SourceState!.UsedFallback);
 
             // An error snapshot must NOT overwrite the last good data.
             store.Save("grok-abc", "grok", new ProviderSnapshot

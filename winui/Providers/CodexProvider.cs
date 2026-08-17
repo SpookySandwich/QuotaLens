@@ -84,7 +84,7 @@ public sealed class CodexProvider : IProvider
             {
                 Label = "Credits",
                 UsedPercent = credits.Total > 0 ? 0.0 : 100.0,
-                ResetDescription = $"{credits.Total.ToString("0.##", CultureInfo.InvariantCulture)} credits remaining",
+                DetailText = $"{credits.Total.ToString("0.##", CultureInfo.InvariantCulture)} credits remaining",
             };
         }
 
@@ -273,7 +273,6 @@ public sealed class CodexProvider : IProvider
             Label = label ?? WindowLabel(windowMinutes),
             UsedPercent = Quota.ClampPercent(usedPercent.Value),
             ResetsAt = resetsAt,
-            ResetDescription = resetsAt is null ? null : "resets",
             WindowMinutes = windowMinutes,
         };
     }

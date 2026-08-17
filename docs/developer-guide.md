@@ -13,7 +13,7 @@ dotnet build .\QuotaLens.slnx -c Debug -p:Platform=x64
 dotnet test  .\QuotaLens.slnx -c Debug -p:Platform=x64
 ```
 
-当前约 687 个测试，覆盖额度计算、平台解析、刷新调度、加号流程和推荐逻辑。
+当前 727 个测试，覆盖额度计算、平台解析、刷新调度、加号流程和推荐逻辑。
 
 ## 打包
 
@@ -30,6 +30,18 @@ dotnet test  .\QuotaLens.slnx -c Debug -p:Platform=x64
 ## 配置页
 
 每个可添加平台都必须走同一张配置页。`ProviderAddFlow` 不再按 BrowserLogin / ApiKey / Local 分叉。登录按钮只出现在需要浏览器会话（或 CLI 登录器）的源上。选 App / CLI 时读本机会话，不要再弹一次网页登录。点「完成」必须先 Fetch 成功，否则对话框留下。
+
+## 平台无关的数据架构
+
+平台适配器只负责把各家的响应转换成 `ProviderSnapshot`：重置时刻写入 `ResetsAt`，周期写入 `WindowMinutes`，模型配额写入 `ModelQuotas`。卡片、时间线、可用率和排序逻辑只读取这些结构化字段，不得根据平台 ID 改分支。
+
+所有卡片重置文案由 `ResetFormatter` 生成，例如 `resets in 3h 12m`。只要 `ResetsAt` 有效，就不显示平台返回的重置句子；`DetailText` 仅保留用量、余额、状态等非重置说明。
+
+多数据源统一实现 `IProviderSource`。`ProviderSourceRunner` 在用户明确选择源时严格使用该源；未选择时才按顺序自动回退。源通过 `UnavailableRecovery` 声明无数据时的恢复动作，通过 `WatchPaths` 声明会话文件；刷新服务和卡片不探测平台类型。配置字段改名统一放进 `Catalog.ConfigKeyAliases`，由配置服务迁移全局或实例字段。
+
+新增平台特殊性应留在解析器或 Catalog 数据中。不要在共享视图、刷新、排序、恢复或监视代码中增加平台名称判断。
+
+未做事项见 [todo.md](todo.md)；近期系统与接口修改见 [recent-changes.md](recent-changes.md)。
 
 ## 卡片标题
 

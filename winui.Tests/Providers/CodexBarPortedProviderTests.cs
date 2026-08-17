@@ -148,9 +148,9 @@ public sealed class CodexBarPortedProviderTests
 
         Assert.AreEqual("kilo", snapshot.ProviderId);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("25/100 credits", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("25/100 credits", snapshot.Primary.DetailText);
         Assert.AreEqual("Kilo · Kilo Pass Pro", snapshot.Name);
-        Assert.AreEqual("Kilo Pass Pro · Auto top-up: visa", snapshot.Tertiary!.ResetDescription);
+        Assert.AreEqual("Kilo Pass Pro · Auto top-up: visa", snapshot.Tertiary!.DetailText);
     }
 
     [TestMethod]
@@ -199,11 +199,11 @@ public sealed class CodexBarPortedProviderTests
         var snapshot = KiloProvider.Snapshot(usage);
 
         Assert.AreEqual(0, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("0/19 credits", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("0/19 credits", snapshot.Primary.DetailText);
         Assert.AreEqual("Kilo · Starter", snapshot.Name);
-        Assert.AreEqual("$0.00 / $19.00 (+ $9.50 bonus)", snapshot.Secondary!.ResetDescription);
+        Assert.AreEqual("$0.00 / $19.00 (+ $9.50 bonus)", snapshot.Secondary!.DetailText);
         Assert.IsFalse(string.IsNullOrWhiteSpace(snapshot.Secondary.ResetsAt));
-        Assert.AreEqual("Starter · Auto top-up: off", snapshot.Tertiary!.ResetDescription);
+        Assert.AreEqual("Starter · Auto top-up: off", snapshot.Tertiary!.DetailText);
     }
 
     [TestMethod]
@@ -237,7 +237,7 @@ public sealed class CodexBarPortedProviderTests
         var snapshot = KiloProvider.Snapshot(usage);
 
         Assert.AreEqual(10, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("Auto top-up: visa", snapshot.Tertiary!.ResetDescription);
+        Assert.AreEqual("Auto top-up: visa", snapshot.Tertiary!.DetailText);
     }
 
     [TestMethod]
@@ -276,8 +276,8 @@ public sealed class CodexBarPortedProviderTests
         var snapshot = KiloProvider.Snapshot(usage);
 
         Assert.AreEqual(100, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("0/0 credits", snapshot.Primary.ResetDescription);
-        Assert.AreEqual("Auto top-up: off", snapshot.Tertiary!.ResetDescription);
+        Assert.AreEqual("0/0 credits", snapshot.Primary.DetailText);
+        Assert.AreEqual("Auto top-up: off", snapshot.Tertiary!.DetailText);
     }
 
     [TestMethod]
@@ -320,7 +320,7 @@ public sealed class CodexBarPortedProviderTests
 
         Assert.AreEqual(10, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("Kilo · Starter", snapshot.Name);
-        Assert.AreEqual("Starter", snapshot.Tertiary!.ResetDescription);
+        Assert.AreEqual("Starter", snapshot.Tertiary!.DetailText);
     }
 
     [TestMethod]
@@ -491,7 +491,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("Cursor · Pro", snapshot.Name);
         Assert.AreEqual("Requests", snapshot.Primary.Label);
         Assert.AreEqual(20, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("20/100 requests", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("20/100 requests", snapshot.Primary.DetailText);
         Assert.AreEqual(25.5, snapshot.Secondary!.UsedPercent, 0.001);
         Assert.AreEqual(10, snapshot.Tertiary!.UsedPercent, 0.001);
         Assert.AreEqual(7.5, snapshot.Balance!.Total, 0.001);
@@ -540,7 +540,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("augment", snapshot.ProviderId);
         Assert.AreEqual("Augment · Pro", snapshot.Name);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("25.0 / 100.0 credits", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("25.0 / 100.0 credits", snapshot.Primary.DetailText);
         Assert.AreEqual(75, snapshot.Balance!.Total, 0.001);
     }
 
@@ -615,7 +615,7 @@ public sealed class CodexBarPortedProviderTests
 
         Assert.AreEqual("Factory · Starter", snapshot.Name);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("250/1.0K tokens", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("250/1.0K tokens", snapshot.Primary.DetailText);
         Assert.AreEqual(50, snapshot.Secondary!.UsedPercent, 0.001);
     }
 
@@ -647,11 +647,11 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("MiniMax · Coding Pro", snapshot.Name);
         Assert.AreEqual("Text Generation", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("25/100 prompts · 5 hours", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("25/100 prompts · 5 hours", snapshot.Primary.DetailText);
         Assert.AreEqual(300, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("Text Generation", snapshot.Secondary!.Label);
         Assert.AreEqual(50, snapshot.Secondary.UsedPercent, 0.001);
-        Assert.AreEqual("150/300 prompts · Weekly", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("150/300 prompts · Weekly", snapshot.Secondary.DetailText);
     }
 
     [TestMethod]
@@ -686,7 +686,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("MiniMax · Team Plan", snapshot.Name);
         Assert.AreEqual("Text Generation", snapshot.Primary.Label);
         Assert.AreEqual(20, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("20/100 prompts · 5 hours", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("20/100 prompts · 5 hours", snapshot.Primary.DetailText);
         Assert.AreEqual(300, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("Image Generation", snapshot.Secondary!.Label);
         Assert.AreEqual(20, snapshot.Secondary.UsedPercent, 0.001);
@@ -711,10 +711,10 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("Windsurf · Pro", snapshot.Name);
         Assert.AreEqual("Daily", snapshot.Primary.Label);
         Assert.AreEqual(35, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("65% remaining", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("65% remaining", snapshot.Primary.DetailText);
         Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
         Assert.AreEqual(60, snapshot.Secondary.UsedPercent, 0.001);
-        Assert.AreEqual("40% remaining", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("40% remaining", snapshot.Secondary.DetailText);
     }
 
     [TestMethod]
@@ -735,7 +735,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("Windsurf · Teams", snapshot.Name);
         Assert.AreEqual("Messages", snapshot.Primary.Label);
         Assert.AreEqual(75, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("375 / 500 messages", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("375 / 500 messages", snapshot.Primary.DetailText);
         Assert.AreEqual("Flow actions", snapshot.Secondary!.Label);
         Assert.AreEqual(25, snapshot.Secondary.UsedPercent, 0.001);
     }
@@ -826,7 +826,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("AWS Bedrock", snapshot.Name);
         Assert.AreEqual("Monthly spend", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("$25.00 spent / $100.00 budget", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$25.00 spent / $100.00 budget", snapshot.Primary.DetailText);
         Assert.AreEqual(75, snapshot.Balance!.Total, 0.001);
         Assert.AreEqual("AWS Cost Explorer · us-west-2", snapshot.SourceLabel);
         Assert.IsFalse(string.IsNullOrWhiteSpace(snapshot.Primary.ResetsAt));
@@ -912,7 +912,7 @@ public sealed class CodexBarPortedProviderTests
         """);
 
         Assert.AreEqual(25, usage.RequestsUsedPercent, 0.001);
-        Assert.AreEqual("generate_content_requests · us-central1", usage.ResetDescription);
+        Assert.AreEqual("generate_content_requests · us-central1", usage.DetailText);
     }
 
     [TestMethod]
@@ -958,12 +958,12 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("Grok", snapshot.Name);
         Assert.AreEqual("Monthly included", snapshot.Primary.Label);
         Assert.AreEqual(1000d / 3000d * 100d, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("$10.00 / $30.00 included", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$10.00 / $30.00 included", snapshot.Primary.DetailText);
         Assert.AreEqual("2030-02-01T00:00:00.0000000+00:00", snapshot.Primary.ResetsAt);
         Assert.AreEqual(31L * 24L * 60L, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("On-demand", snapshot.Secondary!.Label);
         Assert.AreEqual(25, snapshot.Secondary.UsedPercent, 0.001);
-        Assert.AreEqual("$2.50 / $10.00 cap", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("$2.50 / $10.00 cap", snapshot.Secondary.DetailText);
         Assert.AreEqual(20, snapshot.Balance!.Total, 0.001);
         Assert.AreEqual("grok agent stdio", snapshot.SourceLabel);
     }
@@ -983,7 +983,7 @@ public sealed class CodexBarPortedProviderTests
         var snapshot = GrokProvider.Snapshot(billing);
 
         Assert.AreEqual(0, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("$1.25 used", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$1.25 used", snapshot.Primary.DetailText);
         Assert.AreEqual(0, snapshot.Balance!.Total, 0.001);
     }
 
@@ -1009,9 +1009,9 @@ public sealed class CodexBarPortedProviderTests
 
         Assert.AreEqual("manus", snapshot.ProviderId);
         Assert.AreEqual(30, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("Total 1800 · Free 100", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("Total 1800 · Free 100", snapshot.Primary.DetailText);
         Assert.AreEqual(50, snapshot.Secondary!.UsedPercent, 0.001);
-        Assert.AreEqual("Daily: 50 / 100", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("Daily: 50 / 100", snapshot.Secondary.DetailText);
         Assert.AreEqual(1800, snapshot.Balance!.Total, 0.001);
     }
 
@@ -1035,7 +1035,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("perplexity", snapshot.ProviderId);
         Assert.AreEqual("Perplexity", snapshot.Name);
         Assert.AreEqual(100, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("1000/1000 credits", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("1000/1000 credits", snapshot.Primary.DetailText);
         Assert.AreEqual(0, snapshot.Secondary!.UsedPercent, 0.001);
         Assert.AreEqual(12.5, snapshot.Tertiary!.UsedPercent, 0.001);
         Assert.AreEqual(75, snapshot.Balance!.Total, 0.001);
@@ -1051,7 +1051,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("t3chat", snapshot.ProviderId);
         Assert.AreEqual("T3 Chat · T3 Pro", snapshot.Name);
         Assert.AreEqual(42, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("Base - high", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("Base - high", snapshot.Primary.DetailText);
         Assert.AreEqual(7, snapshot.Secondary!.UsedPercent, 0.001);
     }
 
@@ -1082,7 +1082,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("commandcode", snapshot.ProviderId);
         Assert.AreEqual("Command Code · Pro", snapshot.Name);
         Assert.AreEqual(60, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("$18.00 of $30.00 · + $3.00 credits", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$18.00 of $30.00 · + $3.00 credits", snapshot.Primary.DetailText);
         Assert.AreEqual(15, snapshot.Balance!.Total, 0.001);
     }
 
@@ -1101,7 +1101,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("jetbrains", snapshot.ProviderId);
         Assert.AreEqual("JetBrains AI · WebStorm 2025.2", snapshot.Name);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("25 / 100 credits (75 available)", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("25 / 100 credits (75 available)", snapshot.Primary.DetailText);
         Assert.AreEqual(75, snapshot.Balance!.Total, 0.001);
     }
 
@@ -1146,7 +1146,7 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("abacus", snapshot.ProviderId);
         Assert.AreEqual("Abacus AI · Enterprise", snapshot.Name);
         Assert.AreEqual(75, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("750.0 / 1000.0 credits", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("750.0 / 1000.0 credits", snapshot.Primary.DetailText);
         Assert.AreEqual(250, snapshot.Balance!.Total, 0.001);
     }
 
@@ -1300,7 +1300,9 @@ public sealed class CodexBarPortedProviderTests
         Assert.AreEqual("MiMo · Standard", snapshot.Name);
         Assert.AreEqual(EntitlementStatus.Active, snapshot.EntitlementStatus);
         Assert.AreEqual("Standard", snapshot.Primary.Label);
+        Assert.AreEqual(30 * 24 * 60, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("Token Plan", snapshot.Secondary!.Label);
+        Assert.AreEqual(30 * 24 * 60, snapshot.Secondary.WindowMinutes);
         Assert.IsNull(snapshot.Tertiary);
     }
 

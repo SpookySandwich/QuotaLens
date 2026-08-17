@@ -163,7 +163,7 @@ public sealed class DeepSeekProviderTests
             {
                 Label = "Balance",
                 UsedPercent = 0,
-                ResetDescription = "$50.00",
+                DetailText = "$50.00",
             },
             Balance = new BalanceInfo { Currency = "USD", Total = 50, Paid = 40, Granted = 10 },
         };
@@ -186,7 +186,7 @@ public sealed class DeepSeekProviderTests
                 DateTimeOffset.Parse("2030-01-15T12:00:00Z")));
 
         Assert.AreEqual("Balance", snapshot.Primary.Label);
-        Assert.AreEqual("$50.00", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$50.00", snapshot.Primary.DetailText);
         Assert.AreEqual("Today usage", snapshot.Secondary!.Label);
         Assert.AreEqual(RateWindowKind.Informational, snapshot.Secondary.Kind);
         Assert.AreEqual("123 tokens · 7 requests · $1.23", snapshot.Secondary.ValueText);

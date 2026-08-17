@@ -81,8 +81,8 @@ public static class ProviderPriority
         }
 
         var planValue = PlanValue(instanceId, snapshot, config);
-        var availability = Quota.ProviderAvailability(instanceId, snapshot, config);
-        var reset = ResetPriority(instanceId, snapshot, config);
+        var availability = Quota.ProviderAvailability(snapshot);
+        var reset = ResetPriority(snapshot);
 
         if (planValue < 0)
             return new ProviderPriorityScore(
@@ -132,7 +132,7 @@ public static class ProviderPriority
     {
         var providerType = Catalog.ProviderTypeForInstance(instanceId, config);
 
-        if (providerType == "codex-lb" && TryAggregateCodexAccountPlanValue(snapshot, config, out var accountValue))
+        if (TryAggregateAccountPlanValue(providerType, snapshot, config, out var accountValue))
             return accountValue;
 
         var planIdentity = ProviderSnapshotIdentity.PlanIdentity(providerType, snapshot);
@@ -143,7 +143,7 @@ public static class ProviderPriority
                 return configuredRuleValue.Value;
         }
 
-        if (providerType == "codex-lb" && TryConfiguredCodexValue(config, out var configuredValue))
+        if (TryConfiguredProviderValue(providerType, config, out var configuredValue))
             return configuredValue;
 
         if (!planIdentity.IsEmpty)
@@ -177,8 +177,7 @@ public static class ProviderPriority
         var providerType = Catalog.ProviderTypeForInstance(instanceId, config);
         var planIdentity = ProviderSnapshotIdentity.PlanIdentity(providerType, snapshot);
 
-        if (providerType == "codex-lb"
-            && TryAggregateCodexAccountDisplayValue(snapshot, config, out var accountDisplay))
+        if (TryAggregateAccountDisplayValue(providerType, snapshot, config, out var accountDisplay))
         {
             return accountDisplay;
         }
@@ -189,7 +188,7 @@ public static class ProviderPriority
         if (configuredRule is not null && IsDisplaySafe(configuredRule))
             return DisplayFor(configuredRule);
 
-        if (providerType == "codex-lb" && TryConfiguredCodexValue(config, out var configuredValue))
+        if (TryConfiguredProviderValue(providerType, config, out var configuredValue))
         {
             return new ProviderPlanDisplay(
                 configuredValue,
@@ -208,7 +207,8 @@ public static class ProviderPriority
         return rule is not null && IsDisplaySafe(rule) ? DisplayFor(rule) : null;
     }
 
-    private static bool TryAggregateCodexAccountPlanValue(
+    private static bool TryAggregateAccountPlanValue(
+        string providerType,
         ProviderSnapshot snapshot,
         IConfig? config,
         out double value)
@@ -224,7 +224,7 @@ public static class ProviderPriority
             if (string.IsNullOrWhiteSpace(account.Plan))
                 continue;
 
-            var planValue = PlanValueRules.MatchIncludingDefaults("codex-lb", account.Plan, config);
+            var planValue = PlanValueRules.MatchIncludingDefaults(providerType, account.Plan, config);
             if (!planValue.HasValue)
                 continue;
 
@@ -235,7 +235,8 @@ public static class ProviderPriority
         return matched > 0;
     }
 
-    private static bool TryAggregateCodexAccountDisplayValue(
+    private static bool TryAggregateAccountDisplayValue(
+        string providerType,
         ProviderSnapshot snapshot,
         IConfig? config,
         out ProviderPlanDisplay? display)
@@ -252,7 +253,7 @@ public static class ProviderPriority
             if (string.IsNullOrWhiteSpace(account.Plan))
                 return false;
 
-            var rule = PlanValueRules.MatchIncludingDefaultsRule("codex-lb", account.Plan, config);
+            var rule = PlanValueRules.MatchIncludingDefaultsRule(providerType, account.Plan, config);
             if (rule is null || !IsDisplaySafe(rule))
                 return false;
 
@@ -287,12 +288,14 @@ public static class ProviderPriority
         rule.LastVerifiedAt,
         rule.Evidence);
 
-    private static bool TryConfiguredCodexValue(IConfig? config, out double value)
+    private static bool TryConfiguredProviderValue(string providerType, IConfig? config, out double value)
     {
         value = 0;
+        var key = Catalog.PlanValueOverrideKeyFor(providerType);
         return config is not null
+            && key is not null
             && double.TryParse(
-                config.Get("codex_lb_value"),
+                config.Get(key),
                 NumberStyles.Float,
                 CultureInfo.InvariantCulture,
                 out value)
@@ -302,13 +305,9 @@ public static class ProviderPriority
     private static bool IsDisplaySafe(ProviderPlanValueRule rule) =>
         rule.Evidence is ProviderPlanEvidence.Official or ProviderPlanEvidence.UserConfigured;
 
-    public static (int Tier, double MinutesUntil) ResetPriority(
-        string instanceId,
-        ProviderSnapshot snapshot,
-        IConfig? config = null)
+    public static (int Tier, double MinutesUntil) ResetPriority(ProviderSnapshot snapshot)
     {
-        var providerType = Catalog.ProviderTypeForInstance(instanceId, config);
-        var candidates = ResetCandidates(providerType, snapshot)
+        var candidates = ResetCandidates(snapshot)
             .Select(candidate => ResetCandidateScore(candidate.Label, candidate.ResetsAt, candidate.WindowMinutes))
             .Where(score => score.HasValue)
             .Select(score => score!.Value)
@@ -323,11 +322,9 @@ public static class ProviderPriority
             .First();
     }
 
-    private static IEnumerable<SnapshotRateWindow> ResetCandidates(
-        string providerType,
-        ProviderSnapshot snapshot)
+    private static IEnumerable<SnapshotRateWindow> ResetCandidates(ProviderSnapshot snapshot)
     {
-        if (providerType == "antigravity" && snapshot.ModelQuotas.Count > 0)
+        if (snapshot.ModelQuotas.Count > 0)
         {
             var modelCandidates = snapshot.ModelQuotas
                 .Where(ModelQuotaPolicy.CountsForProviderAvailability)

@@ -25,6 +25,13 @@ public sealed partial class EditProviderDialog : ContentDialog
 {
     // Segoe Fluent / MDL2 glyphs.
     private const string BrowseGlyph = "\uE8E5";
+    private const string WarningGlyph = "\uE7BA";
+
+    private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush WarningBrush =
+        new(Windows.UI.Color.FromArgb(255, 232, 163, 61));
+
+    /// <summary>Caveat for the selected source, shown under the tabs rather than on them.</summary>
+    private readonly StackPanel _sourceNote = new() { Visibility = Visibility.Collapsed };
 
     private static readonly Microsoft.UI.Xaml.Media.SolidColorBrush InvalidBrush =
         new(Windows.UI.Color.FromArgb(255, 239, 68, 68));
@@ -362,7 +369,7 @@ public sealed partial class EditProviderDialog : ContentDialog
     {
         var segmented = new Segmented { Header = I18n.T("editProvider.source") };
         foreach (var source in _sources)
-            segmented.Items.Add(new SegmentedItem { Content = source.Name, Tag = source.Id });
+            segmented.Items.Add(new SegmentedItem { Content = SourceItemContent(source), Tag = source.Id });
 
         var selected = 0;
         for (var index = 0; index < _sources.Count; index++)
@@ -378,16 +385,66 @@ public sealed partial class EditProviderDialog : ContentDialog
         segmented.SelectionChanged += (_, _) =>
         {
             _selectedSourceId = (segmented.SelectedItem as SegmentedItem)?.Tag?.ToString();
+            BuildSourceNote(_sources.ElementAtOrDefault(segmented.SelectedIndex));
             BuildFields();
         };
 
         AutomationProperties.SetAutomationId(segmented, $"Source_{_instanceId}");
         FieldsPanel.Children.Add(segmented);
+        FieldsPanel.Children.Add(_sourceNote);
+        BuildSourceNote(_sources.ElementAtOrDefault(selected));
 
         _editors.Add((
             new ProviderField("provider_source", I18n.T("editProvider.source")),
             () => (segmented.SelectedItem as SegmentedItem)?.Tag?.ToString() ?? "",
             _ => { }));
+    }
+
+    /// <summary>
+    /// Tab labels stay plain text. A glyph crowded against the label was easy to miss
+    /// and read as decoration; the note is shown BELOW the row instead, where it can
+    /// actually be read. See <see cref="BuildSourceNote"/>.
+    /// </summary>
+    private static object SourceItemContent(IProviderSource source) => source.Name;
+
+    /// <summary>
+    /// The selected source's caveat (e.g. "tokens only renew while the app is in use"),
+    /// rendered under the tabs as readable text rather than as an icon on the tab.
+    /// </summary>
+    private void BuildSourceNote(IProviderSource? source)
+    {
+        _sourceNote.Children.Clear();
+        if (source?.AttentionNote is not { } noteKey)
+        {
+            _sourceNote.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 6,
+            Margin = new Thickness(0, 2, 0, 0),
+        };
+        row.Children.Add(new FontIcon
+        {
+            Glyph = WarningGlyph,
+            FontSize = 12,
+            Foreground = WarningBrush,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, 2, 0, 0),
+        });
+        row.Children.Add(new TextBlock
+        {
+            Text = I18n.T(noteKey),
+            Style = (Style)Application.Current.Resources["CaptionText"],
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 420,
+        });
+
+        _sourceNote.Children.Add(row);
+        _sourceNote.Visibility = Visibility.Visible;
+        AutomationProperties.SetName(_sourceNote, I18n.T(noteKey));
     }
 
     private IReadOnlySet<string> VisibleFieldKeys(ProviderField[] fields)

@@ -122,7 +122,7 @@ public sealed partial class JetBrainsProvider : IProvider
                 Label = label,
                 UsedPercent = max > 0 ? Quota.ClampPercent(used / max * 100) : 0,
                 ResetsAt = refillAt,
-                ResetDescription = $"{Fmt(used)} / {Fmt(max)} credits ({Fmt(available.Value)} available)",
+                DetailText = $"{Fmt(used)} / {Fmt(max)} credits ({Fmt(available.Value)} available)",
                 WindowMinutes = 30 * 24 * 60,
             },
             Secondary = refillDescription is null
@@ -132,7 +132,7 @@ public sealed partial class JetBrainsProvider : IProvider
                     Label = I18n.T("quota.nextRefill"),
                     UsedPercent = 0,
                     ResetsAt = refillAt,
-                    ResetDescription = refillDescription,
+                    DetailText = refillDescription,
                 },
             Balance = new BalanceInfo
             {

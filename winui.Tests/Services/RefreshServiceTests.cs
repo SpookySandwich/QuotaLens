@@ -8,6 +8,14 @@ namespace QuotaLens.Tests.Services;
 public sealed class RefreshServiceTests
 {
     [TestMethod]
+    public void DefaultSnapshotDirectory_UsesInjectedLocalAppDataRoot()
+    {
+        Assert.AreEqual(
+            Path.Combine(@"C:\sandbox", "QuotaLens", "Snapshots"),
+            RefreshService.DefaultSnapshotDirectory(@"C:\sandbox"));
+    }
+
+    [TestMethod]
     public void RemainingRefreshIndicatorDelay_KeepsFastRefreshVisibleForOneSecond()
     {
         Assert.AreEqual(
@@ -80,6 +88,24 @@ public sealed class RefreshServiceTests
         Assert.AreEqual("Work Qoder", snapshot.Name);
         Assert.AreEqual("Qoder CLI", snapshot.SourceLabel);
         Assert.AreEqual("No token", snapshot.Error);
+    }
+
+    [TestMethod]
+    public void ErrorSnapshotFor_CarriesStructuredRecovery()
+    {
+        var instance = new ProviderInstance("kimi", "kimi", "Kimi");
+        var provider = new FakeProvider("kimi", "Kimi", "Kimi app");
+        var recovery = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "kimi.appSourceNote");
+
+        var snapshot = RefreshService.ErrorSnapshotFor(
+            instance,
+            provider,
+            "Session unavailable",
+            ProviderErrorKind.AuthenticationRequired,
+            recovery);
+
+        Assert.AreEqual(ProviderErrorKind.AuthenticationRequired, snapshot.ErrorKind);
+        Assert.AreEqual(recovery, snapshot.RecoveryAction);
     }
 
     [TestMethod]

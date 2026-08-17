@@ -56,7 +56,7 @@ public sealed class VertexAIProvider : IProvider
             : new[]
             {
                 new VertexQuotaUsage(
-                    usage.ResetDescription ?? "Current Vertex AI quota utilization",
+                    usage.DetailText ?? "Current Vertex AI quota utilization",
                     usage.RequestsUsedPercent,
                     null,
                     null),
@@ -70,7 +70,7 @@ public sealed class VertexAIProvider : IProvider
             {
                 Label = primary.Label,
                 UsedPercent = Quota.ClampPercent(primary.UsedPercent),
-                ResetDescription = UsageDescription(primary),
+                DetailText = UsageDescription(primary),
             },
             AdditionalWindows = quotaDetails
                 .Where(item => !ReferenceEquals(item, primary))
@@ -78,7 +78,7 @@ public sealed class VertexAIProvider : IProvider
                 {
                     Label = item.Label,
                     UsedPercent = Quota.ClampPercent(item.UsedPercent),
-                    ResetDescription = UsageDescription(item),
+                    DetailText = UsageDescription(item),
                 })
                 .ToList(),
             Accounts = string.IsNullOrWhiteSpace(usage.AccountEmail) && string.IsNullOrWhiteSpace(usage.ProjectId)
@@ -614,7 +614,7 @@ public sealed class VertexAIProvider : IProvider
     public sealed record VertexAIUsage(
         double RequestsUsedPercent,
         string? ResetsAt,
-        string? ResetDescription,
+        string? DetailText,
         string? RawData,
         string? ProjectId,
         string? AccountEmail)

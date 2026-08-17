@@ -57,8 +57,8 @@ public sealed class AntigravityProvider : IProvider
     private const string UserStatusPath =
         "/exa.language_server_pb.LanguageServerService/GetUserStatus";
 
-    private static readonly Regex PidRegex = new(@"ProcessId\s*:\s*(\d+)", RegexOptions.Compiled);
-    private static readonly Regex CsrfRegex = new(@"--csrf_token\s+([a-f0-9-]+)", RegexOptions.Compiled);
+    private static readonly Regex PidRegex = new(@"\bProcessId\s*:\s*(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex CsrfRegex = new(@"--csrf_token\s+([a-zA-Z0-9_-]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     private static readonly Regex ListenRegex = new(@"TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // ---- Response shapes (serde names verbatim) ----
@@ -118,35 +118,42 @@ public sealed class AntigravityProvider : IProvider
 
     public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
     {
+        AppLog.Info($"antigravity: discovering language server for {instanceId}...");
         var (port, csrf) = await DiscoverAsync(ct).ConfigureAwait(false);
+        AppLog.Info($"antigravity: discovered port={port}");
 
         ProviderSnapshot? summary = null;
         try
         {
+            AppLog.Info($"antigravity: requesting quota summary from port {port}...");
             var summaryJson = await SendLocalRequestAsync(port, csrf, QuotaSummaryPath, ct).ConfigureAwait(false);
             summary = ParseQuotaSummary(instanceId, summaryJson, DateTimeOffset.UtcNow);
+            AppLog.Info($"antigravity: successfully parsed quota summary for {instanceId}");
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
-        catch (ProviderException)
+        catch (ProviderException e)
         {
-            // Older Antigravity IDE language servers do not expose quota summaries.
+            AppLog.Warn($"antigravity: quota summary request failed: {e.Message}");
         }
 
         try
         {
+            AppLog.Info($"antigravity: requesting user status from port {port}...");
             var statusJson = await SendLocalRequestAsync(port, csrf, UserStatusPath, ct).ConfigureAwait(false);
             var legacy = ParseSnapshot(instanceId, statusJson, DateTimeOffset.UtcNow);
+            AppLog.Info($"antigravity: successfully parsed user status for {instanceId}");
             return summary is null ? legacy : MergeIdentity(summary, legacy);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
-        catch (ProviderException) when (summary is not null)
+        catch (ProviderException e) when (summary is not null)
         {
+            AppLog.Warn($"antigravity: user status request failed, using summary: {e.Message}");
             return summary;
         }
     }
@@ -169,7 +176,7 @@ public sealed class AntigravityProvider : IProvider
             req.Headers.TryAddWithoutValidation("X-Codeium-Csrf-Token", csrf);
             req.Headers.TryAddWithoutValidation("Connect-Protocol-Version", "1");
             using var response = await ProbeClient
-                .SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token)
+                .SendAsync(req, HttpCompletionOption.ResponseContentRead, timeoutCts.Token)
                 .ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
@@ -177,7 +184,7 @@ public sealed class AntigravityProvider : IProvider
                     $"Network error: Antigravity local service returned HTTP {(int)response.StatusCode}");
             }
 
-            return await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return await response.Content.ReadAsStringAsync(timeoutCts.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -239,8 +246,8 @@ public sealed class AntigravityProvider : IProvider
                         GroupRank(family),
                         cadence switch
                         {
-                            QuotaCadenceKind.FiveHour => 0,
-                            QuotaCadenceKind.Weekly => 1,
+                            QuotaCadenceKind.Weekly => 0,
+                            QuotaCadenceKind.FiveHour => 1,
                             _ => 2,
                         },
                         new RateWindow
@@ -250,7 +257,6 @@ public sealed class AntigravityProvider : IProvider
                             UsedPercent = Quota.UsedPercentFromRemaining(
                                 Quota.ClampPercent(remainingFraction * 100)),
                             ResetsAt = reset,
-                            ResetDescription = StringValue(bucket, "description"),
                             WindowMinutes = cadence switch
                             {
                                 QuotaCadenceKind.FiveHour => 5 * 60,
@@ -358,12 +364,13 @@ public sealed class AntigravityProvider : IProvider
                 : null;
     }
 
-    private static string QuotaFamily(string groupName)
+    internal static string QuotaFamily(string groupName)
     {
         if (groupName.Contains("gemini", StringComparison.OrdinalIgnoreCase))
             return "Gemini";
         if (groupName.Contains("claude", StringComparison.OrdinalIgnoreCase)
-            || groupName.Contains("gpt", StringComparison.OrdinalIgnoreCase))
+            || groupName.Contains("gpt", StringComparison.OrdinalIgnoreCase)
+            || groupName.Contains("3p", StringComparison.OrdinalIgnoreCase))
         {
             return "Claude/GPT";
         }
@@ -371,14 +378,14 @@ public sealed class AntigravityProvider : IProvider
         return string.IsNullOrWhiteSpace(groupName) ? "Quota" : groupName.Trim();
     }
 
-    private static int GroupRank(string family) => family switch
+    internal static int GroupRank(string family) => family switch
     {
         "Gemini" => 0,
         "Claude/GPT" => 1,
         _ => 2,
     };
 
-    private static QuotaCadenceKind QuotaCadence(string bucketId, string displayName)
+    internal static QuotaCadenceKind QuotaCadence(string bucketId, string displayName)
     {
         foreach (var raw in new[] { bucketId, displayName })
         {
@@ -403,7 +410,7 @@ public sealed class AntigravityProvider : IProvider
         return QuotaCadenceKind.Other;
     }
 
-    private enum QuotaCadenceKind
+    internal enum QuotaCadenceKind
     {
         Other,
         FiveHour,
@@ -465,7 +472,6 @@ public sealed class AntigravityProvider : IProvider
                 Label = $"{label} usage",
                 UsedPercent = Quota.UsedPercentFromRemaining(remaining),
                 ResetsAt = reset,
-                ResetDescription = reset is null ? null : $"resets {reset}",
                 WindowMinutes = null,
             };
         }
@@ -530,7 +536,7 @@ public sealed class AntigravityProvider : IProvider
                 Label = $"{planName} Prompt Pool",
                 UsedPercent = promptPct,
                 ResetsAt = null,
-                ResetDescription = promptDesc,
+                DetailText = promptDesc,
                 WindowMinutes = null,
             },
             Secondary = familyWindows.Count == 0 ? secondary : null,
@@ -581,7 +587,6 @@ public sealed class AntigravityProvider : IProvider
                 Label = $"{quota.Family} {quota.WindowType}",
                 UsedPercent = quota.UsedPercent,
                 ResetsAt = quota.ResetsAt,
-                ResetDescription = quota.ResetsAt is null ? null : $"resets {quota.ResetsAt}",
                 WindowMinutes = quota.WindowType switch
                 {
                     "5h" => 5 * 60,
@@ -612,6 +617,29 @@ public sealed class AntigravityProvider : IProvider
         }
     }
 
+    private static List<(int Pid, string Csrf)> DiscoverProcsViaWmi()
+    {
+        var result = new List<(int, string)>();
+        try
+        {
+            using var searcher = new System.Management.ManagementObjectSearcher(
+                "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'language_server.exe'");
+            foreach (var obj in searcher.Get())
+            {
+                var pid = Convert.ToInt32(obj["ProcessId"]);
+                var cmd = obj["CommandLine"]?.ToString() ?? "";
+                var cm = CsrfRegex.Match(cmd);
+                if (cm.Success)
+                    result.Add((pid, cm.Groups[1].Value));
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLog.Warn($"antigravity: WMI query failed ({ex.Message}), falling back to PowerShell");
+        }
+        return result;
+    }
+
     /// <summary>
     /// Locate the running Antigravity language servers and a working (port, CSRF) pair.
     /// Antigravity spawns SEVERAL language_server.exe processes, each with its OWN csrf_token
@@ -621,56 +649,103 @@ public sealed class AntigravityProvider : IProvider
     /// </summary>
     private async Task<(int Port, string Csrf)> TryDiscoverAsync(CancellationToken ct)
     {
-        const string psQuery =
-            "Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'language_server.exe' -and $_.CommandLine -like '*--app_data_dir antigravity*' } | Select-Object ProcessId,CommandLine | Format-List";
-
-        string psOut;
-        try
+        var procs = DiscoverProcsViaWmi();
+        if (procs.Count == 0)
         {
-            psOut = await RunProcessAsync("powershell", new[] { "-NoProfile", "-Command", psQuery }, TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
-        }
-        catch (TimeoutException) { throw new ProviderException("Timeout"); }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
-        catch (Exception e) { throw new ProviderException($"Not available: Cannot run powershell: {e.Message}", e); }
+            const string psQuery =
+                "$ProgressPreference = 'SilentlyContinue'; Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'language_server.exe' -and $_.CommandLine -like '*--csrf_token*' } | ForEach-Object { \"$($_.ProcessId)||$($_.CommandLine)\" }";
 
-        var procs = ParseProcs(psOut);
+            var powershellExe = Path.Combine(
+                Environment.SystemDirectory,
+                "WindowsPowerShell",
+                "v1.0",
+                "powershell.exe");
+            if (!File.Exists(powershellExe))
+                powershellExe = "powershell.exe";
+
+            var encodedCommand = Convert.ToBase64String(Encoding.Unicode.GetBytes(psQuery));
+
+            string psOut;
+            try
+            {
+                psOut = await RunProcessAsync(
+                    powershellExe,
+                    $"-NoProfile -NonInteractive -EncodedCommand {encodedCommand}",
+                    TimeSpan.FromSeconds(15),
+                    ct).ConfigureAwait(false);
+            }
+            catch (TimeoutException) { throw new ProviderException("Timeout"); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
+            catch (Exception e) { throw new ProviderException($"Not available: Cannot run powershell: {e.Message}", e); }
+
+            procs = ParseProcs(psOut);
+        }
+
+        AppLog.Info($"antigravity: found {procs.Count} candidate processes");
         if (procs.Count == 0)
             throw new ProviderException("Not available: not_running");
+
+        var cmdExe = Path.Combine(Environment.SystemDirectory, "cmd.exe");
+        if (!File.Exists(cmdExe))
+            cmdExe = "cmd.exe";
 
         string netstatOut;
         try
         {
-            netstatOut = await RunProcessAsync("cmd", new[] { "/c", "netstat -ano -p tcp" }, TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
+            netstatOut = await RunProcessAsync(cmdExe, "/c netstat -ano -p tcp", TimeSpan.FromSeconds(15), ct).ConfigureAwait(false);
         }
         catch (TimeoutException) { throw new ProviderException("Timeout"); }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
         catch (Exception e) { throw new ProviderException($"Not available: netstat error: {e.Message}", e); }
 
         var portsByPid = ParseListeningPorts(netstatOut);
+        AppLog.Info($"antigravity: netstat mapped {portsByPid.Count} listening PIDs");
 
         foreach (var (pid, csrf) in procs)
         {
-            if (!portsByPid.TryGetValue(pid, out var ports)) continue;
+            if (!portsByPid.TryGetValue(pid, out var ports))
+            {
+                AppLog.Info($"antigravity: PID {pid} has no listening TCP ports in netstat");
+                continue;
+            }
+
+            AppLog.Info($"antigravity: PID {pid} has listening ports: {string.Join(", ", ports)}");
             foreach (var port in ports)
             {
                 if (await ProbeAsync(port, csrf, ct).ConfigureAwait(false))
+                {
+                    AppLog.Info($"antigravity: port {port} accepted probe for PID {pid}");
                     return (port, csrf);
+                }
             }
         }
 
         throw new ProviderException("Not available: Cannot find working Antigravity port");
     }
 
-    /// <summary>Parse (PID, CSRF) for every language_server record in the Format-List output.</summary>
-    private static List<(int Pid, string Csrf)> ParseProcs(string psOut)
+    /// <summary>Parse (PID, CSRF) for every language_server record.</summary>
+    internal static List<(int Pid, string Csrf)> ParseProcs(string psOut)
     {
         var result = new List<(int, string)>();
-        foreach (Match pm in PidRegex.Matches(psOut))
+        foreach (var line in psOut.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries))
         {
-            if (!int.TryParse(pm.Groups[1].Value, out var pid)) continue;
-            // The CommandLine (with --csrf_token) follows its ProcessId in Format-List output.
-            var cm = CsrfRegex.Match(psOut, pm.Index);
-            if (cm.Success) result.Add((pid, cm.Groups[1].Value));
+            var parts = line.Split("||", 2, StringSplitOptions.None);
+            if (parts.Length == 2 && int.TryParse(parts[0].Trim(), out var pid))
+            {
+                var cm = CsrfRegex.Match(parts[1]);
+                if (cm.Success)
+                    result.Add((pid, cm.Groups[1].Value));
+            }
+            else
+            {
+                var pm = PidRegex.Match(line);
+                if (pm.Success && int.TryParse(pm.Groups[1].Value, out var legacyPid))
+                {
+                    var cm = CsrfRegex.Match(line);
+                    if (cm.Success)
+                        result.Add((legacyPid, cm.Groups[1].Value));
+                }
+            }
         }
         return result;
     }
@@ -703,15 +778,17 @@ public sealed class AntigravityProvider : IProvider
             };
             req.Headers.TryAddWithoutValidation("X-Codeium-Csrf-Token", csrf);
             req.Headers.TryAddWithoutValidation("Connect-Protocol-Version", "1");
-            using var probe = await ProbeClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token).ConfigureAwait(false);
+            using var probe = await ProbeClient.SendAsync(req, HttpCompletionOption.ResponseContentRead, timeoutCts.Token).ConfigureAwait(false);
+            AppLog.Info($"antigravity: probe port {port} status={(int)probe.StatusCode}");
             return probe.IsSuccessStatusCode;
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
             throw;
         }
-        catch
+        catch (Exception e)
         {
+            AppLog.Info($"antigravity: probe port {port} exception={e.Message}");
             return false;
         }
     }
@@ -720,29 +797,35 @@ public sealed class AntigravityProvider : IProvider
     /// Run a child process, capture stdout, enforce a hard timeout (mirrors tokio::time::timeout).
     /// On timeout the child is killed and a TimeoutException is thrown.
     /// </summary>
-    private static async Task<string> RunProcessAsync(string fileName, string[] args, TimeSpan timeout, CancellationToken ct)
+    private static async Task<string> RunProcessAsync(string fileName, string arguments, TimeSpan timeout, CancellationToken ct)
     {
         var psi = new ProcessStartInfo
         {
             FileName = fileName,
+            Arguments = arguments,
+            WorkingDirectory = Environment.SystemDirectory,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        foreach (var a in args) psi.ArgumentList.Add(a);
 
         using var proc = new Process { StartInfo = psi };
         if (!proc.Start())
             throw new InvalidOperationException("process did not start");
 
-        var stdoutTask = proc.StandardOutput.ReadToEndAsync();
-
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeoutCts.CancelAfter(timeout);
+
+        var stdoutTask = proc.StandardOutput.ReadToEndAsync(timeoutCts.Token);
+        var stderrTask = proc.StandardError.ReadToEndAsync(timeoutCts.Token);
+
         try
         {
+            var stdout = await stdoutTask.ConfigureAwait(false);
+            await stderrTask.ConfigureAwait(false);
             await proc.WaitForExitAsync(timeoutCts.Token).ConfigureAwait(false);
+            return stdout;
         }
         catch (OperationCanceledException)
         {
@@ -750,8 +833,6 @@ public sealed class AntigravityProvider : IProvider
             if (ct.IsCancellationRequested) throw;
             throw new TimeoutException();
         }
-
-        return await stdoutTask.ConfigureAwait(false);
     }
 
 }

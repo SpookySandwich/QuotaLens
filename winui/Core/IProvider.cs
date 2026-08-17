@@ -5,6 +5,9 @@ public enum ProviderErrorKind
     Unknown,
     RateLimited,
 
+    /// <summary>The active credential/session is missing, expired, or rejected.</summary>
+    AuthenticationRequired,
+
     /// <summary>The user must fix a setting; no sign-in will help.</summary>
     Misconfigured,
 
@@ -38,6 +41,9 @@ public sealed class ProviderException : Exception
     }
 
     public ProviderErrorKind Kind { get; }
+
+    /// <summary>Optional structural recovery supplied by source orchestration.</summary>
+    public ProviderRecoveryAction? RecoveryAction { get; init; }
 
     public static ProviderException RateLimited(string message) =>
         new(message, ProviderErrorKind.RateLimited);

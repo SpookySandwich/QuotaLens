@@ -77,7 +77,7 @@ public sealed class HeroViewModelTests
                 {
                     Label = "5h Pool",
                     UsedPercent = 20,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(3.2).ToString("O"),
+                    ResetsAt = DateTimeOffset.UtcNow.AddHours(3).AddMinutes(13).ToString("O"),
                     WindowMinutes = 5 * 60,
                 },
                 Secondary = new RateWindow
@@ -103,7 +103,7 @@ public sealed class HeroViewModelTests
         Assert.AreEqual("claude", visible[1].InstanceId);
         Assert.AreEqual("codex-lb", visible[2].Label);
         Assert.AreEqual("codex-lb", visible[2].InstanceId);
-        Assert.AreEqual("~3h", visible[2].ResetText);
+        Assert.AreEqual("~3h 12m", visible[2].ResetText);
         Assert.AreEqual("reset every 5h", visible[1].ResetFrequencyText);
         Assert.AreEqual("reset every 5h", visible[2].ResetFrequencyText);
         Assert.AreEqual(90, visible[1].AvailablePercent, 0.001);
@@ -152,15 +152,15 @@ public sealed class HeroViewModelTests
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WhenWindowLengthMissing_UsesProviderFallbackFrequency()
+    public void BuildUsageTimelineSegments_WhenWindowLengthMissing_InfersFrequencyFromStructuredWindow()
     {
-        var config = new FakeConfig(new[] { new ProviderInstance("mimo", "mimo", "MiMo") });
+        var config = new FakeConfig(new[] { new ProviderInstance("example", "mimo", "Example") });
         var snapshots = new[]
         {
-            ("mimo", Snapshot("MiMo · Standard", usedPercent: 20, resetHours: 48, windowMinutes: 0)),
+            ("example", Snapshot("Example", usedPercent: 20, resetHours: 48, windowMinutes: 0)),
         };
         snapshots[0].Item2.Primary.WindowMinutes = null;
-        snapshots[0].Item2.Primary.Label = "Standard";
+        snapshots[0].Item2.Primary.Label = "Monthly credits";
 
         var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
 

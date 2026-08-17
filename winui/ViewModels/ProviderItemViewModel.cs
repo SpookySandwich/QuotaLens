@@ -44,6 +44,7 @@ public sealed partial class ProviderItemViewModel : ObservableObject
 
         RefreshCommand = new AsyncRelayCommand(() => _svc.RefreshAsync(InstanceId));
         LaunchCommand = new RelayCommand(() => _svc.LaunchIde(InstanceId));
+        RenewSessionCommand = new AsyncRelayCommand(LaunchAppThenRefreshAsync);
         DeleteCommand = new RelayCommand(() => DeleteRequested?.Invoke(this, this));
         EditCommand = new RelayCommand(
             () => EditRequested?.Invoke(this, this),
@@ -63,11 +64,13 @@ public sealed partial class ProviderItemViewModel : ObservableObject
     public bool HasSettings { get; }
     public string CardAutomationId => $"ProviderCard_{InstanceId}";
     public string LaunchAutomationId => $"Launch_{InstanceId}";
+    public string RenewSessionAutomationId => $"RenewSession_{InstanceId}";
     public string EditAutomationId => $"Edit_{InstanceId}";
     public string DeleteAutomationId => $"Delete_{InstanceId}";
     public string RefreshAutomationId => $"Refresh_{InstanceId}";
     public string LaunchText => I18n.T("ide.launch");
     public string LaunchAutomationName => I18n.T("ide.launchTitle", "name", IdeName);
+    public string RenewSessionText => I18n.T("card.openAppToRenew", "app", IdeName);
     public string EditToolTip => I18n.T("settings.edit");
     public string RefreshToolTip => I18n.T("common.refresh");
     public string EditAutomationName => $"{I18n.T("settings.edit")} {Name}";
@@ -79,6 +82,7 @@ public sealed partial class ProviderItemViewModel : ObservableObject
 
     public IAsyncRelayCommand RefreshCommand { get; }
     public IRelayCommand LaunchCommand { get; }
+    public IAsyncRelayCommand RenewSessionCommand { get; }
     public IRelayCommand DeleteCommand { get; }
     public IRelayCommand EditCommand { get; }
 
@@ -129,13 +133,30 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         private set => SetProperty(ref _canLaunch, value);
     }
 
+    // Recovery is carried by an invalid snapshot. The card never probes providers.
+    private bool _canRenewSession;
+    private ProviderRecoveryAction? _recoveryAction;
+
+    public bool CanRenewSession
+    {
+        get => _canRenewSession;
+        private set => SetProperty(ref _canRenewSession, value);
+    }
+
+    /// <summary>Resolved text of the snapshot's recovery action; null when not due.</summary>
+    public string? RenewSessionToolTip =>
+        _recoveryAction is null ? null : I18n.T(_recoveryAction.DescriptionKey);
+
     public string IdeName
     {
         get => _ideName;
         private set
         {
             if (SetProperty(ref _ideName, value))
+            {
                 OnPropertyChanged(nameof(LaunchAutomationName));
+                OnPropertyChanged(nameof(RenewSessionText));
+            }
         }
     }
 
@@ -209,6 +230,34 @@ public sealed partial class ProviderItemViewModel : ObservableObject
             ? null
             : LaunchIconService.GetOrCreateIconPath(ProviderType, launchTarget, configuredPath);
         SetLaunchIconPath(iconPath);
+        UpdateRecoveryAvailability(_lastSnapshot);
+    }
+
+    private void UpdateRecoveryAvailability(ProviderSnapshot? snapshot)
+    {
+        var recovery = snapshot is { Error: not null }
+            ? snapshot.RecoveryAction
+            : null;
+        if (_recoveryAction != recovery)
+        {
+            _recoveryAction = recovery;
+            OnPropertyChanged(nameof(RenewSessionToolTip));
+        }
+        CanRenewSession = CanLaunch && recovery?.Kind == ProviderRecoveryKind.LaunchApp;
+    }
+
+    /// <summary>
+    /// Launch the provider's app so it renews the stale source's session, then pull
+    /// the fresh data (providers with a token watcher recover even sooner).
+    /// </summary>
+    private async Task LaunchAppThenRefreshAsync()
+    {
+        if (_recoveryAction is not { Kind: ProviderRecoveryKind.LaunchApp } recovery)
+            return;
+
+        _svc.LaunchIde(InstanceId);
+        await Task.Delay(TimeSpan.FromSeconds(Math.Max(0, recovery.RetryDelaySeconds)));
+        await _svc.RefreshAsync(InstanceId);
     }
 
     public void SetSensitiveHidden(bool hidden)
@@ -324,12 +373,12 @@ public sealed partial class ProviderItemViewModel : ObservableObject
 
     private void BuildRateContent(ProviderSnapshot snap)
     {
-        // Antigravity family grouping (when it has model quotas).
-        if (ProviderType == "antigravity"
-            && snap.ModelQuotas.Count > 0
+        // Any provider can opt into family grouping by supplying model quotas without
+        // already-normalized additional windows.
+        if (snap.ModelQuotas.Count > 0
             && snap.AdditionalWindows.Count == 0)
         {
-            var showOther = GetScopedBool("show_antigravity_other_quotas");
+            var showOther = GetScopedBool("show_other_quota_groups");
             var groups = snap.ModelQuotas
                 .Where(q => showOther || q.Family != "Other")
                 .GroupBy(q => q.Family)
@@ -359,13 +408,9 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         }
 
         // Standard primary / secondary / tertiary rows.
-        var primaryResetPrefix = ProviderType == "codex-lb" && !string.IsNullOrWhiteSpace(snap.Primary.ResetDescription)
-            ? snap.Primary.ResetDescription
-            : null;
         Rows.Add(new QuotaRowViewModel(
             snap.Primary,
             prominent: true,
-            resetPrefix: primaryResetPrefix,
             hideSensitive: _isSensitiveHidden));
         if (snap.Secondary != null)
             Rows.Add(new QuotaRowViewModel(snap.Secondary, hideSensitive: _isSensitiveHidden));
@@ -376,11 +421,9 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         OnPropertyChanged(nameof(HasRows));
 
         var reset = snap.Primary.Kind == RateWindowKind.Quota
-            ? Quota.FmtReset(snap.Primary.ResetsAt)
+            ? ResetFormatter.FormatReset(snap.Primary.ResetsAt)
             : null;
-        FooterReset = ProviderType == "codex-lb"
-            ? null
-            : reset == null ? null : $"{I18n.T("card.reset")} {reset}";
+        FooterReset = reset;
 
         BuildAccountsAndInlineBalance(snap);
     }

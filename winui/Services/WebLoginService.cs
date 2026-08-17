@@ -1678,7 +1678,7 @@ public sealed class WebLoginService
                 UsedPercent = usedPercent,
                 ValueText = combo is null ? $"¥{Fmt2(financialBalance)}" : null,
                 ResetsAt = endTime,
-                ResetDescription =
+                DetailText =
                     $"{primaryLabel} ({Fmt0(tokensUsed)}/{Fmt0(tokensTotal)} {quotaUnit}) | ¥{Fmt2(financialBalance)} bal / ¥{Fmt2(amountOwed)} owed",
                 WindowMinutes = null,
             },
@@ -1689,7 +1689,7 @@ public sealed class WebLoginService
                     Label = "Tokens",
                     UsedPercent = usedPercent,
                     ResetsAt = endTime,
-                    ResetDescription = resetDesc,
+                    DetailText = resetDesc,
                     WindowMinutes = null,
                 },
             Tertiary = null,
@@ -1859,7 +1859,7 @@ public sealed class WebLoginService
             {
                 Label = "Plan expired",
                 UsedPercent = 100,
-                ResetDescription = periodEnd is null ? "Expired" : $"Expired {periodEnd}",
+                DetailText = periodEnd is null ? "Expired" : $"Expired {periodEnd}",
             }
             : windows.FirstOrDefault() ?? noQuotaWindow;
         var remainingWindows = isExpired ? new List<RateWindow>() : windows.Skip(1).ToList();
@@ -1979,7 +1979,8 @@ public sealed class WebLoginService
             Label = label,
             UsedPercent = usedPercent,
             ResetsAt = periodEnd,
-            ResetDescription = $"{FmtTokens(used)}/{FmtTokens(limit)} ({Fmt1(usedPercent)}%)",
+            DetailText = $"{FmtTokens(used)}/{FmtTokens(limit)} ({Fmt1(usedPercent)}%)",
+            WindowMinutes = 30 * 24 * 60,
         };
     }
 
@@ -2105,7 +2106,7 @@ public sealed class WebLoginService
             Label = label,
             UsedPercent = usedPercent,
             ResetsAt = detail.ResetTime,
-            ResetDescription = $"{prefix}{resolvedUsed}/{resolvedLimit} {descriptionSuffix}",
+            DetailText = $"{prefix}{resolvedUsed}/{resolvedLimit} {descriptionSuffix}",
             WindowMinutes = windowMinutes,
         };
     }
@@ -2201,7 +2202,7 @@ public sealed class WebLoginService
                 Label = "Amp Free",
                 UsedPercent = Quota.UtilizationToUsedPercent(used / quota),
                 ResetsAt = resetsAt,
-                ResetDescription = $"{Fmt1(used)}/{Fmt1(quota)} credits",
+                DetailText = $"{Fmt1(used)}/{Fmt1(quota)} credits",
                 WindowMinutes = usage.WindowHours is > 0 ? (long?)Math.Round(usage.WindowHours.Value * 60.0) : null,
             };
         }
@@ -2269,7 +2270,7 @@ public sealed class WebLoginService
                 Label = label,
                 UsedPercent = Quota.ClampPercent(100 - remaining),
                 ResetsAt = resetsAt,
-                ResetDescription = resetDescription,
+                DetailText = resetDescription,
                 WindowMinutes = 30L * 24L * 60L,
             });
         }
@@ -2331,7 +2332,7 @@ public sealed class WebLoginService
                 Label = "Requests",
                 UsedPercent = Quota.ClampPercent(requestsUsed.Value / requestsLimit.Value * 100),
                 ResetsAt = billingCycleEnd,
-                ResetDescription = $"{Fmt0(requestsUsed.Value)}/{Fmt0(requestsLimit.Value)} requests",
+                DetailText = $"{Fmt0(requestsUsed.Value)}/{Fmt0(requestsLimit.Value)} requests",
             };
         }
         else
@@ -2341,7 +2342,7 @@ public sealed class WebLoginService
                 Label = "Included plan",
                 UsedPercent = planPercent,
                 ResetsAt = billingCycleEnd,
-                ResetDescription = planLimitUsd > 0
+                DetailText = planLimitUsd > 0
                     ? $"${Fmt2(planUsedUsd)} / ${Fmt2(planLimitUsd)} included"
                     : string.IsNullOrWhiteSpace(email) ? null : email,
             };
@@ -2364,7 +2365,7 @@ public sealed class WebLoginService
                     Label = "Auto + Composer",
                     UsedPercent = autoPercent.Value,
                     ResetsAt = billingCycleEnd,
-                    ResetDescription = "Included plan lane",
+                    DetailText = "Included plan lane",
                 },
             Tertiary = apiPercent is null
                 ? null
@@ -2373,7 +2374,7 @@ public sealed class WebLoginService
                     Label = "API",
                     UsedPercent = apiPercent.Value,
                     ResetsAt = billingCycleEnd,
-                    ResetDescription = "Named model lane",
+                    DetailText = "Named model lane",
                 },
             Balance = onDemandUsed > 0 || onDemandLimit is > 0
                 ? new BalanceInfo
@@ -2462,7 +2463,7 @@ public sealed class WebLoginService
                 Label = "Credits",
                 UsedPercent = resolvedLimit > 0 ? Quota.ClampPercent(resolvedUsed / resolvedLimit * 100) : 0,
                 ResetsAt = resetsAt,
-                ResetDescription = resolvedLimit > 0
+                DetailText = resolvedLimit > 0
                     ? $"{Fmt1(resolvedUsed)} / {Fmt1(resolvedLimit)} credits"
                     : email,
             },
@@ -2554,7 +2555,7 @@ public sealed class WebLoginService
             Label = label,
             UsedPercent = usedPercent,
             ResetsAt = reset,
-            ResetDescription = $"{Fmt0(usedPercent)}% used",
+            DetailText = $"{Fmt0(usedPercent)}% used",
             WindowMinutes = windowMinutes,
         };
     }
@@ -2578,7 +2579,7 @@ public sealed class WebLoginService
             Label = label,
             UsedPercent = percent,
             ResetsAt = resetsAt,
-            ResetDescription = allowance > 0
+            DetailText = allowance > 0
                 ? $"{FmtTokens(used)}/{FmtTokens(allowance)} tokens"
                 : $"{FmtTokens(used)} tokens",
         };
@@ -2709,7 +2710,7 @@ public sealed class WebLoginService
                 Label = label,
                 UsedPercent = Quota.ClampPercent(percent),
                 ResetsAt = reset,
-                ResetDescription = $"{Fmt0(used.Value)}/{Fmt0(limit.Value)} prompts · {windowType}",
+                DetailText = $"{Fmt0(used.Value)}/{Fmt0(limit.Value)} prompts · {windowType}",
                 WindowMinutes = MiniMaxWindowMinutes(windowType),
             };
         }
@@ -2805,7 +2806,7 @@ public sealed class WebLoginService
                 Label = service,
                 UsedPercent = 0,
                 ResetsAt = null,
-                ResetDescription = "Unlimited",
+                DetailText = "Unlimited",
                 WindowMinutes = windowMinutes ?? 7 * 24 * 60,
             };
         }
@@ -2835,7 +2836,7 @@ public sealed class WebLoginService
             Label = service,
             UsedPercent = usedPercent,
             ResetsAt = reset?.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
-            ResetDescription = $"{Fmt0(used)}/{Fmt0(limit)} prompts · {windowType}",
+            DetailText = $"{Fmt0(used)}/{Fmt0(limit)} prompts · {windowType}",
             WindowMinutes = windowMinutes ?? (isWeekly ? 7 * 24 * 60 : null),
         };
     }
@@ -3057,7 +3058,7 @@ public sealed class WebLoginService
             Label = label,
             UsedPercent = Quota.ClampPercent(100 - remaining),
             ResetsAt = EpochSecondsToIso(resetUnix) ?? resetIso,
-            ResetDescription = $"{Fmt0(remaining)}% remaining",
+            DetailText = $"{Fmt0(remaining)}% remaining",
         };
     }
 
@@ -3075,7 +3076,7 @@ public sealed class WebLoginService
         {
             Label = label,
             UsedPercent = Quota.ClampPercent(clampedUsed / total.Value * 100.0),
-            ResetDescription = $"{Fmt0(clampedUsed)} / {Fmt0(total.Value)} {unit}",
+            DetailText = $"{Fmt0(clampedUsed)} / {Fmt0(total.Value)} {unit}",
         };
     }
 
@@ -3105,7 +3106,7 @@ public sealed class WebLoginService
             {
                 Label = "Monthly credits",
                 UsedPercent = Quota.ClampPercent((proMonthlyCredits - periodicCredits) / proMonthlyCredits * 100),
-                ResetDescription = $"Total {Fmt0(totalCredits)} · Free {Fmt0(freeCredits)}",
+                DetailText = $"Total {Fmt0(totalCredits)} · Free {Fmt0(freeCredits)}",
             }
             : null;
         var secondary = maxRefreshCredits > 0
@@ -3114,7 +3115,7 @@ public sealed class WebLoginService
                 Label = I18n.T("quota.resetCredits"),
                 UsedPercent = Quota.ClampPercent((maxRefreshCredits - refreshCredits) / maxRefreshCredits * 100),
                 ResetsAt = JDateIso(data, "nextRefreshTime"),
-                ResetDescription = $"{DisplayName(JString(data, "refreshInterval")) ?? I18n.T("quota.refresh")}: {Fmt0(refreshCredits)} / {Fmt0(maxRefreshCredits)}",
+                DetailText = $"{DisplayName(JString(data, "refreshInterval")) ?? I18n.T("quota.refresh")}: {Fmt0(refreshCredits)} / {Fmt0(maxRefreshCredits)}",
             }
             : null;
 
@@ -3126,7 +3127,7 @@ public sealed class WebLoginService
             {
                 Label = "Credits",
                 UsedPercent = totalCredits > 0 ? 0 : 100,
-                ResetDescription = $"{Fmt0(totalCredits)} credits",
+                DetailText = $"{Fmt0(totalCredits)} credits",
             },
             Secondary = primary is not null ? secondary : null,
             Balance = new BalanceInfo
@@ -3185,7 +3186,7 @@ public sealed class WebLoginService
                 Label = "Recurring credits",
                 UsedPercent = Quota.ClampPercent(recurringUsed / recurringTotal * 100),
                 ResetsAt = renewalDate,
-                ResetDescription = $"{Fmt0(recurringUsed)}/{Fmt0(recurringTotal)} credits",
+                DetailText = $"{Fmt0(recurringUsed)}/{Fmt0(recurringTotal)} credits",
             };
         }
         else if (!hasFallbackCredits)
@@ -3195,7 +3196,7 @@ public sealed class WebLoginService
                 Label = "Recurring credits",
                 UsedPercent = 100,
                 ResetsAt = renewalDate,
-                ResetDescription = "0/0 credits",
+                DetailText = "0/0 credits",
             };
         }
 
@@ -3216,20 +3217,20 @@ public sealed class WebLoginService
             {
                 Label = "Purchased credits",
                 UsedPercent = purchasedTotal > 0 ? Quota.ClampPercent(purchasedUsed / purchasedTotal * 100) : 100,
-                ResetDescription = $"{Fmt0(purchasedUsed)}/{Fmt0(purchasedTotal)} credits",
+                DetailText = $"{Fmt0(purchasedUsed)}/{Fmt0(purchasedTotal)} credits",
             },
             Secondary = new RateWindow
             {
                 Label = "Bonus credits",
                 UsedPercent = promoTotal > 0 ? Quota.ClampPercent(promoUsed / promoTotal * 100) : 100,
                 ResetsAt = promoExpiration,
-                ResetDescription = $"{Fmt0(promoUsed)}/{Fmt0(promoTotal)} bonus",
+                DetailText = $"{Fmt0(promoUsed)}/{Fmt0(promoTotal)} bonus",
             },
             Tertiary = new RateWindow
             {
                 Label = "Purchased credits",
                 UsedPercent = purchasedTotal > 0 ? Quota.ClampPercent(purchasedUsed / purchasedTotal * 100) : 100,
-                ResetDescription = $"{Fmt0(purchasedUsed)}/{Fmt0(purchasedTotal)} credits",
+                DetailText = $"{Fmt0(purchasedUsed)}/{Fmt0(purchasedTotal)} credits",
             },
             Balance = new BalanceInfo
             {
@@ -3266,7 +3267,7 @@ public sealed class WebLoginService
                 Label = "Base",
                 UsedPercent = Quota.ClampPercent(JDouble(customer, "usageFourHourPercentage") ?? 0),
                 ResetsAt = baseReset,
-                ResetDescription = T3Description("Base", JString(customer, "usageBand")),
+                DetailText = T3Description("Base", JString(customer, "usageBand")),
                 WindowMinutes = 4 * 60,
             },
             Secondary = new RateWindow
@@ -3274,7 +3275,7 @@ public sealed class WebLoginService
                 Label = "Overage",
                 UsedPercent = Quota.ClampPercent(secondaryPct),
                 ResetsAt = overageReset,
-                ResetDescription = "Overage",
+                DetailText = "Overage",
             },
             SourceLabel = "T3 Chat WebView",
             Confidence = Confidence.Official,
@@ -3319,7 +3320,7 @@ public sealed class WebLoginService
                 Label = "Monthly credits",
                 UsedPercent = total is > 0 ? Quota.ClampPercent(used / total.Value * 100) : monthlyRemaining > 0 || purchasedCredits > 0 ? 0 : 100,
                 ResetsAt = periodEnd,
-                ResetDescription = description,
+                DetailText = description,
             },
             Balance = new BalanceInfo
             {
@@ -3358,7 +3359,7 @@ public sealed class WebLoginService
                 Label = "Session",
                 UsedPercent = Quota.ClampPercent(session ?? 0),
                 ResetsAt = JDateIso(root, "sessionResetsAt"),
-                ResetDescription = string.IsNullOrWhiteSpace(email) ? null : email,
+                DetailText = string.IsNullOrWhiteSpace(email) ? null : email,
                 WindowMinutes = (long?)JDouble(root, "sessionWindowMinutes") ?? 5 * 60,
             },
             Secondary = weekly is null
@@ -3368,7 +3369,7 @@ public sealed class WebLoginService
                     Label = "Weekly",
                     UsedPercent = Quota.ClampPercent(weekly.Value),
                     ResetsAt = JDateIso(root, "weeklyResetsAt"),
-                    ResetDescription = "Weekly usage",
+                    DetailText = "Weekly usage",
                     WindowMinutes = 7 * 24 * 60,
                 },
             SourceLabel = "Ollama WebView",
@@ -3411,7 +3412,7 @@ public sealed class WebLoginService
                 Label = "Credits",
                 UsedPercent = total.Value > 0 ? Quota.ClampPercent(used / total.Value * 100) : 0,
                 ResetsAt = resetsAt,
-                ResetDescription = $"{Fmt1(used)} / {Fmt1(total.Value)} credits",
+                DetailText = $"{Fmt1(used)} / {Fmt1(total.Value)} credits",
                 WindowMinutes = 30 * 24 * 60,
             },
             Balance = new BalanceInfo
@@ -3466,7 +3467,7 @@ public sealed class WebLoginService
                 Label = "Credits",
                 UsedPercent = Quota.ClampPercent((1 - creditLeft.Value) * 100),
                 ResetsAt = credit is { } creditSource ? StepFunCreditReset(creditSource) : null,
-                ResetDescription = $"{Fmt1(Quota.ClampPercent(creditLeft.Value * 100))}% {I18n.T("common.available")}",
+                DetailText = $"{Fmt1(Quota.ClampPercent(creditLeft.Value * 100))}% {I18n.T("common.available")}",
             };
             secondary = null;
         }
@@ -3480,7 +3481,7 @@ public sealed class WebLoginService
                 Label = "5h Window",
                 UsedPercent = Quota.ClampPercent((1 - fiveHourLeft.Value) * 100),
                 ResetsAt = EpochSecondsToIso(fiveHourReset),
-                ResetDescription = $"{Fmt0(Quota.ClampPercent(fiveHourLeft.Value * 100))}% {I18n.T("common.available")}",
+                DetailText = $"{Fmt0(Quota.ClampPercent(fiveHourLeft.Value * 100))}% {I18n.T("common.available")}",
                 WindowMinutes = 5 * 60,
             };
             secondary = new RateWindow
@@ -3488,7 +3489,7 @@ public sealed class WebLoginService
                 Label = "Weekly Window",
                 UsedPercent = Quota.ClampPercent((1 - weeklyLeft.Value) * 100),
                 ResetsAt = EpochSecondsToIso(weeklyReset),
-                ResetDescription = $"{Fmt0(Quota.ClampPercent(weeklyLeft.Value * 100))}% {I18n.T("common.available")}",
+                DetailText = $"{Fmt0(Quota.ClampPercent(weeklyLeft.Value * 100))}% {I18n.T("common.available")}",
                 WindowMinutes = 7 * 24 * 60,
             };
         }
@@ -3844,7 +3845,7 @@ public sealed class WebLoginService
                 Label = "Credits",
                 UsedPercent = usedPercent,
                 ResetsAt = resetsAt,
-                ResetDescription = detail,
+                DetailText = detail,
                 WindowMinutes = 30L * 24L * 60L,
             },
             Balance = balance,
@@ -3886,7 +3887,7 @@ public sealed class WebLoginService
                 Label = "5h Window",
                 UsedPercent = usedPercent,
                 ResetsAt = EpochMillisecondsToIso(JDouble(usage, "per5HourResetTime")),
-                ResetDescription = AlibabaTokenPlanPersonalDetail(usedPercent, fiveHourTotal),
+                DetailText = AlibabaTokenPlanPersonalDetail(usedPercent, fiveHourTotal),
                 WindowMinutes = 5 * 60,
             });
         }
@@ -3898,7 +3899,7 @@ public sealed class WebLoginService
                 Label = "Weekly",
                 UsedPercent = usedPercent,
                 ResetsAt = EpochMillisecondsToIso(JDouble(usage, "per1WeekResetTime")),
-                ResetDescription = AlibabaTokenPlanPersonalDetail(usedPercent, weeklyTotal),
+                DetailText = AlibabaTokenPlanPersonalDetail(usedPercent, weeklyTotal),
                 WindowMinutes = 7 * 24 * 60,
             });
         }
@@ -3954,7 +3955,7 @@ public sealed class WebLoginService
                 {
                     Label = "Plan expired",
                     UsedPercent = 100,
-                    ResetDescription = "Expired",
+                    DetailText = "Expired",
                 },
                 Balance = AlibabaCloudBalance(root),
                 SourceLabel = "Alibaba Coding Plan WebView",
@@ -4016,7 +4017,7 @@ public sealed class WebLoginService
             {
                 Label = "Coding plan",
                 UsedPercent = 0,
-                ResetDescription = "Plan active",
+                DetailText = "Plan active",
             });
         }
 
@@ -4044,7 +4045,7 @@ public sealed class WebLoginService
         }
     }
 
-    private sealed record UsageWindow(double UsedPercent, string? ResetsAt, string? ResetDescription);
+    private sealed record UsageWindow(double UsedPercent, string? ResetsAt, string? DetailText);
     private sealed record UsageWindowSet(UsageWindow? Rolling, UsageWindow? Weekly, UsageWindow? Monthly, string? RenewsAt);
     private sealed record WindowCandidate(UsageWindow Window, string PathLower);
 
@@ -4188,7 +4189,7 @@ public sealed class WebLoginService
             Label = label,
             UsedPercent = Quota.ClampPercent(normalizedUsed / total.Value * 100),
             ResetsAt = resetsAt,
-            ResetDescription = $"{Fmt0(normalizedUsed)} / {Fmt0(total.Value)} used",
+            DetailText = $"{Fmt0(normalizedUsed)} / {Fmt0(total.Value)} used",
             WindowMinutes = windowMinutes,
         };
     }
@@ -4393,7 +4394,7 @@ public sealed class WebLoginService
         Label = label,
         UsedPercent = window.UsedPercent,
         ResetsAt = window.ResetsAt,
-        ResetDescription = window.ResetDescription,
+        DetailText = window.DetailText,
         WindowMinutes = windowMinutes,
     };
 
@@ -4402,7 +4403,7 @@ public sealed class WebLoginService
         Label = "Renews",
         UsedPercent = 0,
         ResetsAt = renewsAt,
-        ResetDescription = "Subscription renewal",
+        DetailText = "Subscription renewal",
     };
 
     private static double ResetSortSeconds(UsageWindow window, bool shorterReset)

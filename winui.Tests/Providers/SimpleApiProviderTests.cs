@@ -31,11 +31,11 @@ public sealed class SimpleApiProviderTests
         Assert.AreEqual("openrouter", snapshot.ProviderId);
         Assert.AreEqual(60, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(7 * 24 * 60, snapshot.Primary.WindowMinutes);
-        StringAssert.Contains(snapshot.Primary.ResetDescription!, "resets weekly");
+        StringAssert.Contains(snapshot.Primary.DetailText!, "resets weekly");
         Assert.AreEqual("Daily usage", snapshot.Secondary!.Label);
         Assert.AreEqual(RateWindowKind.Informational, snapshot.Secondary.Kind);
         Assert.AreEqual("$1.25 used", snapshot.Secondary.ValueText);
-        Assert.AreEqual("Current UTC day", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("Current UTC day", snapshot.Secondary.DetailText);
         Assert.AreEqual("Weekly usage", snapshot.Tertiary!.Label);
         Assert.AreEqual("Monthly usage", snapshot.AdditionalWindows.Single().Label);
         Assert.IsNull(snapshot.Balance);
@@ -61,12 +61,12 @@ public sealed class SimpleApiProviderTests
         Assert.AreEqual(0, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(RateWindowKind.Informational, snapshot.Primary.Kind);
         Assert.AreEqual("No per-key limit", snapshot.Primary.ValueText);
-        Assert.AreEqual("Account funding is reported separately", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("Account funding is reported separately", snapshot.Primary.DetailText);
         Assert.IsNull(snapshot.Primary.ResetsAt);
         Assert.AreEqual(ProviderAvailabilityKind.Unknown, snapshot.AvailabilityKind);
         Assert.AreEqual(
             ProviderAvailabilityKind.Unknown,
-            Quota.ProviderAvailabilityState("openrouter", snapshot).Kind);
+            Quota.ProviderAvailabilityState(snapshot).Kind);
     }
 
     [TestMethod]
@@ -158,7 +158,7 @@ public sealed class SimpleApiProviderTests
         """));
 
         Assert.AreEqual(100, snapshot.Primary.UsedPercent, 0.001);
-        StringAssert.Contains(snapshot.Primary.ResetDescription!, "$1.25 deficit");
+        StringAssert.Contains(snapshot.Primary.DetailText!, "$1.25 deficit");
         Assert.AreEqual(-1.25, snapshot.Balance!.Total, 0.001);
     }
 
@@ -219,7 +219,7 @@ public sealed class SimpleApiProviderTests
         Assert.AreEqual(25, snapshot.Balance.Paid, 0.001);
         Assert.AreEqual(100, snapshot.Balance.Granted, 0.001);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("DIEM 75.00 / 100.00 epoch allocation", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("DIEM 75.00 / 100.00 epoch allocation", snapshot.Primary.DetailText);
     }
 
     [TestMethod]
@@ -238,7 +238,7 @@ public sealed class SimpleApiProviderTests
         """));
 
         Assert.AreEqual(100, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("Balance unavailable for API calls", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("Balance unavailable for API calls", snapshot.Primary.DetailText);
     }
 
     [TestMethod]
@@ -254,10 +254,10 @@ public sealed class SimpleApiProviderTests
 
         Assert.AreEqual("crof", snapshot.ProviderId);
         Assert.AreEqual(60, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("40 requests left", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("40 requests left", snapshot.Primary.DetailText);
         Assert.AreEqual(24 * 60, snapshot.Primary.WindowMinutes);
         Assert.AreEqual("Credits", snapshot.Secondary!.Label);
-        Assert.AreEqual("$9.00", snapshot.Secondary.ResetDescription);
+        Assert.AreEqual("$9.00", snapshot.Secondary.DetailText);
         Assert.AreEqual("USD", snapshot.Balance!.Currency);
         Assert.AreEqual(9, snapshot.Balance!.Total, 0.001);
     }
@@ -280,13 +280,13 @@ public sealed class SimpleApiProviderTests
         Assert.AreEqual(RateWindowKind.Informational, snapshot.Primary.Kind);
         Assert.AreEqual(0, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("$9.04", snapshot.Primary.ValueText);
-        Assert.AreEqual("$9.04", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("$9.04", snapshot.Primary.DetailText);
         Assert.IsNull(snapshot.Primary.ResetsAt);
         Assert.IsNull(snapshot.Secondary);
         Assert.AreEqual(9.0441, snapshot.Balance!.Total, 0.0001);
         Assert.AreEqual(
             ProviderAvailabilityKind.Unknown,
-            Quota.ProviderAvailabilityState("crof", snapshot).Kind);
+            Quota.ProviderAvailabilityState(snapshot).Kind);
     }
 
     [TestMethod]
@@ -670,7 +670,7 @@ public sealed class SimpleApiProviderTests
         Assert.AreEqual("Copilot · Business", snapshot.Name);
         Assert.AreEqual("Premium", snapshot.Primary.Label);
         Assert.AreEqual(60, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("60/100", snapshot.Primary.ResetDescription);
+        Assert.AreEqual("60/100", snapshot.Primary.DetailText);
         Assert.AreEqual("Chat", snapshot.Secondary!.Label);
         Assert.AreEqual(25, snapshot.Secondary.UsedPercent, 0.001);
         Assert.IsFalse(string.IsNullOrWhiteSpace(snapshot.Primary.ResetsAt));
@@ -810,7 +810,7 @@ public sealed class SimpleApiProviderTests
         Assert.AreEqual(EntitlementStatus.Expired, snapshot.EntitlementStatus);
         Assert.AreEqual("ElevenLabs", snapshot.Name);
         Assert.IsNull(snapshot.PlanName);
-        StringAssert.Contains(snapshot.Primary.ResetDescription, "Status: Canceled");
+        StringAssert.Contains(snapshot.Primary.DetailText, "Status: Canceled");
     }
 
     [TestMethod]
@@ -870,7 +870,7 @@ public sealed class SimpleApiProviderTests
         """));
 
         Assert.AreEqual(ProviderAvailabilityKind.Unlimited, snapshot.AvailabilityKind);
-        Assert.AreEqual(ProviderAvailabilityKind.Unlimited, Quota.ProviderAvailabilityState("warp", snapshot).Kind);
+        Assert.AreEqual(ProviderAvailabilityKind.Unlimited, Quota.ProviderAvailabilityState(snapshot).Kind);
     }
 
     [TestMethod]
@@ -1174,7 +1174,7 @@ public sealed class SimpleApiProviderTests
         Assert.AreEqual("z.ai · Pro", snapshot.Name);
         Assert.AreEqual("1 week window", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
-        Assert.AreEqual("Monthly", snapshot.Secondary!.ResetDescription);
+        Assert.AreEqual("Monthly", snapshot.Secondary!.DetailText);
         Assert.IsNull(snapshot.Secondary.WindowMinutes);
     }
 
@@ -1261,7 +1261,7 @@ public sealed class SimpleApiProviderTests
         Assert.AreEqual(RateWindowKind.Informational, snapshot.Primary.Kind);
         Assert.AreEqual("Providers", snapshot.Primary.Label);
         Assert.AreEqual("2 providers", snapshot.Primary.ValueText);
-        Assert.AreEqual(100, Quota.ProviderAvailability("llmproxy", snapshot));
+        Assert.AreEqual(100, Quota.ProviderAvailability(snapshot));
     }
 
     [TestMethod]

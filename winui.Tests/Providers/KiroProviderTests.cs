@@ -51,7 +51,7 @@ public sealed class KiroProviderTests
         Assert.AreEqual("kiro-main", snapshot.ProviderId);
         Assert.AreEqual("Kiro · Kiro Pro", snapshot.Name);
         Assert.AreEqual(25d, snapshot.Primary.UsedPercent);
-        StringAssert.Contains(snapshot.Primary.ResetDescription, "Overage: 3 credits · $0.12 USD");
+        StringAssert.Contains(snapshot.Primary.DetailText, "Overage: 3 credits · $0.12 USD");
         Assert.IsNotNull(snapshot.Secondary);
         Assert.AreEqual("Bonus credits", snapshot.Secondary!.Label);
         Assert.AreEqual(20d, snapshot.Secondary.UsedPercent);
@@ -107,6 +107,6 @@ public sealed class KiroProviderTests
             snapshot.AdditionalWindows.Select(window => window.Label).ToArray());
         Assert.AreEqual(1.3, snapshot.AdditionalWindows[0].UsedPercent, 0.001);
         Assert.IsTrue(snapshot.AdditionalWindows.All(window => !window.CountsForAvailability));
-        Assert.AreEqual(75, Quota.ProviderAvailability("kiro", snapshot), 0.001);
+        Assert.AreEqual(75, Quota.ProviderAvailability(snapshot), 0.001);
     }
 }

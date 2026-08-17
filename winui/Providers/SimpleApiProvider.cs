@@ -50,7 +50,7 @@ public sealed class SimpleApiProvider : IProvider
         double UsedPercent,
         string? ResetsAt,
         string Label,
-        string? ResetDescription);
+        string? DetailText);
 
     private static readonly IReadOnlyDictionary<string, Definition> Definitions =
         new Dictionary<string, Definition>
@@ -641,7 +641,7 @@ public sealed class SimpleApiProvider : IProvider
                 UsedPercent = usedPercent,
                 ValueText = hasNoKeyLimit ? I18n.T("quota.noPerKeyLimit") : null,
                 WindowMinutes = hasNoKeyLimit ? null : OpenRouterResetWindowMinutes(resetType),
-                ResetDescription = hasNoKeyLimit
+                DetailText = hasNoKeyLimit
                     ? "Account funding is reported separately"
                     : OpenRouterLimitDescription(limit, remaining, resetType),
             },
@@ -809,7 +809,7 @@ public sealed class SimpleApiProvider : IProvider
             Sensitivity = RateWindowSensitivity.Financial,
             UsedPercent = 0,
             ValueText = $"${Fmt2(usage.Value)} used",
-            ResetDescription = period,
+            DetailText = period,
         };
     }
 
@@ -951,7 +951,7 @@ public sealed class SimpleApiProvider : IProvider
             Sensitivity = RateWindowSensitivity.Financial,
             UsedPercent = 0,
             ValueText = $"${Fmt2(displayedCredits)}",
-            ResetDescription = $"${Fmt2(displayedCredits)}",
+            DetailText = $"${Fmt2(displayedCredits)}",
         };
 
         RateWindow primary = creditsWindow;
@@ -967,7 +967,7 @@ public sealed class SimpleApiProvider : IProvider
                 Label = "Requests",
                 UsedPercent = Quota.ClampPercent(100 - remainingPercent),
                 ResetsAt = NextCrofRequestReset(DateTimeOffset.UtcNow),
-                ResetDescription = $"{Fmt0(Math.Max(0, usableRequests.Value))} requests left",
+                DetailText = $"{Fmt0(Math.Max(0, usableRequests.Value))} requests left",
                 WindowMinutes = 24 * 60,
             };
             secondary = creditsWindow;
@@ -1093,7 +1093,7 @@ public sealed class SimpleApiProvider : IProvider
                 Label = "Character credits",
                 UsedPercent = limit > 0 ? Quota.UtilizationToUsedPercent(used / limit) : 0,
                 ResetsAt = UnixSecondsToIso(OptionalLong(root, "next_character_count_reset_unix")),
-                ResetDescription = usageDescription,
+                DetailText = usageDescription,
             },
             Secondary = SlotWindow(root, "voice_slots_used", "voice_limit", "Voice slots"),
             Tertiary = SlotWindow(root, "professional_voice_slots_used", "professional_voice_limit", "Professional voices"),
@@ -1132,7 +1132,7 @@ public sealed class SimpleApiProvider : IProvider
                 Label = "Requests",
                 UsedPercent = isUnlimited ? 0 : limit > 0 ? Quota.UtilizationToUsedPercent(used / limit) : 0,
                 ResetsAt = isUnlimited ? null : OptionalDateIso(info, "nextRefreshTime"),
-                ResetDescription = isUnlimited ? "Unlimited" : $"{Fmt0(used)}/{Fmt0(limit)} credits",
+                DetailText = isUnlimited ? "Unlimited" : $"{Fmt0(used)}/{Fmt0(limit)} credits",
             },
             Secondary = bonus.Total > 0
                 ? new RateWindow
@@ -1140,7 +1140,7 @@ public sealed class SimpleApiProvider : IProvider
                     Label = "Bonus credits",
                     UsedPercent = bonus.Total > 0 ? Quota.UtilizationToUsedPercent((bonus.Total - bonus.Remaining) / bonus.Total) : 100,
                     ResetsAt = bonus.NextExpiration,
-                    ResetDescription = $"{Fmt0(bonus.Remaining)}/{Fmt0(bonus.Total)} remaining",
+                    DetailText = $"{Fmt0(bonus.Remaining)}/{Fmt0(bonus.Total)} remaining",
                 }
                 : null,
             SourceLabel = "Warp API",
@@ -1177,7 +1177,7 @@ public sealed class SimpleApiProvider : IProvider
                 Label = "Credits",
                 UsedPercent = resolvedTotal > 0 ? Quota.UtilizationToUsedPercent(resolvedUsed / resolvedTotal) : resolvedRemaining > 0 ? 0 : 100,
                 ResetsAt = OptionalDateIso(root, "next_quota_reset"),
-                ResetDescription = $"{Fmt0(resolvedUsed)}/{Fmt0(resolvedTotal)} credits",
+                DetailText = $"{Fmt0(resolvedUsed)}/{Fmt0(resolvedTotal)} credits",
             },
             Balance = new BalanceInfo
             {
@@ -1235,7 +1235,7 @@ public sealed class SimpleApiProvider : IProvider
                 ResetsAt = rateLimit is { } rateLimitObject
                     ? OptionalDateIso(rateLimitObject, "weeklyResetsAt")
                     : null,
-                ResetDescription = $"{Fmt0(resolvedWeeklyUsed)}/{Fmt0(weeklyLimit.Value)} credits",
+                DetailText = $"{Fmt0(resolvedWeeklyUsed)}/{Fmt0(weeklyLimit.Value)} credits",
                 WindowMinutes = 7 * 24 * 60,
             };
         }
@@ -1515,7 +1515,7 @@ public sealed class SimpleApiProvider : IProvider
                 Label = label,
                 UsedPercent = usedPercent,
                 ResetsAt = resetsAt,
-                ResetDescription = resetDescription,
+                DetailText = resetDescription,
             },
             Balance = balance,
             SourceLabel = sourceLabel,
@@ -1534,7 +1534,7 @@ public sealed class SimpleApiProvider : IProvider
         {
             Label = label,
             UsedPercent = Quota.UtilizationToUsedPercent(used.Value / limit.Value),
-            ResetDescription = $"{Fmt0(used.Value)} / {Fmt0(limit.Value)}",
+            DetailText = $"{Fmt0(used.Value)} / {Fmt0(limit.Value)}",
         };
     }
 
@@ -1561,7 +1561,7 @@ public sealed class SimpleApiProvider : IProvider
         {
             Label = label,
             UsedPercent = usedPercent,
-            ResetDescription = entitlement is > 0 && remaining is not null
+            DetailText = entitlement is > 0 && remaining is not null
                 ? $"{Fmt0(Math.Max(0, entitlement.Value - remaining.Value))}/{Fmt0(entitlement.Value)}"
                 : usedPercent > 100
                     ? $"{Fmt0(usedPercent)}% used"
@@ -1724,7 +1724,7 @@ public sealed class SimpleApiProvider : IProvider
             Label = DisplayName(label) ?? label,
             UsedPercent = Quota.ClampPercent(NormalizePercent(usedPercent.Value)),
             ResetsAt = reset,
-            ResetDescription = reset is null ? description : null,
+            DetailText = reset is null ? description : null,
             WindowMinutes = windowMinutes,
         };
     }
@@ -1792,7 +1792,7 @@ public sealed class SimpleApiProvider : IProvider
         Label = limit.Label,
         UsedPercent = limit.UsedPercent,
         ResetsAt = limit.ResetsAt,
-        ResetDescription = limit.ResetDescription,
+        DetailText = limit.DetailText,
         WindowMinutes = limit.WindowMinutes,
     };
 

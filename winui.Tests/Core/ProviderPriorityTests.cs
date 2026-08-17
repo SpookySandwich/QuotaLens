@@ -417,7 +417,7 @@ public sealed class ProviderPriorityTests
         snapshot.Primary.Kind = RateWindowKind.Informational;
         snapshot.Primary.ValueText = "$12.34 spent";
 
-        var availability = Quota.ProviderAvailability("openai", snapshot);
+        var availability = Quota.ProviderAvailability(snapshot);
 
         Assert.AreEqual(100, availability);
     }

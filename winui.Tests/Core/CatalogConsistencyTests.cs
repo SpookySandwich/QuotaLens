@@ -102,18 +102,26 @@ public sealed class CatalogConsistencyTests
     [TestMethod]
     public void ProviderRegistry_FactoryCategories_DoNotOverlap()
     {
-        // Custom providers that intentionally wrap the WebView flow (CLI-first detection
-        // with a WebView login fallback). Any other overlap is a registration bug.
+        // Custom providers that intentionally wrap another factory category. Kimi wraps
+        // the WebView flow; zai wraps the SimpleApi API-key flow (CLI-first detection
+        // with an API-key fallback). Any other overlap is a registration bug.
         var webWrappers = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "kimi" };
+        var simpleWrappers = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "zai" };
 
         var custom = ProviderRegistry.CustomProviderTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var simple = SimpleApiProvider.SupportedTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var web = WebLoginService.SupportedTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var customExceptWrappers = custom.Except(webWrappers).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var customExceptWrappers = custom.Except(webWrappers).Except(simpleWrappers)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         Assert.IsTrue(webWrappers.IsSubsetOf(custom), "web-wrapper providers must have a custom factory");
         Assert.IsTrue(webWrappers.IsSubsetOf(web), "web-wrapper providers must keep their WebView fallback");
-        AssertDisjoint(custom, simple, "custom", "simple API");
+        Assert.IsTrue(simpleWrappers.IsSubsetOf(custom), "simple-wrapper providers must have a custom factory");
+        Assert.IsTrue(simpleWrappers.IsSubsetOf(simple), "simple-wrapper providers must keep their API-key flow");
+        CollectionAssert.AreEquivalent(
+            simpleWrappers.ToList(),
+            custom.Intersect(simple).ToList(),
+            "custom/simple overlap must be exactly the intentional simple wrappers");
         AssertDisjoint(customExceptWrappers, web, "custom", "WebView");
         AssertDisjoint(simple, web, "simple API", "WebView");
     }
@@ -188,7 +196,7 @@ public sealed class CatalogConsistencyTests
     public void DefaultConfig_PreservesFieldDefaultOverrides()
     {
         Assert.AreEqual("http://127.0.0.1:2455", Catalog.DefaultConfig["codex_lb_url"]);
-        Assert.AreEqual("false", Catalog.DefaultConfig["show_antigravity_other_quotas"]);
+        Assert.AreEqual("false", Catalog.DefaultConfig["show_other_quota_groups"]);
         Assert.AreEqual("", Catalog.DefaultConfig["deepseek_key"]);
         Assert.AreEqual("5", Catalog.DefaultConfig["empty_threshold_pct"]);
     }
@@ -379,6 +387,9 @@ public sealed class CatalogConsistencyTests
     [TestMethod]
     public void SimpleApiProviders_HaveRegistryAndRequiredConfigFields()
     {
+        // zai's API-key flow is wrapped by ZaiProvider (local ZCode session first),
+        // so its required-field and instance-type rules differ; see ZaiProviderTests.
+        var wrapped = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "zai" };
         var known = Catalog.Types.Select(type => type.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var registered = ProviderRegistry.RegisteredTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var failures = new List<string>();
@@ -395,8 +406,12 @@ public sealed class CatalogConsistencyTests
                 failures.Add($"{providerType}: missing default {configKey}");
             if (!Catalog.Fields.TryGetValue(providerType, out var fields) || !fields.Any(field => field.Key == configKey))
                 failures.Add($"{providerType}: missing editable {configKey}");
-            if (!Catalog.RequiredFields.TryGetValue(providerType, out var required) || !required.Contains(configKey))
+            if (!wrapped.Contains(providerType)
+                && (!Catalog.RequiredFields.TryGetValue(providerType, out var required) || !required.Contains(configKey)))
                 failures.Add($"{providerType}: missing required field {configKey}");
+
+            if (wrapped.Contains(providerType))
+                continue;
 
             var provider = ProviderRegistry.Create(providerType);
             Assert.IsInstanceOfType(provider, typeof(SimpleApiProvider));

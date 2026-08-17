@@ -212,7 +212,7 @@ internal static class OpenCodeGoLocalUsageProvider
         Label = label,
         UsedPercent = Quota.ClampPercent(cost / limit * 100),
         ResetsAt = resetsAt.ToString("O", CultureInfo.InvariantCulture),
-        ResetDescription = $"${cost.ToString("0.##", CultureInfo.InvariantCulture)} of ${limit.ToString("0", CultureInfo.InvariantCulture)}",
+        DetailText = $"${cost.ToString("0.##", CultureInfo.InvariantCulture)} of ${limit.ToString("0", CultureInfo.InvariantCulture)}",
         WindowMinutes = windowMinutes,
         CountsForAvailability = countsForAvailability,
     };
