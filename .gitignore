@@ -35,6 +35,9 @@ nul
 .claude/
 AGENTS.local.md
 *.local.md
+HANDOFF.md
+handoff*.md
+*HANDOFF*
 
 # Editor state
 .vscode/

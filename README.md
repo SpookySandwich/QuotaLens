@@ -7,10 +7,14 @@
 A native Windows dashboard for quota, usage, and balances across **48 AI coding providers**.<br>
 No QuotaLens backend, no account, and no telemetry.
 
-[![Build](https://img.shields.io/github/actions/workflow/status/SpookySandwich/QuotaLens/windows-installer.yml?branch=main&label=build)](https://github.com/SpookySandwich/QuotaLens/actions/workflows/windows-installer.yml)
-[![Release](https://img.shields.io/github/v/release/SpookySandwich/QuotaLens?display_name=tag&label=release)](https://github.com/SpookySandwich/QuotaLens/releases/latest)
-[![License](https://img.shields.io/github/license/SpookySandwich/QuotaLens?label=license)](LICENSE)
-![Platform](https://img.shields.io/badge/Windows%2011-x64-0078D4)
+[![Build](https://img.shields.io/github/actions/workflow/status/SpookySandwich/QuotaLens/windows-installer.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=build)](https://github.com/SpookySandwich/QuotaLens/actions/workflows/windows-installer.yml)
+[![Release](https://img.shields.io/github/v/release/SpookySandwich/QuotaLens?style=flat-square&logo=github&label=release)](https://github.com/SpookySandwich/QuotaLens/releases/latest)
+![Platform](https://img.shields.io/badge/platform-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?style=flat-square&logo=windows&logoColor=white)
+![Providers](https://img.shields.io/badge/providers-48%20supported-10B981?style=flat-square)
+![Privacy](https://img.shields.io/badge/privacy-100%25%20local-success?style=flat-square)
+[![License](https://img.shields.io/github/license/SpookySandwich/QuotaLens?style=flat-square&label=license)](LICENSE)
 
 **English** · [简体中文](README.zh-CN.md)
 

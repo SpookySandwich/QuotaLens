@@ -7,10 +7,14 @@
 一款原生 Windows 面板，统一查看 **48 家 AI 编程服务商**的额度、用量与余额。<br>
 QuotaLens 无后端、无需注册账号，也没有遥测。
 
-[![Build](https://img.shields.io/github/actions/workflow/status/SpookySandwich/QuotaLens/windows-installer.yml?branch=main&label=build)](https://github.com/SpookySandwich/QuotaLens/actions/workflows/windows-installer.yml)
-[![Release](https://img.shields.io/github/v/release/SpookySandwich/QuotaLens?display_name=tag&label=release)](https://github.com/SpookySandwich/QuotaLens/releases/latest)
-[![License](https://img.shields.io/github/license/SpookySandwich/QuotaLens?label=license)](LICENSE)
-![Platform](https://img.shields.io/badge/Windows%2011-x64-0078D4)
+[![Build](https://img.shields.io/github/actions/workflow/status/SpookySandwich/QuotaLens/windows-installer.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=build)](https://github.com/SpookySandwich/QuotaLens/actions/workflows/windows-installer.yml)
+[![Release](https://img.shields.io/github/v/release/SpookySandwich/QuotaLens?style=flat-square&logo=github&label=release)](https://github.com/SpookySandwich/QuotaLens/releases/latest)
+![Platform](https://img.shields.io/badge/平台-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
+![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?style=flat-square&logo=windows&logoColor=white)
+![Providers](https://img.shields.io/badge/服务商-支持%2048%20家-10B981?style=flat-square)
+![Privacy](https://img.shields.io/badge/隐私-100%25%20本地%20%7C%20零遥测-success?style=flat-square)
+[![License](https://img.shields.io/github/license/SpookySandwich/QuotaLens?style=flat-square&label=license)](LICENSE)
 
 [English](README.md) · **简体中文**
 
