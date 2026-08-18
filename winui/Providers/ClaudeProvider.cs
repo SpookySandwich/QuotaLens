@@ -305,7 +305,7 @@ public sealed class ClaudeProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = Type,
-            Name = $"Claude Code · {subDisplay}",
+            Name = "Claude Code",
             PlanName = ProviderSnapshotIdentity.NormalizePlanName("Claude Code", subDisplay),
             Primary = primary,
             Secondary = secondary,

@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using QuotaLens.Core;
 using QuotaLens.Providers;
 
 namespace QuotaLens.Tests.Providers;
@@ -6,6 +7,26 @@ namespace QuotaLens.Tests.Providers;
 [TestClass]
 public sealed class GeminiProviderTests
 {
+    [TestMethod]
+    public void Sources_AreCanonicalAppAndCli_WithLegacyIdeCompatibility()
+    {
+        var provider = new GeminiProvider();
+
+        CollectionAssert.AreEqual(
+            new[] { "app", "cli" },
+            provider.Sources.Select(source => source.Mode.ConfigValue()).ToArray());
+
+        var app = provider.Sources.Single(source => source.Mode == ProviderSourceMode.App);
+        CollectionAssert.AreEqual(
+            new[] { "gemini_app_path", "gemini_auto_launch_app" },
+            app.ConfigFieldKeys.ToArray());
+        CollectionAssert.Contains(app.LegacyConfigValues.ToArray(), "ide");
+        Assert.AreEqual("gemini.appSourceNote", app.UnavailableRecovery?.DescriptionKey);
+
+        var cli = provider.Sources.Single(source => source.Mode == ProviderSourceMode.Cli);
+        CollectionAssert.AreEqual(new[] { "gemini_home", "gemini_path" }, cli.ConfigFieldKeys.ToArray());
+    }
+
     [TestMethod]
     public void ParseCodeAssistStatus_WithPaidTier_PrefersPaidTierNameAndId()
     {
@@ -60,7 +81,7 @@ public sealed class GeminiProviderTests
 
         var snapshot = GeminiProvider.Snapshot(usage);
 
-        Assert.AreEqual("Gemini · Standard", snapshot.Name);
+        Assert.AreEqual("Gemini", snapshot.Name);
         Assert.IsNull(snapshot.Secondary);
         Assert.IsNull(snapshot.Tertiary);
         Assert.HasCount(1, snapshot.Accounts);
@@ -120,7 +141,7 @@ public sealed class GeminiProviderTests
         Assert.AreEqual(4, usage.Windows.Count);
 
         var snapshot = GeminiProvider.Snapshot(usage with { AccountPlan = "Pro" });
-        Assert.AreEqual("Gemini · Pro", snapshot.Name);
+        Assert.AreEqual("Gemini", snapshot.Name);
         Assert.AreEqual("Gemini weekly", snapshot.Primary.Label);
         Assert.AreEqual(2.0, snapshot.Primary.UsedPercent, 0.01);
         Assert.IsNull(snapshot.Primary.DetailText);

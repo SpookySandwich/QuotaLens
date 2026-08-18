@@ -9,8 +9,8 @@ public sealed class ProviderSourceRunnerTests
     [TestMethod]
     public async Task FetchAsync_UsesSelectedSourceWhenItIsAvailable()
     {
-        var web = new FakeSource("web", available: true, label: "web-data");
-        var app = new FakeSource("app", available: true, label: "app-data");
+        var web = new FakeSource(ProviderSourceMode.Web, available: true, label: "web-data");
+        var app = new FakeSource(ProviderSourceMode.App, available: true, label: "app-data");
         var config = new MapConfig(new Dictionary<string, string>
         {
             ["kimi.provider_source"] = "web",
@@ -32,9 +32,9 @@ public sealed class ProviderSourceRunnerTests
     [TestMethod]
     public async Task FetchAsync_SelectedUnavailableSource_DoesNotFallThrough()
     {
-        var web = new FakeSource("web", available: true, label: "web-data");
+        var web = new FakeSource(ProviderSourceMode.Web, available: true, label: "web-data");
         var recovery = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "source.note");
-        var app = new FakeSource("app", available: false, label: "app-data", recovery: recovery);
+        var app = new FakeSource(ProviderSourceMode.App, available: false, label: "app-data", recovery: recovery);
         var config = new MapConfig(new Dictionary<string, string>
         {
             ["kimi.provider_source"] = "app",
@@ -54,8 +54,8 @@ public sealed class ProviderSourceRunnerTests
     [TestMethod]
     public async Task FetchAsync_AutomaticModeFallsThroughToFirstAvailableSource()
     {
-        var app = new FakeSource("app", available: false, label: "app-data");
-        var web = new FakeSource("web", available: true, label: "web-data");
+        var app = new FakeSource(ProviderSourceMode.App, available: false, label: "app-data");
+        var web = new FakeSource(ProviderSourceMode.Web, available: true, label: "web-data");
 
         var snapshot = await ProviderSourceRunner.FetchAsync(
             new UnusedProvider(),
@@ -75,11 +75,11 @@ public sealed class ProviderSourceRunnerTests
     public async Task FetchAsync_WhenSelectedSourceFails_DoesNotSwitchToAnotherLogin()
     {
         var app = new FakeSource(
-            "app",
+            ProviderSourceMode.App,
             available: true,
             label: "app-data",
             fail: new ProviderException("Not available: HTTP 401"));
-        var web = new FakeSource("web", available: true, label: "web-data");
+        var web = new FakeSource(ProviderSourceMode.Web, available: true, label: "web-data");
         var config = new MapConfig(new Dictionary<string, string>
         {
             ["kimi.provider_source"] = "app",
@@ -100,7 +100,7 @@ public sealed class ProviderSourceRunnerTests
     public async Task FetchAsync_WithoutAvailableSource_CarriesPreferredSourceRecovery()
     {
         var recovery = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "source.note");
-        var app = new FakeSource("app", available: false, recovery: recovery);
+        var app = new FakeSource(ProviderSourceMode.App, available: false, recovery: recovery);
 
         var error = await Assert.ThrowsExactlyAsync<ProviderException>(() =>
             ProviderSourceRunner.FetchAsync(
@@ -118,7 +118,7 @@ public sealed class ProviderSourceRunnerTests
     {
         var recovery = new ProviderRecoveryAction(ProviderRecoveryKind.LaunchApp, "source.note");
         var app = new FakeSource(
-            "app",
+            ProviderSourceMode.App,
             available: true,
             fail: new ProviderException("Login required", ProviderErrorKind.AuthenticationRequired),
             recovery: recovery);
@@ -135,6 +135,48 @@ public sealed class ProviderSourceRunnerTests
         Assert.AreEqual(ProviderErrorKind.AuthenticationRequired, error.Kind);
     }
 
+    [TestMethod]
+    public async Task FetchAsync_LegacySelection_ResolvesAndReportsCanonicalMode()
+    {
+        var app = new FakeSource(
+            ProviderSourceMode.App,
+            available: true,
+            label: "app-data",
+            legacyConfigValues: new[] { "ide" });
+        var config = new MapConfig(new Dictionary<string, string>
+        {
+            ["gemini.provider_source"] = "ide",
+        });
+
+        var snapshot = await ProviderSourceRunner.FetchAsync(
+            new UnusedProvider(),
+            new IProviderSource[] { app },
+            "gemini",
+            config,
+            CancellationToken.None);
+
+        Assert.AreEqual("app", snapshot.SourceState?.RequestedSourceId);
+        Assert.AreEqual("app", snapshot.SourceState?.EffectiveSourceId);
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_DuplicateMode_IsRejectedBeforeProviderLogicRuns()
+    {
+        var sources = new IProviderSource[]
+        {
+            new FakeSource(ProviderSourceMode.App, available: true),
+            new FakeSource(ProviderSourceMode.App, available: true),
+        };
+
+        await Assert.ThrowsExactlyAsync<InvalidOperationException>(() =>
+            ProviderSourceRunner.FetchAsync(
+                new UnusedProvider(),
+                sources,
+                "gemini",
+                new EmptyConfig(),
+                CancellationToken.None));
+    }
+
     private sealed class FakeSource : IProviderSource
     {
         private readonly bool _available;
@@ -143,22 +185,23 @@ public sealed class ProviderSourceRunnerTests
         private readonly ProviderRecoveryAction? _recovery;
 
         public FakeSource(
-            string id,
+            ProviderSourceMode mode,
             bool available,
             string label = "",
             Exception? fail = null,
-            ProviderRecoveryAction? recovery = null)
+            ProviderRecoveryAction? recovery = null,
+            IReadOnlyList<string>? legacyConfigValues = null)
         {
-            Id = id;
-            Name = id;
+            Mode = mode;
             _available = available;
             _label = label;
             _fail = fail;
             _recovery = recovery;
+            LegacyConfigValues = legacyConfigValues ?? Array.Empty<string>();
         }
 
-        public string Id { get; }
-        public string Name { get; }
+        public ProviderSourceMode Mode { get; }
+        public IReadOnlyList<string> LegacyConfigValues { get; }
         public ProviderRecoveryAction? UnavailableRecovery => _recovery;
         public bool IsAvailable(string instanceId, IConfig config) => _available;
 
@@ -167,7 +210,7 @@ public sealed class ProviderSourceRunnerTests
             if (_fail is not null)
                 throw _fail;
             if (!_available)
-                throw new ProviderException("Login required: " + Id);
+                throw new ProviderException("Login required: " + Mode.DisplayName());
             return Task.FromResult(new ProviderSnapshot { ProviderId = "kimi", Name = _label });
         }
     }

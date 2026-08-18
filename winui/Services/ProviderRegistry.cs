@@ -53,6 +53,63 @@ public static class ProviderRegistry
         throw new ArgumentException($"Unknown provider type: {type}");
     }
 
+    /// <summary>
+    /// Older single-source CLI providers keep their fetch implementations unchanged,
+    /// but receive the same source-owned connection contract as native multi-source
+    /// providers. This is the compatibility boundary; the dialog never consults the
+    /// provider login catalog or provider IDs.
+    /// </summary>
+    public static IReadOnlyList<IProviderSource> ConnectionSourcesFor(IProvider provider)
+    {
+        if (provider.Sources.Count > 0)
+            return provider.Sources;
+        if (!ProviderLoginLauncher.IsSupported(provider.Type))
+            return Array.Empty<IProviderSource>();
+
+        var fieldKeys = Catalog.Fields.TryGetValue(provider.Type, out var fields)
+            ? fields.Select(field => field.Key).ToArray()
+            : Array.Empty<string>();
+        return new IProviderSource[]
+        {
+            new ProviderSource(
+                ProviderSourceMode.Cli,
+                (_, _) => true,
+                provider.FetchAsync,
+                configFieldKeys: fieldKeys,
+                connectionAction: new CliProviderConnectionAction(provider.Type)),
+        };
+    }
+
+    /// <summary>
+    /// Resolves the source displayed by settings when no explicit value has been saved:
+    /// the provider's first declared source is its default. Fetch orchestration may use
+    /// a temporary fallback, but that must not silently change the user's everyday tool.
+    /// </summary>
+    public static IProviderSource? ConfiguredOrDefaultSourceFor(
+        IReadOnlyList<IProviderSource> sources,
+        string instanceId,
+        IConfig config)
+    {
+        var explicitlySelected = config.GetScoped(instanceId, ProviderSourceRunner.SourceConfigKey);
+        return sources.Find(explicitlySelected) ?? sources.FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Resolves the dashboard launch action from the configured/default native source.
+    /// A native provider never borrows another source's action; legacy providers retain
+    /// their existing catalog/default-editor behavior.
+    /// </summary>
+    public static IProviderLaunchAction? LaunchActionFor(
+        IProvider provider,
+        string instanceId,
+        IConfig config)
+    {
+        if (provider.Sources.Count == 0)
+            return new AppProviderLaunchAction(provider.Type, allowDefaultEditorFallback: true);
+
+        return ConfiguredOrDefaultSourceFor(provider.Sources, instanceId, config)?.LaunchAction;
+    }
+
     /// <summary>True when a provider exposes more than one data source (selected per instance).</summary>
     public static bool HasMultipleSources(string type) =>
         Factories.ContainsKey(type) && Create(type).Sources.Count > 1;

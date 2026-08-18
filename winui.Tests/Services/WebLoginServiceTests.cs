@@ -47,7 +47,7 @@ public sealed class WebLoginServiceTests
         var snapshot = WebLoginService.ParseKimi(json);
 
         Assert.AreEqual("kimi", snapshot.ProviderId);
-        Assert.AreEqual("Kimi · Moderato", snapshot.Name);
+        Assert.AreEqual("Kimi", snapshot.Name);
         Assert.AreEqual("Weekly Requests", snapshot.Primary.Label);
         Assert.AreEqual(214d / 2048d * 100d, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("214/2048 requests", snapshot.Primary.DetailText);
@@ -74,7 +74,7 @@ public sealed class WebLoginServiceTests
         var snapshot = WebLoginService.ParseAmp(json);
 
         Assert.AreEqual("amp", snapshot.ProviderId);
-        Assert.AreEqual("Amp · Free", snapshot.Name);
+        Assert.AreEqual("Amp", snapshot.Name);
         Assert.AreEqual("Amp Free", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("25.0/100.0 credits", snapshot.Primary.DetailText);
@@ -90,7 +90,7 @@ public sealed class WebLoginServiceTests
             LoadWebLoginFixture("amp-subscription-and-credits.redacted.json"),
             now);
 
-        Assert.AreEqual("Amp · Megawatt", snapshot.Name);
+        Assert.AreEqual("Amp", snapshot.Name);
         Assert.AreEqual("Other usage", snapshot.Primary.Label);
         Assert.AreEqual(3, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(now.AddDays(29), DateTimeOffset.Parse(snapshot.Primary.ResetsAt!));
@@ -132,7 +132,7 @@ public sealed class WebLoginServiceTests
         }
         """, DateTimeOffset.Parse("2026-08-03T00:00:00Z"));
 
-        Assert.AreEqual("Amp · Megawatt", snapshot.Name);
+        Assert.AreEqual("Amp", snapshot.Name);
         Assert.AreEqual("Other usage", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
         Assert.IsNull(snapshot.Secondary);
@@ -168,7 +168,7 @@ public sealed class WebLoginServiceTests
         var snapshot = WebLoginService.ParseAlibabaTokenPlan(json);
 
         Assert.AreEqual("alibabatokenplan", snapshot.ProviderId);
-        Assert.AreEqual("Alibaba Token Plan · Token Plan", snapshot.Name);
+        Assert.AreEqual("Alibaba Token Plan", snapshot.Name);
         Assert.AreEqual("Credits", snapshot.Primary.Label);
         Assert.AreEqual(75, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("25,000 / 100,000 credits left", snapshot.Primary.DetailText);
@@ -202,7 +202,7 @@ public sealed class WebLoginServiceTests
         var snapshot = WebLoginService.ParseAlibabaTokenPlan(
             LoadWebLoginFixture("alibaba-token-plan-personal.redacted.json"));
 
-        Assert.AreEqual("Alibaba Token Plan · Pro", snapshot.Name);
+        Assert.AreEqual("Alibaba Token Plan", snapshot.Name);
         Assert.AreEqual("5h Window", snapshot.Primary.Label);
         Assert.AreEqual(0.09973083333333333, snapshot.Primary.UsedPercent, 0.000000001);
         Assert.AreEqual(5 * 60, snapshot.Primary.WindowMinutes);
@@ -220,7 +220,7 @@ public sealed class WebLoginServiceTests
         var snapshot = WebLoginService.ParseAlibabaTokenPlan(
             LoadWebLoginFixture("alibaba-token-plan-personal-weekly-only.redacted.json"));
 
-        Assert.AreEqual("Alibaba Token Plan · Personal", snapshot.Name);
+        Assert.AreEqual("Alibaba Token Plan", snapshot.Name);
         Assert.AreEqual("Weekly", snapshot.Primary.Label);
         Assert.AreEqual(10.007527475, snapshot.Primary.UsedPercent, 0.000000001);
         Assert.AreEqual(7 * 24 * 60, snapshot.Primary.WindowMinutes);
@@ -250,7 +250,7 @@ public sealed class WebLoginServiceTests
             LoadWebLoginFixture("minimax-token-plan-normal.redacted.json"),
             now);
 
-        Assert.AreEqual("MiniMax · Plus", snapshot.Name);
+        Assert.AreEqual("MiniMax", snapshot.Name);
         Assert.AreEqual("General", snapshot.Primary.Label);
         Assert.AreEqual(4, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(5 * 60, snapshot.Primary.WindowMinutes);
@@ -271,7 +271,7 @@ public sealed class WebLoginServiceTests
             LoadWebLoginFixture("minimax-token-plan-status-boost.redacted.json"),
             now);
 
-        Assert.AreEqual("MiniMax · Plus", snapshot.Name);
+        Assert.AreEqual("MiniMax", snapshot.Name);
         Assert.AreEqual("General", snapshot.Primary.Label);
         Assert.AreEqual(1, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("2/200 prompts · 5 hours", snapshot.Primary.DetailText);
@@ -488,7 +488,7 @@ public sealed class WebLoginServiceTests
 
         var snapshot = WebLoginService.ParseBayesdl(json);
 
-        Assert.AreEqual("BayesDL · Token Standard 标准包", snapshot.Name);
+        Assert.AreEqual("BayesDL", snapshot.Name);
         Assert.AreEqual("Token Standard 标准包", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("Token Standard 标准包 (2500000/10000000 tokens) | ¥15.25 bal / ¥3.25 owed", snapshot.Primary.DetailText);
@@ -517,7 +517,7 @@ public sealed class WebLoginServiceTests
 
         var snapshot = WebLoginService.ParseBayesdl(json);
 
-        Assert.AreEqual("BayesDL · Coding Pro 进阶包", snapshot.Name);
+        Assert.AreEqual("BayesDL", snapshot.Name);
         Assert.AreEqual(5, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("Coding Pro 进阶包 (900/18000 uses) | ¥0.00 bal / ¥0.00 owed", snapshot.Primary.DetailText);
     }
@@ -551,7 +551,7 @@ public sealed class WebLoginServiceTests
         }
         """, DateTimeOffset.Parse("2026-08-03T00:00:00Z"));
 
-        Assert.AreEqual("BayesDL · Active Pro", snapshot.Name);
+        Assert.AreEqual("BayesDL", snapshot.Name);
         Assert.AreEqual("Active Pro", snapshot.PlanName);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(EntitlementStatus.Active, snapshot.EntitlementStatus);
@@ -624,7 +624,7 @@ public sealed class WebLoginServiceTests
         var snapshot = WebLoginService.ParseAlibabaCodingPlan(json);
 
         Assert.AreEqual("alibaba", snapshot.ProviderId);
-        Assert.AreEqual("Alibaba · Active Pro", snapshot.Name);
+        Assert.AreEqual("Alibaba", snapshot.Name);
         Assert.AreEqual("5h Pool", snapshot.Primary.Label);
         Assert.AreEqual(5.2, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("52 / 1000 used", snapshot.Primary.DetailText);
@@ -664,7 +664,7 @@ public sealed class WebLoginServiceTests
         var snapshot = WebLoginService.ParseAlibabaCodingPlan(json);
 
         Assert.AreEqual("alibaba", snapshot.ProviderId);
-        Assert.AreEqual("Alibaba · Coding Plan Pro", snapshot.Name);
+        Assert.AreEqual("Alibaba", snapshot.Name);
         Assert.AreEqual("5h Pool", snapshot.Primary.Label);
         Assert.AreEqual(10, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("10 / 100 used", snapshot.Primary.DetailText);
@@ -702,7 +702,7 @@ public sealed class WebLoginServiceTests
 
         var snapshot = WebLoginService.ParseAlibabaCodingPlan(json);
 
-        Assert.AreEqual("Alibaba · Coding Plan Pro", snapshot.Name);
+        Assert.AreEqual("Alibaba", snapshot.Name);
         Assert.AreEqual("5h Pool", snapshot.Primary.Label);
         Assert.AreEqual(10, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
@@ -762,7 +762,7 @@ public sealed class WebLoginServiceTests
 
         var snapshot = WebLoginService.ParseAlibabaCodingPlan(json);
 
-        Assert.AreEqual("Alibaba · Coding Plan Lite", snapshot.Name);
+        Assert.AreEqual("Alibaba", snapshot.Name);
         Assert.AreEqual("Coding plan", snapshot.Primary.Label);
         Assert.AreEqual("Plan active", snapshot.Primary.DetailText);
     }

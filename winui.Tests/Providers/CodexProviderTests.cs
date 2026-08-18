@@ -36,7 +36,7 @@ public sealed class CodexProviderTests
         """), Credentials(), DateTimeOffset.UnixEpoch);
 
         Assert.AreEqual("codex", snapshot.ProviderId);
-        Assert.AreEqual("Codex · Pro", snapshot.Name);
+        Assert.AreEqual("Codex", snapshot.Name);
         Assert.AreEqual("5h Pool", snapshot.Primary.Label);
         Assert.AreEqual(22, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(300, snapshot.Primary.WindowMinutes);
@@ -64,7 +64,7 @@ public sealed class CodexProviderTests
         }
         """), Credentials(), DateTimeOffset.UnixEpoch);
 
-        Assert.AreEqual("Codex · Free", snapshot.Name);
+        Assert.AreEqual("Codex", snapshot.Name);
         Assert.AreEqual("Weekly Pool", snapshot.Primary.Label);
         Assert.AreEqual(10080, snapshot.Primary.WindowMinutes);
         Assert.IsNull(snapshot.Secondary);
@@ -83,7 +83,7 @@ public sealed class CodexProviderTests
         }
         """), Credentials(plan: "plus"), DateTimeOffset.UnixEpoch);
 
-        Assert.AreEqual("Codex · Plus", snapshot.Name);
+        Assert.AreEqual("Codex", snapshot.Name);
         Assert.AreEqual("Credits", snapshot.Primary.Label);
         Assert.AreEqual(8, snapshot.Balance!.Total, 0.001);
     }

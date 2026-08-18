@@ -8,7 +8,7 @@ using QuotaLens.Core;
 namespace QuotaLens.Services;
 
 /// <summary>
-/// Extracts and caches the icon from the GUI executable a provider launch button opens.
+/// Extracts and caches the icon from the executable a provider launch button represents.
 /// </summary>
 public static class LaunchIconService
 {
@@ -28,6 +28,14 @@ public static class LaunchIconService
             WriteAssociatedIconPng,
             CacheRoot);
     }
+
+    /// <summary>Extracts an icon directly from a resolved executable such as wt.exe.</summary>
+    public static string? GetOrCreateIconPath(string executablePath) =>
+        GetOrCreateIconPath(
+            executablePath,
+            File.Exists,
+            WriteAssociatedIconPng,
+            CacheRoot);
 
     internal static string? GetOrCreateIconPath(
         string providerId,
@@ -49,17 +57,26 @@ public static class LaunchIconService
             return null;
         }
 
-        if (!fileExists(launchPath))
+        return GetOrCreateIconPath(launchPath, fileExists, writeIconPng, cacheRoot);
+    }
+
+    internal static string? GetOrCreateIconPath(
+        string executablePath,
+        Func<string, bool> fileExists,
+        Func<string, string, bool> writeIconPng,
+        string cacheRoot)
+    {
+        if (!fileExists(executablePath))
             return null;
 
-        var cachePath = BuildCachePath(cacheRoot, launchPath);
+        var cachePath = BuildCachePath(cacheRoot, executablePath);
         if (File.Exists(cachePath))
             return cachePath;
 
         try
         {
             Directory.CreateDirectory(cacheRoot);
-            return writeIconPng(launchPath, cachePath) && File.Exists(cachePath)
+            return writeIconPng(executablePath, cachePath) && File.Exists(cachePath)
                 ? cachePath
                 : null;
         }

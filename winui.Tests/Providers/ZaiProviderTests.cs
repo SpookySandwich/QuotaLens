@@ -38,7 +38,7 @@ public sealed class ZaiProviderTests
     {
         var snapshot = ZaiProvider.ParseBalance(SampleBalanceJson);
 
-        Assert.AreEqual("z.ai · ZCode Start Plan", snapshot.Name);
+        Assert.AreEqual("z.ai", snapshot.Name);
         Assert.AreEqual("ZCode Start Plan", snapshot.PlanName);
         Assert.AreEqual("ZCode CLI", snapshot.SourceLabel);
 
@@ -130,11 +130,13 @@ public sealed class ZaiProviderTests
             sendBalanceAsync: (_, _) => throw new AssertFailedException("unused"),
             readSessionToken: () => null);
 
-        CollectionAssert.AreEqual(new[] { "cli", "key" }, provider.Sources.Select(source => source.Id).ToArray());
-        var cli = provider.Sources.Single(source => source.Id == "cli");
+        CollectionAssert.AreEqual(
+            new[] { "cli", "web" },
+            provider.Sources.Select(source => source.Mode.ConfigValue()).ToArray());
+        var cli = provider.Sources.Single(source => source.Mode == ProviderSourceMode.Cli);
         Assert.AreEqual("zcode.cliSourceNote", cli.AttentionNote);
         Assert.AreEqual("zcode.cliSourceNote", cli.UnavailableRecovery?.DescriptionKey);
-        Assert.IsNull(provider.Sources.Single(source => source.Id == "key").UnavailableRecovery);
+        Assert.IsNull(provider.Sources.Single(source => source.Mode == ProviderSourceMode.Web).UnavailableRecovery);
     }
 
     private static HttpResponseMessage BalanceResponse() => new(HttpStatusCode.OK)

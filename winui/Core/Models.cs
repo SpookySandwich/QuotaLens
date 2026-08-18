@@ -149,7 +149,7 @@ public sealed record ProviderRecoveryAction(
     string DescriptionKey,
     int RetryDelaySeconds = 8);
 
-/// <summary>Which source was requested and which source actually produced the snapshot.</summary>
+/// <summary>Which App/CLI/Web source was requested and which one produced the snapshot.</summary>
 public sealed record ProviderSourceState(
     string? RequestedSourceId,
     string EffectiveSourceId,
@@ -162,7 +162,10 @@ public sealed record ProviderSourceState(
 public sealed class ProviderSnapshot
 {
     public string ProviderId { get; set; } = "";
-    /// <summary>Presentation title composed from instance identity and active plan.</summary>
+    /// <summary>
+    /// Normalized presentation title. Provider parsers set only their stable identity;
+    /// ProviderSnapshotIdentity is the sole owner of appending an active plan.
+    /// </summary>
     public string Name { get; set; } = "";
     /// <summary>Provider-owned canonical plan identifier, when the response exposes one.</summary>
     public string? PlanId { get; set; }

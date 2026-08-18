@@ -75,16 +75,42 @@ public sealed record ProviderLaunchTarget(
     string[] DefaultPaths,
     string[] DirectoryExecutableNames,
     string? PackageFamilyName,
-    string? PackageExecutableRelativePath)
+    string? PackageExecutableRelativePath,
+    IReadOnlyDictionary<string, string>? ExecutableDisplayNames = null)
 {
     public ProviderLaunchTarget(string displayName, string? configKey, string[] defaultPaths)
-        : this(displayName, configKey, defaultPaths, Array.Empty<string>(), null, null)
+        : this(displayName, configKey, defaultPaths, Array.Empty<string>(), null, null, null)
     {
     }
 
     public ProviderLaunchTarget(string displayName, string? configKey, string[] defaultPaths, string[] directoryExecutableNames)
-        : this(displayName, configKey, defaultPaths, directoryExecutableNames, null, null)
+        : this(displayName, configKey, defaultPaths, directoryExecutableNames, null, null, null)
     {
+    }
+
+    public ProviderLaunchTarget(
+        string displayName,
+        string? configKey,
+        string[] defaultPaths,
+        string[] directoryExecutableNames,
+        IReadOnlyDictionary<string, string> executableDisplayNames)
+        : this(displayName, configKey, defaultPaths, directoryExecutableNames, null, null, executableDisplayNames)
+    {
+    }
+
+    public string DisplayNameFor(string executablePath)
+    {
+        var executableName = Path.GetFileName(executablePath);
+        if (ExecutableDisplayNames is not null)
+        {
+            foreach (var (candidate, displayName) in ExecutableDisplayNames)
+            {
+                if (string.Equals(candidate, executableName, StringComparison.OrdinalIgnoreCase))
+                    return displayName;
+            }
+        }
+
+        return DisplayName;
     }
 }
 
@@ -411,6 +437,8 @@ public static class Catalog
         {
             new ProviderField("codex_home", "Codex home", @"%USERPROFILE%\.codex",
                 Description: "Optional Codex home directory. Leave empty to use CODEX_HOME or the default user profile location."),
+            new ProviderField("codex_path", "Codex CLI executable", "codex", IsFilePath: true,
+                Description: "Path to the Codex CLI used for interactive sign-in. Leave empty to use 'codex' on PATH."),
             new ProviderField("codex_chatgpt_base_url", "ChatGPT base URL", "https://chatgpt.com/backend-api",
                 Description: "Optional Codex usage API base URL. Leave empty unless your Codex configuration uses a custom ChatGPT base URL."),
 
@@ -424,9 +452,11 @@ public static class Catalog
         },
         ["gemini"] = new[]
         {
-            new ProviderField("gemini_app_path", "Desktop app path", "",
+            new ProviderField("gemini_app_path", "Antigravity app path", @"%LOCALAPPDATA%\Programs\Antigravity\Antigravity.exe",
                 IsFilePath: true, IsGlobal: true,
-                Description: "Optional desktop app or editor executable to launch from the card. Leave empty to use default editor or disable the launch button."),
+                Description: "Optional Antigravity or Antigravity IDE executable. Leave empty to detect either installed app automatically."),
+            new ProviderField("gemini_auto_launch_app", "Automatically start Antigravity in background", IsToggle: true,
+                Description: "When the App source is selected, start Antigravity hidden before refresh if its local quota service is not already running."),
             new ProviderField("gemini_home", "Gemini CLI data directory", @"%USERPROFILE%\.gemini",
                 Description: "Directory where the Gemini CLI stores its OAuth credentials (oauth_creds.json). Leave empty to use the .gemini directory under your user profile."),
             new ProviderField("gemini_path", "Gemini CLI executable", "gemini", IsFilePath: true,
@@ -678,7 +708,7 @@ public static class Catalog
         ["grok"] = new[]
         {
             new ProviderField("grok_path", "Grok CLI location", "grok", IsFilePath: true,
-                Description: "Leave empty to use GROK_CLI_PATH, then the grok command on PATH. QuotaLens calls grok agent stdio and reads x.ai billing."),
+                Description: "Leave empty to use GROK_CLI_PATH, then the grok command on PATH. QuotaLens reuses the CLI login to read billing quota and subscription identity."),
         },
         ["kilo"] = new[]
         {
@@ -1336,6 +1366,24 @@ public static class Catalog
     private static IReadOnlyDictionary<string, string[]> FieldEnv(params (string Key, string[] Env)[] entries) =>
         entries.ToDictionary(entry => entry.Key, entry => entry.Env, StringComparer.OrdinalIgnoreCase);
 
+    private static readonly string[] AntigravityAppPaths =
+    [
+        @"%LOCALAPPDATA%\Programs\Antigravity\Antigravity.exe",
+        @"%LOCALAPPDATA%\Programs\Antigravity IDE\Antigravity IDE.exe",
+        @"%ProgramFiles%\Antigravity\Antigravity.exe",
+        @"%ProgramFiles%\Antigravity IDE\Antigravity IDE.exe",
+    ];
+
+    private static readonly string[] AntigravityExecutableNames =
+        ["Antigravity.exe", "Antigravity IDE.exe"];
+
+    private static readonly IReadOnlyDictionary<string, string> AntigravityDisplayNames =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Antigravity.exe"] = "Antigravity",
+            ["Antigravity IDE.exe"] = "Antigravity IDE",
+        };
+
     /// <summary>Providers that get a Launch button for their desktop GUI app.</summary>
     public static readonly IReadOnlyDictionary<string, ProviderLaunchTarget> LaunchTargets = new Dictionary<string, ProviderLaunchTarget>
     {
@@ -1381,14 +1429,9 @@ public static class Catalog
         ["antigravity"] = new(
             "Antigravity",
             "antigravity_path",
-            new[]
-            {
-                @"%LOCALAPPDATA%\Programs\Antigravity IDE\Antigravity IDE.exe",
-                @"%LOCALAPPDATA%\Programs\Antigravity\Antigravity.exe",
-                @"%ProgramFiles%\Antigravity IDE\Antigravity IDE.exe",
-                @"%ProgramFiles%\Antigravity\Antigravity.exe",
-            },
-            new[] { "Antigravity IDE.exe", "Antigravity.exe" }),
+            AntigravityAppPaths,
+            AntigravityExecutableNames,
+            AntigravityDisplayNames),
         ["kiro"] = new(
             "Kiro",
             "kiro_app_path",
@@ -1424,10 +1467,11 @@ public static class Catalog
             },
             new[] { "Kimi.exe", "kimi.exe" }),
         ["gemini"] = new(
-            "Gemini",
+            "Antigravity",
             "gemini_app_path",
-            Array.Empty<string>(),
-            Array.Empty<string>()),
+            AntigravityAppPaths,
+            AntigravityExecutableNames,
+            AntigravityDisplayNames),
         ["openai"] = new(
             "ChatGPT",
             "openai_app_path",

@@ -59,4 +59,32 @@ public sealed class LaunchIconServiceTests
 
         Assert.IsNull(iconPath);
     }
+
+    [TestMethod]
+    public void GetOrCreateIconPath_DirectExecutableSupportsTerminalIcons()
+    {
+        const string executable = @"C:\Users\test\AppData\Local\Microsoft\WindowsApps\wt.exe";
+        var cacheRoot = Path.Combine(Path.GetTempPath(), "QuotaLensTerminalIconTest", Guid.NewGuid().ToString("N"));
+
+        try
+        {
+            var iconPath = LaunchIconService.GetOrCreateIconPath(
+                executable,
+                fileExists: path => path == executable || File.Exists(path),
+                writeIconPng: (_, output) =>
+                {
+                    File.WriteAllText(output, "fake terminal png");
+                    return true;
+                },
+                cacheRoot);
+
+            Assert.IsNotNull(iconPath);
+            Assert.IsTrue(File.Exists(iconPath));
+        }
+        finally
+        {
+            if (Directory.Exists(cacheRoot))
+                Directory.Delete(cacheRoot, recursive: true);
+        }
+    }
 }

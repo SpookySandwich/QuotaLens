@@ -31,7 +31,7 @@ public sealed class QoderProviderTests
             });
 
         Assert.AreEqual("qoder", snapshot.ProviderId);
-        Assert.AreEqual("Qoder · Pro Trial", snapshot.Name);
+        Assert.AreEqual("Qoder", snapshot.Name);
         Assert.AreEqual("qodercli usage", snapshot.SourceLabel);
         Assert.AreEqual(Confidence.Official, snapshot.Confidence);
 
@@ -63,7 +63,7 @@ public sealed class QoderProviderTests
             },
         });
 
-        Assert.AreEqual("Qoder · Pro", snapshot.Name);
+        Assert.AreEqual("Qoder", snapshot.Name);
         Assert.AreEqual(25.0, snapshot.Primary.UsedPercent);
         Assert.AreEqual("75/300 credits (225 left)", snapshot.Primary.DetailText);
     }
@@ -150,7 +150,7 @@ public sealed class QoderProviderTests
             },
         });
 
-        Assert.AreEqual("Qoder · Standard", snapshot.Name);
+        Assert.AreEqual("Qoder", snapshot.Name);
         Assert.AreEqual(100.0, snapshot.Primary.UsedPercent);
         Assert.AreEqual("0/0 credits (0 left)", snapshot.Primary.DetailText);
         Assert.IsNull(snapshot.Primary.ResetsAt);

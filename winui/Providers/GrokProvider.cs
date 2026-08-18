@@ -11,27 +11,26 @@ using static QuotaLens.Core.JsonUtil;
 namespace QuotaLens.Providers;
 
 /// <summary>
-/// Grok CLI quota provider. Ports CodexBar's grok-agent-stdio JSON-RPC flow:
-/// initialize the ACP session, then call the x.ai/billing extension method.
+/// Grok CLI quota provider. Reads quota from the CLI billing endpoint and plan
+/// identity from the CLI's authenticated user/subscription endpoint.
 ///
-/// KNOWN UPSTREAM LIMITATION: current grok CLI releases only wire x.ai/billing
-/// into the interactive TUI; the agent-stdio surface answers -32601 "Method not
-/// found" (verified against grok 0.2.106, same as CodexBar documents). When the
-/// CLI credentials file (~/.grok/auth.json) has a non-expired session, QuotaLens
-/// instead fetches the credits config directly from the CLI's own backend proxy
-/// (GET {base}/billing?format=credits) — the exact REST call the CLI's billing
-/// extension makes — and only falls back to the stdio RPC when that fails.
+/// Current grok CLI releases expose x.ai/billing only to the interactive TUI; the
+/// agent-stdio surface answers -32601 "Method not found". With a usable session in
+/// ~/.grok/auth.json, QuotaLens therefore reads quota and subscription identity from
+/// the CLI backend's authenticated billing and user resources. Agent stdio remains a
+/// compatibility fallback for CLI versions that expose the extension publicly.
 /// </summary>
 public sealed class GrokProvider : IProvider
 {
     public string Type => "grok";
     public string Name => "Grok";
-    public string SourceLabel => "grok agent stdio";
+    public string SourceLabel => "Grok CLI session";
     public Confidence Confidence => Confidence.Official;
 
     /// <summary>Default backend the grok CLI's x.ai/billing extension calls.</summary>
     internal const string DefaultProxyBaseUrl = "https://cli-chat-proxy.grok.com/v1";
     private const string BillingPath = "/billing?format=credits";
+    private const string UserSubscriptionPath = "/user?include=subscription";
 
     private static readonly TimeSpan InitializeTimeout = TimeSpan.FromSeconds(8);
     private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(8);
@@ -56,6 +55,7 @@ public sealed class GrokProvider : IProvider
         }
 
         ProviderException? creditsFailure = null;
+        ProviderSnapshot? creditsSnapshot = null;
 
         // Fast path: the REST surface the CLI itself uses. Login-required errors are
         // final (re-login is the fix); anything else falls through to the RPC path.
@@ -63,7 +63,41 @@ public sealed class GrokProvider : IProvider
         {
             try
             {
-                return await FetchCreditsConfigAsync(credentials, binary, ProxyBaseUrl(), ct).ConfigureAwait(false);
+                creditsSnapshot = await FetchCreditsConfigAsync(
+                    credentials,
+                    binary,
+                    ProxyBaseUrl(),
+                    ct).ConfigureAwait(false);
+                if (!string.IsNullOrWhiteSpace(creditsSnapshot.PlanName))
+                    return creditsSnapshot;
+
+                // Billing and subscription are separate CLI backend resources. Keep the
+                // healthy quota snapshot while enriching it with structured identity from
+                // the same authenticated user endpoint the CLI uses for subscription checks.
+                try
+                {
+                    var plan = await FetchPlanIdentityAsync(
+                        credentials,
+                        binary,
+                        ProxyBaseUrl(),
+                        ct).ConfigureAwait(false);
+                    if (!plan.IsEmpty)
+                    {
+                        creditsSnapshot.PlanId = plan.PlanId;
+                        creditsSnapshot.PlanName = plan.PlanName;
+                        return creditsSnapshot;
+                    }
+
+                    AppLog.Warn("grok: user subscription response omitted plan identity");
+                }
+                catch (ProviderException error)
+                {
+                    AppLog.Warn($"grok: user subscription enrichment failed ({error.Message})");
+                }
+
+                // Retain the ACP extension as a compatibility fallback for CLI versions
+                // that expose it. Current versions return Method not found here.
+                AppLog.Info("grok: trying agent stdio plan fallback");
             }
             catch (ProviderException error) when (!IsLoginRequired(error))
             {
@@ -89,23 +123,36 @@ public sealed class GrokProvider : IProvider
             }, InitializeTimeout, ct).ConfigureAwait(false);
 
             var billingJson = await client.RequestResultAsync("x.ai/billing", new { }, RequestTimeout, ct).ConfigureAwait(false);
-            var billing = ParseBilling(billingJson);
-            return Snapshot(billing);
+            return SnapshotFromRpc(billingJson);
         }
         catch (ProviderException error) when (IsMethodNotFound(error))
         {
+            if (creditsSnapshot is not null)
+                return creditsSnapshot;
             if (creditsFailure is not null)
                 throw creditsFailure;
             if (credentials is null)
                 throw new ProviderException("Login required: Grok CLI is not signed in. Run 'grok login' first.");
             throw;
         }
-        catch (ProviderException)
+        catch (ProviderException error)
         {
+            if (creditsSnapshot is not null)
+            {
+                AppLog.Warn($"grok: plan enrichment failed ({error.Message}); keeping credits snapshot");
+                return creditsSnapshot;
+            }
+
             throw;
         }
         catch (Exception e) when (e is not OperationCanceledException)
         {
+            if (creditsSnapshot is not null)
+            {
+                AppLog.Warn($"grok: plan enrichment failed ({e.Message}); keeping credits snapshot");
+                return creditsSnapshot;
+            }
+
             throw new ProviderException($"Not available: Grok CLI failed: {e.Message}", e);
         }
         finally
@@ -196,11 +243,100 @@ public sealed class GrokProvider : IProvider
         }
     }
 
+    /// <summary>
+    /// Fetches the authenticated Grok profile including its subscription. As with the
+    /// billing request, one rejected access token gets a silent CLI refresh before the
+    /// result is treated as unavailable.
+    /// </summary>
+    private static async Task<ProviderPlanIdentity> FetchPlanIdentityAsync(
+        GrokCredential credentials,
+        string binary,
+        string proxyBase,
+        CancellationToken ct)
+    {
+        try
+        {
+            return await FetchPlanIdentityOnceAsync(credentials, proxyBase, ct).ConfigureAwait(false);
+        }
+        catch (ProviderException error) when (IsLoginRequired(error))
+        {
+            AppLog.Info("grok: user subscription rejected; attempting silent CLI refresh");
+            if (await TrySilentRefreshAsync(binary, ct).ConfigureAwait(false))
+            {
+                var refreshed = LoadCredentials(GrokHome());
+                if (refreshed is not null)
+                    return await FetchPlanIdentityOnceAsync(refreshed, proxyBase, ct).ConfigureAwait(false);
+            }
+
+            throw;
+        }
+    }
+
+    private static async Task<ProviderPlanIdentity> FetchPlanIdentityOnceAsync(
+        GrokCredential credentials,
+        string proxyBase,
+        CancellationToken ct)
+    {
+        var requestUri = UserSubscriptionUrl(proxyBase);
+        using var request = AuthenticatedGet(requestUri, credentials);
+        AppLog.Info($"grok: GET {requestUri}");
+
+        HttpResponseMessage response;
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(CreditsRequestTimeout);
+            response = await Http.Client
+                .SendAsync(request, HttpCompletionOption.ResponseContentRead, timeout.Token)
+                .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new ProviderException("Not available: Grok subscription request timed out.");
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            throw new ProviderException($"Network error: Grok subscription request failed: {e.Message}", e);
+        }
+
+        using (response)
+        {
+            if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+                throw new ProviderException("Login required: Grok session expired or was revoked. Run 'grok login' again.");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new ProviderException(
+                    $"Not available: Grok subscription service error (HTTP {(int)response.StatusCode}).");
+            }
+
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return ParseUserPlanIdentity(json);
+        }
+    }
+
     /// <summary>Builds the credits endpoint from a validated base URL.</summary>
     internal static Uri BillingUrl(string proxyBase)
     {
         var uri = ProviderEndpointPolicy.RequireCredentialTarget("grok", proxyBase);
         return new Uri(uri.ToString().TrimEnd('/') + BillingPath);
+    }
+
+    internal static Uri UserSubscriptionUrl(string proxyBase)
+    {
+        var uri = ProviderEndpointPolicy.RequireCredentialTarget("grok", proxyBase);
+        return new Uri(uri.ToString().TrimEnd('/') + UserSubscriptionPath);
+    }
+
+    private static HttpRequestMessage AuthenticatedGet(Uri requestUri, GrokCredential credentials)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {credentials.Key}");
+        if (!string.IsNullOrWhiteSpace(credentials.UserId))
+            request.Headers.TryAddWithoutValidation("x-userid", credentials.UserId);
+        request.Headers.TryAddWithoutValidation("x-grok-client-mode", "interactive");
+        request.Headers.TryAddWithoutValidation("Accept", "application/json");
+        return request;
     }
 
     /// <summary>Grok home (~/.grok or GROK_HOME) — where login stores the session.</summary>
@@ -338,7 +474,10 @@ public sealed class GrokProvider : IProvider
                 PrepaidBalanceCents = OptionalCents(config, "prepaidBalance"),
                 BillingPeriodStart = OptionalString(config, "billingPeriodStart"),
                 BillingPeriodEnd = OptionalString(config, "billingPeriodEnd"),
-                SubscriptionTier = OptionalString(root, "subscriptionTier"),
+                SubscriptionTier = OptionalString(root, "subscriptionTier")
+                    ?? OptionalString(root, "subscription_tier")
+                    ?? OptionalString(config, "subscriptionTier")
+                    ?? OptionalString(config, "subscription_tier"),
                 OnDemandEnabled = OptionalBool(root, "onDemandEnabled"),
             };
 
@@ -362,8 +501,64 @@ public sealed class GrokProvider : IProvider
         }
     }
 
+    /// <summary>Parses the CLI backend's /user?include=subscription response.</summary>
+    internal static ProviderPlanIdentity ParseUserPlanIdentity(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                throw new ProviderException("Parse error: Grok user response was not an object");
+
+            return SubscriptionTierIdentity(
+                OptionalString(root, "subscriptionTier")
+                ?? OptionalString(root, "subscription_tier"));
+        }
+        catch (ProviderException)
+        {
+            throw;
+        }
+        catch (Exception e)
+        {
+            throw new ProviderException($"Parse error: Invalid Grok user JSON: {e.Message}", e);
+        }
+    }
+
+    /// <summary>
+    /// Converts backend enum spelling into stable ID + human-readable plan identity.
+    /// Unknown future tiers remain visible instead of being discarded.
+    /// </summary>
+    internal static ProviderPlanIdentity SubscriptionTierIdentity(string? rawTier)
+    {
+        var raw = ProviderConfig.Clean(rawTier);
+        if (raw is null)
+            return default;
+
+        var key = new string(raw
+            .Replace("+", "Plus", StringComparison.Ordinal)
+            .Where(char.IsLetterOrDigit)
+            .Select(char.ToLowerInvariant)
+            .ToArray());
+
+        return key switch
+        {
+            "supergrokheavy" => new("supergrok_heavy", "SuperGrok Heavy"),
+            "supergrokplus" => new("supergrok_plus", "SuperGrok Plus"),
+            "supergrok" => new("supergrok", "SuperGrok"),
+            "supergroklite" => new("supergrok_lite", "SuperGrok Lite"),
+            "xpremiumplus" => new("x_premium_plus", "X Premium+"),
+            "xpremium" => new("x_premium", "X Premium"),
+            "xbasic" => new("x_basic", "X Basic"),
+            "free" => new("free", "Free"),
+            "apikey" => new("api_key", "API key"),
+            _ => new(raw, raw),
+        };
+    }
+
     internal static ProviderSnapshot Snapshot(GrokCreditsConfig config, DateTimeOffset? updatedAt = null)
     {
+        var plan = SubscriptionTierIdentity(config.SubscriptionTier);
         var usedCents = config.UsedCents ?? 0;
         var limitCents = config.MonthlyLimitCents ?? 0;
         var usedPercent = config.CreditUsagePercent is { } percent
@@ -434,7 +629,8 @@ public sealed class GrokProvider : IProvider
         {
             ProviderId = "grok",
             Name = "Grok",
-            PlanName = string.IsNullOrWhiteSpace(config.SubscriptionTier) ? null : config.SubscriptionTier,
+            PlanId = plan.PlanId,
+            PlanName = plan.PlanName,
             Primary = new RateWindow
             {
                 Label = label,
@@ -452,6 +648,31 @@ public sealed class GrokProvider : IProvider
     }
 
     // ---- legacy ACP RPC path (kept as fallback + for future CLI versions) ----
+
+    /// <summary>
+    /// The CLI has returned both its legacy billing object and, in current releases,
+    /// the credits-config object used by the REST endpoint. Detect the shape once at
+    /// this boundary so the fetch flow does not carry version-specific branches.
+    /// </summary>
+    internal static ProviderSnapshot SnapshotFromRpc(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty("config", out var config)
+                && config.ValueKind == JsonValueKind.Object)
+            {
+                return Snapshot(ParseCreditsConfig(json));
+            }
+        }
+        catch (JsonException)
+        {
+            // ParseBilling supplies the stable provider-facing parse error below.
+        }
+
+        return Snapshot(ParseBilling(json));
+    }
 
     internal static GrokBilling ParseBilling(string json)
     {
@@ -508,6 +729,9 @@ public sealed class GrokProvider : IProvider
         {
             ProviderId = "grok",
             Name = "Grok",
+            PlanName = ProviderSnapshotIdentity.NormalizePlanName(
+                "Grok",
+                billing.SubscriptionTier ?? billing.SubscriptionTierCamel),
             Primary = new RateWindow
             {
                 Label = "Monthly included",
@@ -626,6 +850,8 @@ public sealed class GrokProvider : IProvider
         [JsonPropertyName("onDemandEnabled")] public bool? OnDemandEnabled { get; set; }
         [JsonPropertyName("disabledByConfig")] public bool? DisabledByConfig { get; set; }
         [JsonPropertyName("usage")] public GrokBillingUsage? Usage { get; set; }
+        [JsonPropertyName("subscription_tier")] public string? SubscriptionTier { get; set; }
+        [JsonPropertyName("subscriptionTier")] public string? SubscriptionTierCamel { get; set; }
     }
 
     internal sealed class GrokBillingCycle
@@ -662,8 +888,7 @@ public sealed class GrokProvider : IProvider
             // Shared CLI launch path: resolves the configured/PATH binary including
             // .cmd/.bat shims, exactly like the other CLI-backed providers.
             var startInfo = HiddenCliProcess.CreateStartInfo(_binary, new[] { "agent", "stdio" });
-            startInfo.RedirectStandardInput = true;
-            startInfo.StandardInputEncoding = Encoding.UTF8;
+            HiddenCliProcess.EnableUtf8StandardInput(startInfo);
             startInfo.StandardOutputEncoding = Encoding.UTF8;
             startInfo.StandardErrorEncoding = Encoding.UTF8;
 

@@ -1049,7 +1049,7 @@ public sealed class SimpleApiProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "copilot",
-            Name = string.IsNullOrWhiteSpace(plan) ? "Copilot" : $"Copilot · {plan}",
+            Name = "Copilot",
             PlanName = plan,
             Primary = primary,
             Secondary = secondary,
@@ -1068,7 +1068,6 @@ public sealed class SimpleApiProvider : IProvider
         var limit = RequiredDouble(root, "character_limit");
         var tier = DisplayName(OptionalString(root, "tier"));
         var status = OptionalString(root, "status");
-        var name = string.IsNullOrWhiteSpace(tier) ? "ElevenLabs" : $"ElevenLabs · {tier}";
         var isActive = string.Equals(status, "active", StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, "trialing", StringComparison.OrdinalIgnoreCase);
         var isExpired = string.Equals(status, "inactive", StringComparison.OrdinalIgnoreCase)
@@ -1076,9 +1075,6 @@ public sealed class SimpleApiProvider : IProvider
             || string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, "expired", StringComparison.OrdinalIgnoreCase)
             || string.Equals(status, "unpaid", StringComparison.OrdinalIgnoreCase);
-        if (!string.IsNullOrWhiteSpace(status) && !isActive)
-            name += $" · {status}";
-
         var usageDescription = $"{Fmt0(used)} / {Fmt0(limit)} credits";
         if (!string.IsNullOrWhiteSpace(status) && !isActive)
             usageDescription += $" · Status: {DisplayName(status)}";
@@ -1086,7 +1082,7 @@ public sealed class SimpleApiProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "elevenlabs",
-            Name = name,
+            Name = "ElevenLabs",
             PlanName = tier,
             Primary = new RateWindow
             {
@@ -1270,7 +1266,6 @@ public sealed class SimpleApiProvider : IProvider
         if (entitlementStatus == EntitlementStatus.Active && tier is not null)
         {
             snapshot.PlanName = tier;
-            snapshot.Name = $"Codebuff · {tier}";
         }
         else if (entitlementStatus == EntitlementStatus.Expired)
         {
@@ -1302,7 +1297,7 @@ public sealed class SimpleApiProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "synthetic",
-            Name = string.IsNullOrWhiteSpace(plan) ? "Synthetic" : $"Synthetic · {plan}",
+            Name = "Synthetic",
             PlanName = plan,
             Primary = windows[0],
             Secondary = windows.Count > 1 ? windows[1] : null,
@@ -1345,7 +1340,7 @@ public sealed class SimpleApiProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "zai",
-            Name = string.IsNullOrWhiteSpace(plan) ? "z.ai" : $"z.ai · {plan}",
+            Name = "z.ai",
             PlanName = plan,
             Primary = ToRateWindow(primary),
             Secondary = tokenLimit is not null && timeLimit is not null ? ToRateWindow(timeLimit) : null,

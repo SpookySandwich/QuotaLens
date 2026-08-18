@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text.Json;
 using QuotaLens.Core;
+using QuotaLens.Services;
 using static QuotaLens.Core.JsonUtil;
 
 namespace QuotaLens.Providers;
@@ -33,10 +34,39 @@ public sealed class ZaiProvider : IProvider
         Func<bool>? apiIsAvailable = null,
         Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>>? apiFetchAsync = null)
     {
+        var readToken = readSessionToken ?? ZcodeCredentials.TryReadSessionToken;
+        var isApiAvailable = apiIsAvailable ?? (() => true);
+        var fetchFromApi = apiFetchAsync
+            ?? ((string instanceId, IConfig config, CancellationToken ct) =>
+                new SimpleApiProvider("zai").FetchAsync(instanceId, config, ct));
+        var recovery = new ProviderRecoveryAction(
+            ProviderRecoveryKind.LaunchApp,
+            "zcode.cliSourceNote");
+
         _sources = new IProviderSource[]
         {
-            new ZcodeCliSource(cliIsAvailable, sendBalanceAsync, readSessionToken ?? ZcodeCredentials.TryReadSessionToken),
-            new ZaiApiKeySource(apiIsAvailable ?? (() => true), apiFetchAsync),
+            new ProviderSource(
+                ProviderSourceMode.Cli,
+                (_, _) => cliIsAvailable(),
+                (_, _, ct) => FetchZcodeAsync(readToken, sendBalanceAsync, ct),
+                configFieldKeys: new[] { "zai_home", "zai_app_path" },
+                attentionNote: "zcode.cliSourceNote",
+                unavailableRecovery: recovery,
+                connectionAction: new AppProviderConnectionAction(
+                    "zai",
+                    "zai_app_path",
+                    cliIsAvailable,
+                    verificationFieldKeys: new[] { "zai_home", "zai_app_path" }),
+                launchAction: new AppProviderLaunchAction("zai"),
+                watchPaths: (instanceId, config) =>
+                    new[] { ZcodeCredentials.StorePath(config, instanceId) }),
+            new ProviderSource(
+                ProviderSourceMode.Web,
+                (_, _) => isApiAvailable(),
+                fetchFromApi,
+                configFieldKeys: new[] { "zai_key", "zai_base_url", "zai_quota_url" },
+                legacyConfigValues: new[] { "key" },
+                attentionNote: "zai.webSourceNote"),
         };
     }
 
@@ -49,63 +79,29 @@ public sealed class ZaiProvider : IProvider
     public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
         ProviderSourceRunner.FetchAsync(this, _sources, instanceId, config, ct);
 
-    // ---- sources -------------------------------------------------------------
-
-    private sealed class ZcodeCliSource(
-        Func<bool> isAvailable,
+    private static async Task<ProviderSnapshot> FetchZcodeAsync(
+        Func<string?> readSessionToken,
         Func<string, CancellationToken, Task<HttpResponseMessage>> sendBalanceAsync,
-        Func<string?> readSessionToken) : IProviderSource
+        CancellationToken ct)
     {
-        private static readonly ProviderRecoveryAction Recovery = new(
-            ProviderRecoveryKind.LaunchApp,
-            "zcode.cliSourceNote");
+        var token = readSessionToken()
+            ?? throw new ProviderException(
+                "Login required: ZCode is not signed in on this machine.",
+                ProviderErrorKind.AuthenticationRequired);
 
-        public string Id => "cli";
-        public string Name => "ZCode";
-        public string? AttentionNote => "zcode.cliSourceNote";
-        public ProviderRecoveryAction? UnavailableRecovery => Recovery;
-        public IReadOnlyList<string> WatchPaths(string instanceId, IConfig config) =>
-            new[] { ZcodeCredentials.StorePath(config, instanceId) };
-        public bool IsAvailable(string instanceId, IConfig config) => isAvailable();
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(BalanceTimeout);
 
-        public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
-        {
-            var token = readSessionToken()
-                ?? throw new ProviderException(
-                    "Login required: ZCode is not signed in on this machine.",
-                    ProviderErrorKind.AuthenticationRequired);
+        using var response = await sendBalanceAsync(token, timeout.Token).ConfigureAwait(false);
+        if ((int)response.StatusCode is 401 or 403)
+            throw new ProviderException(
+                "Login required: ZCode session was rejected. Open ZCode to re-login.",
+                ProviderErrorKind.AuthenticationRequired);
+        if (!response.IsSuccessStatusCode)
+            throw new ProviderException($"Network error: HTTP {(int)response.StatusCode}");
 
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            timeout.CancelAfter(BalanceTimeout);
-
-            using var response = await sendBalanceAsync(token, timeout.Token).ConfigureAwait(false);
-            if ((int)response.StatusCode is 401 or 403)
-                throw new ProviderException(
-                    "Login required: ZCode session was rejected. Open ZCode to re-login.",
-                    ProviderErrorKind.AuthenticationRequired);
-            if (!response.IsSuccessStatusCode)
-                throw new ProviderException($"Network error: HTTP {(int)response.StatusCode}");
-
-            var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
-            return ParseBalance(json);
-        }
-    }
-
-    private sealed class ZaiApiKeySource(
-        Func<bool> isAvailable,
-        Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>>? fetchAsync) : IProviderSource
-    {
-        // Reuses the pre-existing API-key flow wholesale; it reports its own
-        // "not configured" error when the key is missing.
-        private readonly Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>> _fetch =
-            fetchAsync ?? ((instanceId, config, ct) => new SimpleApiProvider("zai").FetchAsync(instanceId, config, ct));
-
-        public string Id => "key";
-        public string Name => "API Key";
-        public IReadOnlyList<string> ConfigFieldKeys => new[] { "zai_key", "zai_base_url", "zai_quota_url" };
-        public bool IsAvailable(string instanceId, IConfig config) => isAvailable();
-        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
-            _fetch(instanceId, config, ct);
+        var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
+        return ParseBalance(json);
     }
 
     private static async Task<HttpResponseMessage> SendBalanceAsync(string token, CancellationToken ct)
@@ -158,7 +154,7 @@ public sealed class ZaiProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "zai",
-            Name = string.IsNullOrWhiteSpace(planName) ? "z.ai" : $"z.ai · {planName}",
+            Name = "z.ai",
             PlanName = planName,
             Primary = ToWindow(ordered[0]),
             Secondary = ordered.Count > 1 ? ToWindow(ordered[1]) : null,

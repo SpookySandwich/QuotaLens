@@ -11,26 +11,36 @@ namespace QuotaLens.Providers;
 /// <summary>
 /// Antigravity local read-only provider.
 ///
-/// Discovery: find the running bundled `language_server.exe` (via PowerShell Get-CimInstance,
-/// matching the Rust), extract the --csrf_token from its command line, find its LISTENING
-/// localhost port(s) (via `netstat -ano | findstr`), then probe each port over HTTPS
-/// (self-signed cert) using the Connect-RPC protocol. Refresh never starts Antigravity or its
-/// language server; users retain control over application lifecycle.
+/// Discovery: find the running bundled language server (`language_server.exe` in
+/// Antigravity or `language_server_windows_x64.exe` in Antigravity IDE), extract the
+/// --csrf_token from its command line, map its listening localhost ports, then probe
+/// each port over HTTPS using the shared Connect-RPC protocol.
 ///
 /// Data fetch: POST GetUserStatus, parse plan/prompt credits + per-model quotas into a
 /// ProviderSnapshot with Claude/Gemini/Other family grouping.
 /// </summary>
 public sealed class AntigravityProvider : IProvider
 {
+    internal static readonly string[] LanguageServerProcessNames =
+        ["language_server", "language_server_windows_x64"];
+    private static readonly string[] LanguageServerExecutableNames =
+        LanguageServerProcessNames.Select(name => name + ".exe").ToArray();
+
     public string Type => "antigravity";
     public string Name => "Antigravity";
     public string SourceLabel => "Antigravity local probe";
     public Confidence Confidence => Confidence.SemiOfficial;
 
-    /// <summary>Lightweight availability probe: is the bundled language server running?</summary>
+    /// <summary>
+    /// Lightweight availability probe for both the Antigravity app and the older
+    /// Antigravity IDE. They expose the same local protocol under different binary names.
+    /// </summary>
     internal static bool IsRunning()
     {
-        try { return Process.GetProcessesByName("language_server").Length > 0; }
+        try
+        {
+            return LanguageServerProcessNames.Any(name => Process.GetProcessesByName(name).Length > 0);
+        }
         catch { return false; }
     }
 
@@ -529,7 +539,7 @@ public sealed class AntigravityProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = instanceId,
-            Name = $"Antigravity · {planName}",
+            Name = "Antigravity",
             PlanName = ProviderSnapshotIdentity.NormalizePlanName("Antigravity", planName),
             Primary = new RateWindow
             {
@@ -622,8 +632,11 @@ public sealed class AntigravityProvider : IProvider
         var result = new List<(int, string)>();
         try
         {
+            var processFilter = string.Join(
+                " OR ",
+                LanguageServerExecutableNames.Select(name => $"Name = '{name}'"));
             using var searcher = new System.Management.ManagementObjectSearcher(
-                "SELECT ProcessId, CommandLine FROM Win32_Process WHERE Name = 'language_server.exe'");
+                $"SELECT ProcessId, CommandLine FROM Win32_Process WHERE {processFilter}");
             foreach (var obj in searcher.Get())
             {
                 var pid = Convert.ToInt32(obj["ProcessId"]);
@@ -642,7 +655,7 @@ public sealed class AntigravityProvider : IProvider
 
     /// <summary>
     /// Locate the running Antigravity language servers and a working (port, CSRF) pair.
-    /// Antigravity spawns SEVERAL language_server.exe processes, each with its OWN csrf_token
+    /// Antigravity may spawn several language-server processes, each with its own csrf_token
     /// and a dynamic port (--https_server_port 0). We enumerate them all, map every listening
     /// port to its owning PID via a single netstat, then probe each process's ports with that
     /// process's csrf until one answers.
@@ -652,8 +665,11 @@ public sealed class AntigravityProvider : IProvider
         var procs = DiscoverProcsViaWmi();
         if (procs.Count == 0)
         {
-            const string psQuery =
-                "$ProgressPreference = 'SilentlyContinue'; Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'language_server.exe' -and $_.CommandLine -like '*--csrf_token*' } | ForEach-Object { \"$($_.ProcessId)||$($_.CommandLine)\" }";
+            var processNames = string.Join(
+                ", ",
+                LanguageServerExecutableNames.Select(name => $"'{name}'"));
+            var psQuery =
+                $"$ProgressPreference = 'SilentlyContinue'; $names = @({processNames}); Get-CimInstance Win32_Process | Where-Object {{ $names -contains $_.Name -and $_.CommandLine -like '*--csrf_token*' }} | ForEach-Object {{ \"$($_.ProcessId)||$($_.CommandLine)\" }}";
 
             var powershellExe = Path.Combine(
                 Environment.SystemDirectory,

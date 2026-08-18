@@ -11,7 +11,62 @@ namespace QuotaLens.Services;
 /// </summary>
 public static class IdeLauncher
 {
-    public static void LaunchIde(string providerId, ProviderLaunchTarget target, string? customPath)
+    public static Process? LaunchIde(string providerId, ProviderLaunchTarget target, string? customPath) =>
+        LaunchIde(providerId, target, customPath, background: false);
+
+    /// <summary>Launch using the effective value from persisted or draft config.</summary>
+    public static Process? LaunchIde(
+        string providerId,
+        ProviderLaunchTarget target,
+        IConfig config,
+        bool background = false)
+    {
+        var customPath = ConfiguredPath(target, config);
+        return LaunchIde(providerId, target, customPath, background);
+    }
+
+    /// <summary>
+    /// Launch using the target path's declared config scope. Native multi-source
+    /// providers may keep a path per instance, while shared desktop paths remain global.
+    /// </summary>
+    public static Process? LaunchIde(
+        string providerId,
+        string instanceId,
+        ProviderLaunchTarget target,
+        IConfig config,
+        bool background = false)
+    {
+        var customPath = ConfiguredPath(providerId, instanceId, target, config);
+        return LaunchIde(providerId, target, customPath, background);
+    }
+
+    internal static string? ConfiguredPath(ProviderLaunchTarget target, IConfig config) =>
+        target.ConfigKey is null ? null : config.Get(target.ConfigKey);
+
+    internal static string? ConfiguredPath(
+        string providerId,
+        string instanceId,
+        ProviderLaunchTarget target,
+        IConfig config)
+    {
+        if (target.ConfigKey is null)
+            return null;
+
+        var field = Catalog.Fields.TryGetValue(providerId, out var fields)
+            ? fields.FirstOrDefault(candidate =>
+                string.Equals(candidate.Key, target.ConfigKey, StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        return field is { IsGlobal: false }
+            ? config.GetScoped(instanceId, target.ConfigKey)
+            : config.Get(target.ConfigKey);
+    }
+
+    public static Process? LaunchIde(
+        string providerId,
+        ProviderLaunchTarget target,
+        string? customPath,
+        bool background)
     {
         var exePath = ResolveLaunchPath(providerId, target, customPath);
 
@@ -19,17 +74,51 @@ public static class IdeLauncher
         // tokio::process::Command::new spawn (no piping/redirection of the IDE process).
         try
         {
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = exePath,
-                UseShellExecute = true,
-            });
+            return Process.Start(BuildStartInfo(exePath, background));
         }
         catch (Exception e)
         {
             throw new ProviderException($"Failed to launch {exePath}: {e.Message}", e);
         }
     }
+
+    /// <summary>
+    /// Starts a provider app and returns a launch lifetime. Background sessions keep all
+    /// newly created windows for the resolved executable hidden until the caller disposes
+    /// the session; windows that were already open before launch are preserved.
+    /// </summary>
+    internal static DesktopAppLaunchSession LaunchIdeSession(
+        string providerId,
+        string instanceId,
+        ProviderLaunchTarget target,
+        IConfig config,
+        bool background)
+    {
+        var customPath = ConfiguredPath(providerId, instanceId, target, config);
+        var exePath = ResolveLaunchPath(providerId, target, customPath);
+        BackgroundWindowSuppressor? suppressor = null;
+        try
+        {
+            if (background)
+                suppressor = BackgroundWindowSuppressor.Start(exePath);
+
+            var process = Process.Start(BuildStartInfo(exePath, background));
+            return new DesktopAppLaunchSession(process, suppressor);
+        }
+        catch (Exception e)
+        {
+            if (suppressor is not null)
+                suppressor.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            throw new ProviderException($"Failed to launch {exePath}: {e.Message}", e);
+        }
+    }
+
+    internal static ProcessStartInfo BuildStartInfo(string exePath, bool background) => new()
+    {
+        FileName = exePath,
+        UseShellExecute = true,
+        WindowStyle = background ? ProcessWindowStyle.Hidden : ProcessWindowStyle.Normal,
+    };
 
     internal static string ResolveLaunchPath(
         string providerId,
@@ -62,7 +151,9 @@ public static class IdeLauncher
                 return executable;
         }
 
-        throw new ProviderException($"{target.DisplayName} app not found. Please set the app path in settings.");
+        throw new ProviderException(
+            $"Not configured: {target.DisplayName} app not found. Please set the app path in settings.",
+            ProviderErrorKind.Misconfigured);
     }
 
     internal static bool TryResolveLaunchPath(
@@ -105,7 +196,9 @@ public static class IdeLauncher
                 return path;
         }
 
-        throw new ProviderException($"{target.DisplayName} app not found at {expanded}. Please set the app path in settings.");
+        throw new ProviderException(
+            $"Not configured: {target.DisplayName} app not found at {expanded}. Please set the app path in settings.",
+            ProviderErrorKind.Misconfigured);
     }
 
     private static string? ResolveDirectoryExecutable(

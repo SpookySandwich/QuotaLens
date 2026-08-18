@@ -91,7 +91,7 @@ public sealed class CodexProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "codex",
-            Name = string.IsNullOrWhiteSpace(displayPlan) ? "Codex" : $"Codex · {displayPlan}",
+            Name = "Codex",
             PlanName = displayPlan,
             Primary = primary!,
             Secondary = secondary,

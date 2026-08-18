@@ -43,7 +43,7 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         RefreshLaunchAvailability();
 
         RefreshCommand = new AsyncRelayCommand(() => _svc.RefreshAsync(InstanceId));
-        LaunchCommand = new RelayCommand(() => _svc.LaunchIde(InstanceId));
+        LaunchCommand = new RelayCommand(() => _svc.LaunchProvider(InstanceId));
         RenewSessionCommand = new AsyncRelayCommand(LaunchAppThenRefreshAsync);
         DeleteCommand = new RelayCommand(() => DeleteRequested?.Invoke(this, this));
         EditCommand = new RelayCommand(
@@ -69,8 +69,8 @@ public sealed partial class ProviderItemViewModel : ObservableObject
     public string DeleteAutomationId => $"Delete_{InstanceId}";
     public string RefreshAutomationId => $"Refresh_{InstanceId}";
     public string LaunchText => I18n.T("ide.launch");
-    public string LaunchAutomationName => I18n.T("ide.launchTitle", "name", IdeName);
-    public string RenewSessionText => I18n.T("card.openAppToRenew", "app", IdeName);
+    public string LaunchAutomationName => I18n.T("ide.launchTitle", "name", LaunchTargetName);
+    public string RenewSessionText => I18n.T("card.openAppToRenew", "app", LaunchTargetName);
     public string EditToolTip => I18n.T("settings.edit");
     public string RefreshToolTip => I18n.T("common.refresh");
     public string EditAutomationName => $"{I18n.T("settings.edit")} {Name}";
@@ -122,7 +122,7 @@ public sealed partial class ProviderItemViewModel : ObservableObject
     public ObservableCollection<AccountRowViewModel> Accounts { get; } = new();
 
     private bool _canLaunch;
-    private string _ideName = "";
+    private string _launchTargetName = "";
     private string? _launchIconPath;
     private Uri? _launchIconUri;
     private bool _hasNamePrivacyPlaceholder;
@@ -147,12 +147,12 @@ public sealed partial class ProviderItemViewModel : ObservableObject
     public string? RenewSessionToolTip =>
         _recoveryAction is null ? null : I18n.T(_recoveryAction.DescriptionKey);
 
-    public string IdeName
+    public string LaunchTargetName
     {
-        get => _ideName;
+        get => _launchTargetName;
         private set
         {
-            if (SetProperty(ref _ideName, value))
+            if (SetProperty(ref _launchTargetName, value))
             {
                 OnPropertyChanged(nameof(LaunchAutomationName));
                 OnPropertyChanged(nameof(RenewSessionText));
@@ -212,24 +212,10 @@ public sealed partial class ProviderItemViewModel : ObservableObject
 
     public void RefreshLaunchAvailability()
     {
-        var launchTarget = Catalog.LaunchTargetFor(ProviderType, _svc.Config);
-        var configuredPath = launchTarget?.ConfigKey is null
-            ? null
-            : _svc.Config.Get(launchTarget.ConfigKey);
-        var canResolveLaunchPath = launchTarget != null
-            && IdeLauncher.TryResolveLaunchPath(ProviderType, launchTarget, configuredPath, out _);
-
-        CanLaunch = canResolveLaunchPath;
-        IdeName = !canResolveLaunchPath || launchTarget == null
-            ? ""
-            : launchTarget.ConfigKey == Catalog.DefaultLaunchEditorPathKey
-                ? I18n.T("ide.defaultEditor")
-                : launchTarget.DisplayName;
-
-        var iconPath = !canResolveLaunchPath || launchTarget == null
-            ? null
-            : LaunchIconService.GetOrCreateIconPath(ProviderType, launchTarget, configuredPath);
-        SetLaunchIconPath(iconPath);
+        var launchInfo = _svc.GetLaunchInfo(InstanceId);
+        CanLaunch = launchInfo is not null;
+        LaunchTargetName = launchInfo?.DisplayName ?? "";
+        SetLaunchIconPath(launchInfo?.IconPath);
         UpdateRecoveryAvailability(_lastSnapshot);
     }
 
@@ -255,7 +241,7 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         if (_recoveryAction is not { Kind: ProviderRecoveryKind.LaunchApp } recovery)
             return;
 
-        _svc.LaunchIde(InstanceId);
+        _svc.LaunchProvider(InstanceId);
         await Task.Delay(TimeSpan.FromSeconds(Math.Max(0, recovery.RetryDelaySeconds)));
         await _svc.RefreshAsync(InstanceId);
     }

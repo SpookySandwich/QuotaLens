@@ -84,11 +84,7 @@ public sealed class DeepgramProvider : IProvider
     internal static ProviderSnapshot Snapshot(DeepgramUsage usage) => new()
     {
         ProviderId = "deepgram",
-        Name = usage.ProjectCount > 1
-            ? $"Deepgram · {usage.ProjectCount} projects"
-            : string.IsNullOrWhiteSpace(usage.ProjectName)
-                ? "Deepgram"
-                : $"Deepgram · {usage.ProjectName}",
+        Name = "Deepgram",
         Primary = new RateWindow
         {
             Label = "Requests",

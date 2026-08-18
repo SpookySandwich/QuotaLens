@@ -7,6 +7,14 @@ namespace QuotaLens.Tests.Providers;
 [TestClass]
 public sealed class AntigravityProviderTests
 {
+    [TestMethod]
+    public void LanguageServerDiscovery_CoversAppAndIdeBinaryNames()
+    {
+        CollectionAssert.AreEquivalent(
+            new[] { "language_server", "language_server_windows_x64" },
+            AntigravityProvider.LanguageServerProcessNames);
+    }
+
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-06-15T08:00:00Z");
 
     [TestMethod]
@@ -133,7 +141,7 @@ public sealed class AntigravityProviderTests
 
         var snapshot = AntigravityProvider.ParseSnapshot("antigravity", json, Now);
 
-        Assert.AreEqual("Antigravity · Ultra", snapshot.Name);
+        Assert.AreEqual("Antigravity", snapshot.Name);
         Assert.HasCount(1, snapshot.AdditionalWindows);
         Assert.AreEqual("Claude / GPT quota", snapshot.AdditionalWindows[0].Label);
         Assert.IsNull(snapshot.AdditionalWindows[0].WindowMinutes);

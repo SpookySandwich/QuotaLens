@@ -116,7 +116,7 @@ public sealed partial class JetBrainsProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "jetbrains",
-            Name = string.IsNullOrWhiteSpace(ideName) ? "JetBrains AI" : $"JetBrains AI · {ideName}",
+            Name = "JetBrains AI",
             Primary = new RateWindow
             {
                 Label = label,

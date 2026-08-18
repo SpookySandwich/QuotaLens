@@ -220,100 +220,38 @@ public sealed class RefreshService : IProviderService
         OnUi(() => InstancesChanged?.Invoke(this, EventArgs.Empty));
     }
 
-    public void LaunchIde(string instanceId)
+    public ProviderLaunchInfo? GetLaunchInfo(string instanceId)
     {
-        var inst = Instances.FirstOrDefault(i => i.Id == instanceId);
-        if (inst is null)
-            return;
+        var action = LaunchActionFor(instanceId);
+        if (action is null)
+            return null;
 
-        var type = inst.Type;
-        var target = Catalog.LaunchTargetFor(type, Config);
-        if (target == null)
-            return;
-
-        var path = target.ConfigKey is null ? "" : Config.Get(target.ConfigKey);
-        try { IdeLauncher.LaunchIde(type, target, string.IsNullOrWhiteSpace(path) ? null : path); }
-        catch { /* UI swallows launch errors (matches original) */ }
+        try { return action.GetInfo(instanceId, Config); }
+        catch { return null; }
     }
 
-    public async Task<bool> OpenLoginAsync(string instanceId)
+    public void LaunchProvider(string instanceId)
     {
-        var inst = Instances.FirstOrDefault(i => i.Id == instanceId);
-        if (inst is null)
-            return false;
+        var action = LaunchActionFor(instanceId);
+        if (action is null)
+            return;
 
-        var type = inst.Type;
-        if (ProviderLoginLauncher.IsSupported(type))
-        {
-            var launch = ProviderLoginLauncher.TryLaunch(type, instanceId, Config);
-            if (launch.Outcome == TerminalLaunchOutcome.Started)
-            {
-                // The login terminal closes itself once sign-in finishes; await that, then
-                // refresh so the card reflects the fresh login state without a manual click.
-                _ = RefreshAfterLoginAsync(launch.Process, instanceId);
-                return true;
-            }
-
-            if (launch.Outcome == TerminalLaunchOutcome.CliMissing)
-            {
-                // No CLI to sign in with — open the install page so the button always
-                // does something visible rather than silently failing.
-                ProviderLoginLauncher.TryOpenInstallPage(type);
-                return true;
-            }
-
-            return false;
-        }
-
-        if (WebLoginService.Instance is null || !WebLoginService.IsSupported(type))
-            return false;
-
-        var captured = await WebLoginService.Instance.OpenLoginAsync(instanceId, type, Config);
-        // Pull the freshly captured snapshot, or the latest login-required state,
-        // into the card so the UI reflects the outcome immediately.
-        if (captured)
-        {
-            try
-            {
-                var cached = await WebLoginService.Instance.FetchAsync(
-                    instanceId,
-                    type,
-                    Config,
-                    allowHiddenCapture: false);
-                Store(instanceId, cached);
-                return true;
-            }
-            catch (ProviderException)
-            {
-                // Fall through to the normal refresh path so the card shows the
-                // latest login-required or stale-cache state.
-            }
-        }
-
-        await RefreshAsync(instanceId);
-        return captured;
+        try { action.Launch(instanceId, Config); }
+        catch { /* UI launch actions remain best-effort. */ }
     }
 
-    private async Task RefreshAfterLoginAsync(Process? process, string instanceId)
+    private IProviderLaunchAction? LaunchActionFor(string instanceId)
     {
-        if (process is not null)
-        {
-            using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-            try
-            {
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                // Timed out waiting for the user to finish signing in; refresh anyway.
-            }
-            catch (Exception)
-            {
-                // Process handle already gone — refresh regardless.
-            }
-        }
+        var instance = Instances.FirstOrDefault(candidate =>
+            string.Equals(candidate.Id, instanceId, StringComparison.OrdinalIgnoreCase));
+        if (instance is null || !_byType.TryGetValue(instance.Type, out var provider))
+            return null;
 
-        await RefreshAsync(instanceId);
+        var action = ProviderRegistry.LaunchActionFor(
+            provider,
+            instance.Id,
+            Config);
+        return action;
     }
 
     /// <summary>Start the periodic auto-refresh (uses Config.RefreshMs).</summary>

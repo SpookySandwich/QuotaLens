@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using QuotaLens.Core;
 using QuotaLens.Helpers;
+using QuotaLens.Services;
 
 namespace QuotaLens.Providers;
 
@@ -21,15 +22,40 @@ public sealed partial class GeminiProvider : IProvider
     private const string ProjectsEndpoint = "https://cloudresourcemanager.googleapis.com/v1/projects";
     private static readonly DateTimeOffset ConsumerOAuthRetirement =
         new(2026, 6, 18, 0, 0, 0, TimeSpan.Zero);
+    private static readonly AntigravityProvider Antigravity = new();
 
     private readonly IReadOnlyList<IProviderSource> _sources;
 
     public GeminiProvider()
     {
+        var appRecovery = new ProviderRecoveryAction(
+            ProviderRecoveryKind.LaunchApp,
+            "gemini.appSourceNote");
+
         _sources = new IProviderSource[]
         {
-            new AntigravityIdeSource(),
-            new GeminiCliSource(this),
+            new ProviderSource(
+                ProviderSourceMode.App,
+                (_, _) => AntigravityProvider.IsRunning(),
+                FetchAppAsync,
+                configFieldKeys: new[] { "gemini_app_path", "gemini_auto_launch_app" },
+                legacyConfigValues: new[] { "ide" },
+                attentionNote: "gemini.appSourceNote",
+                unavailableRecovery: appRecovery,
+                connectionAction: new AppProviderConnectionAction(
+                    "gemini",
+                    "gemini_app_path",
+                    AntigravityProvider.IsRunning,
+                    launchInBackground: true,
+                    autoLaunchConfigKey: "gemini_auto_launch_app"),
+                launchAction: new AppProviderLaunchAction("gemini")),
+            new ProviderSource(
+                ProviderSourceMode.Cli,
+                CliCredentialsExist,
+                FetchCliAsync,
+                configFieldKeys: new[] { "gemini_home", "gemini_path" },
+                connectionAction: new CliProviderConnectionAction("gemini"),
+                launchAction: new CliProviderLaunchAction("gemini")),
         };
     }
 
@@ -204,8 +230,6 @@ public sealed partial class GeminiProvider : IProvider
 
     internal static ProviderSnapshot Snapshot(GeminiUsage usage, DateTimeOffset? updatedAt = null)
     {
-        var plan = string.IsNullOrWhiteSpace(usage.AccountPlan) ? "" : $" · {usage.AccountPlan}";
-
         if (usage.Windows is not null && usage.Windows.Count > 0)
         {
             var primary = usage.Windows[0];
@@ -216,7 +240,7 @@ public sealed partial class GeminiProvider : IProvider
             return new ProviderSnapshot
             {
                 ProviderId = "gemini",
-                Name = $"Gemini{plan}",
+                Name = "Gemini",
                 PlanName = usage.AccountPlan,
                 Primary = primary,
                 Secondary = secondary,
@@ -261,7 +285,7 @@ public sealed partial class GeminiProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "gemini",
-            Name = $"Gemini{plan}",
+            Name = "Gemini",
             PlanName = usage.AccountPlan,
             Primary = primaryFallback,
             Secondary = secondaryFallback,
@@ -683,36 +707,16 @@ public sealed partial class GeminiProvider : IProvider
         }
     }
 
-    private sealed class GeminiCliSource : IProviderSource
+    private static async Task<ProviderSnapshot> FetchAppAsync(
+        string instanceId,
+        IConfig config,
+        CancellationToken ct)
     {
-        private readonly GeminiProvider _owner;
-
-        public GeminiCliSource(GeminiProvider owner) => _owner = owner;
-
-        public string Id => "cli";
-        public string Name => "Gemini CLI";
-        public IReadOnlyList<string> ConfigFieldKeys => new[] { "gemini_home", "gemini_path" };
-        public bool IsAvailable(string instanceId, IConfig config) => _owner.CliCredentialsExist(instanceId, config);
-        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
-            _owner.FetchCliAsync(instanceId, config, ct);
-    }
-
-    private sealed class AntigravityIdeSource : IProviderSource
-    {
-        private static readonly AntigravityProvider Provider = new();
-
-        public string Id => "ide";
-        public string Name => "Antigravity IDE";
-        public IReadOnlyList<string> ConfigFieldKeys => new[] { "gemini_app_path" };
-        public bool IsAvailable(string instanceId, IConfig config) => AntigravityProvider.IsRunning();
-        public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
-        {
-            var snap = await Provider.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
-            snap.ProviderId = instanceId;
-            snap.Name = "Gemini" + (string.IsNullOrWhiteSpace(snap.PlanName) ? "" : $" · {snap.PlanName}");
-            snap.SourceLabel = "Antigravity local probe";
-            return snap;
-        }
+        var snap = await Antigravity.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
+        snap.ProviderId = instanceId;
+        snap.Name = "Gemini";
+        snap.SourceLabel = "Antigravity local probe";
+        return snap;
     }
 
 }

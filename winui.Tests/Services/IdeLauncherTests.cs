@@ -123,13 +123,21 @@ public sealed class IdeLauncherTests
     }
 
     [TestMethod]
-    public void AntigravityLaunchTarget_IsBuiltInAndPrefersIdeApp()
+    public void AntigravityLaunchTargets_CoverAppAndIdeWithProviderSpecificConfigKeys()
     {
-        var target = Catalog.LaunchTargets["antigravity"];
+        var legacyTarget = Catalog.LaunchTargets["antigravity"];
+        var geminiTarget = Catalog.LaunchTargets["gemini"];
 
-        StringAssert.Contains(target.DefaultPaths[0], "Antigravity IDE");
-        CollectionAssert.Contains(target.DirectoryExecutableNames, "Antigravity IDE.exe");
-        Assert.AreEqual("antigravity_path", target.ConfigKey);
+        foreach (var target in new[] { legacyTarget, geminiTarget })
+        {
+            Assert.IsTrue(target.DefaultPaths.Any(path => path.Contains(@"Programs\Antigravity\Antigravity.exe", StringComparison.OrdinalIgnoreCase)));
+            Assert.IsTrue(target.DefaultPaths.Any(path => path.Contains("Antigravity IDE", StringComparison.OrdinalIgnoreCase)));
+            CollectionAssert.Contains(target.DirectoryExecutableNames, "Antigravity.exe");
+            CollectionAssert.Contains(target.DirectoryExecutableNames, "Antigravity IDE.exe");
+        }
+
+        Assert.AreEqual("antigravity_path", legacyTarget.ConfigKey);
+        Assert.AreEqual("gemini_app_path", geminiTarget.ConfigKey);
     }
 
     [TestMethod]

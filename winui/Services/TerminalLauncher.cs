@@ -64,6 +64,45 @@ public static class TerminalLauncher
     }
 
     /// <summary>
+    /// Opens the selected source's ordinary interactive CLI with no login arguments.
+    /// This is the dashboard launch action, distinct from the setup action above.
+    /// </summary>
+    public static TerminalLaunchResult TryLaunchCli(
+        string providerType,
+        string instanceId,
+        IConfig config)
+    {
+        if (!ProviderLoginCatalog.TryGet(providerType, out var descriptor))
+            return new(TerminalLaunchOutcome.CliMissing, null);
+
+        if (!TryResolveCli(descriptor, instanceId, config, out var binary))
+        {
+            AppLog.Warn($"launch: {providerType} CLI not resolved (command '{descriptor.CliCommand}')");
+            return new(TerminalLaunchOutcome.CliMissing, null);
+        }
+
+        var encoded = EncodeCliScript(binary, providerType);
+        AppLog.Info($"launch: opening interactive {providerType} CLI at {binary}");
+
+        var startInfo = BuildStartInfo(encoded);
+        try
+        {
+            var process = Process.Start(startInfo);
+            if (process is not null)
+            {
+                AppLog.Info($"launch: {providerType} CLI terminal started ({Path.GetFileName(startInfo.FileName)})");
+                return new(TerminalLaunchOutcome.Started, process);
+            }
+        }
+        catch (Exception error)
+        {
+            AppLog.Warn($"launch: {providerType} CLI terminal failed: {error.Message}");
+        }
+
+        return new(TerminalLaunchOutcome.LaunchFailed, null);
+    }
+
+    /// <summary>
     /// Resolves the CLI, preferring a user-configured path, then PATH.
     /// <see cref="HiddenCliProcess.ResolveBinary"/> returns the bare name unchanged when
     /// nothing matches, so the existence check is load-bearing — a non-empty result is
@@ -106,13 +145,48 @@ public static class TerminalLauncher
         return false;
     }
 
+    /// <summary>
+    /// Resolves the native terminal executable whose icon represents CLI launches.
+    /// Windows Terminal is preferred; Windows PowerShell is the built-in fallback.
+    /// </summary>
+    internal static string? ResolveTerminalIconExecutable(
+        string? localAppData = null,
+        Func<string, string>? resolve = null,
+        Func<string, bool>? fileExists = null)
+    {
+        localAppData ??= Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        resolve ??= binary => HiddenCliProcess.ResolveBinary(binary);
+        fileExists ??= File.Exists;
+
+        var candidates = new List<string>
+        {
+            Path.Combine(localAppData, "Microsoft", "WindowsApps", "wt.exe"),
+        };
+        try
+        {
+            candidates.Add(resolve("wt.exe"));
+        }
+        catch (ArgumentException)
+        {
+            // PATH resolution is optional; the app-execution alias above is primary.
+        }
+
+        candidates.Add(Path.Combine(
+            Environment.SystemDirectory,
+            "WindowsPowerShell", "v1.0", "powershell.exe"));
+
+        return candidates
+            .Where(candidate => !string.IsNullOrWhiteSpace(candidate))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault(fileExists);
+    }
+
     private static IEnumerable<string> Candidates(
         ProviderLoginDescriptor descriptor,
         string instanceId,
         IConfig config)
     {
-        if (!string.IsNullOrWhiteSpace(descriptor.CliPathFieldKey))
-            yield return config.GetScoped(instanceId, descriptor.CliPathFieldKey!);
+        yield return config.GetScoped(instanceId, descriptor.CliPathFieldKey);
 
         yield return descriptor.CliCommand;
     }
@@ -173,6 +247,28 @@ public static class TerminalLauncher
         };
         var script = string.Join(Environment.NewLine, lines);
 
+        return Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
+    }
+
+    /// <summary>Builds the safe encoded script used by the everyday CLI launch.</summary>
+    internal static string EncodeCliScript(string binary, string providerType)
+    {
+        var lines = new[]
+        {
+            "$ErrorActionPreference = 'Continue'",
+            "$binary = " + Quote(binary),
+            "Write-Host " + Quote($"QuotaLens: opening {providerType} CLI...") + " -ForegroundColor Cyan",
+            "Write-Host ''",
+            "& $binary",
+            "$exitCode = $LASTEXITCODE",
+            "if ($null -eq $exitCode -or $exitCode -eq 0) {",
+            "    exit 0",
+            "} else {",
+            "    Write-Host \"CLI exited with code $exitCode. Press Enter to close this window.\" -ForegroundColor Yellow",
+            "    Read-Host",
+            "}",
+        };
+        var script = string.Join(Environment.NewLine, lines);
         return Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
     }
 

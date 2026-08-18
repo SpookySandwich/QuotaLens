@@ -144,7 +144,7 @@ public sealed class QoderProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "qoder",
-            Name = plan is null ? "Qoder" : $"Qoder · {plan}",
+            Name = "Qoder",
             PlanName = plan,
             Primary = ToRateWindow(aggregate, resetsAt, usage.IsQuotaExceeded, windowMinutes: 30 * 24 * 60),
             AdditionalWindows = showBreakdown

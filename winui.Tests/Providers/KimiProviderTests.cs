@@ -43,7 +43,7 @@ public sealed class KimiProviderTests
         var snapshot = provider.ParseCliUsage(SampleUsageJson);
 
         Assert.AreEqual("kimi", snapshot.ProviderId);
-        Assert.AreEqual("Kimi · Moderato", snapshot.Name);
+        Assert.AreEqual("Kimi", snapshot.Name);
         Assert.AreEqual("Weekly", snapshot.Primary.Label);
         Assert.AreEqual(16.0, snapshot.Primary.UsedPercent);
         Assert.AreEqual(10080, snapshot.Primary.WindowMinutes);
@@ -137,7 +137,7 @@ public sealed class KimiProviderTests
         var snapshot = await provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None);
 
         CollectionAssert.AreEqual(new[] { "fresh-access" }, usageCalls);
-        Assert.AreEqual("Kimi · Moderato", snapshot.Name);
+        Assert.AreEqual("Kimi", snapshot.Name);
         Assert.AreEqual("Kimi Code CLI", snapshot.SourceLabel);
     }
 
@@ -193,6 +193,47 @@ public sealed class KimiProviderTests
     }
 
     [TestMethod]
+    public void ParseAppSubscription_UsesActiveGoodsAsStructuredPlanIdentity()
+    {
+        var identity = KimiProvider.ParseAppSubscription("""
+            {
+              "subscription": {
+                "goods": {
+                  "id": "goods-advanced",
+                  "title": "Allegro",
+                  "membershipLevel": "LEVEL_ADVANCED"
+                },
+                "status": "SUBSCRIPTION_STATUS_CANCEL",
+                "active": true
+              },
+              "subscribed": true
+            }
+            """);
+
+        Assert.AreEqual("LEVEL_ADVANCED", identity.PlanId);
+        Assert.AreEqual("Allegro", identity.PlanName);
+    }
+
+    [TestMethod]
+    public void ParseAppUsage_AcceptsPlanIdentityWithoutComposingProviderTitle()
+    {
+        var snapshot = KimiProvider.ParseAppUsage(
+            """
+            {
+              "usages": [{
+                "scope": "FEATURE_CODING",
+                "detail": { "limit": "100", "used": "0", "remaining": "100" }
+              }]
+            }
+            """,
+            new ProviderPlanIdentity("LEVEL_ADVANCED", "Allegro"));
+
+        Assert.AreEqual("Kimi", snapshot.Name);
+        Assert.AreEqual("LEVEL_ADVANCED", snapshot.PlanId);
+        Assert.AreEqual("Allegro", snapshot.PlanName);
+    }
+
+    [TestMethod]
     public async Task FetchAsync_PrefersAppSourceWhenAvailable()
     {
         var appCalls = 0;
@@ -243,7 +284,9 @@ public sealed class KimiProviderTests
 
         Assert.AreEqual(1, webCalls);
         Assert.AreEqual("Kimi WebView", snapshot.SourceLabel);
-        CollectionAssert.AreEqual(new[] { "app", "cli", "web" }, provider.Sources.Select(source => source.Id).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "app", "cli", "web" },
+            provider.Sources.Select(source => source.Mode.ConfigValue()).ToArray());
     }
 
     [TestMethod]
@@ -302,8 +345,8 @@ public sealed class KimiProviderTests
     {
         var provider = Provider(FreshCredentials());
 
-        Assert.AreEqual("kimi.appSourceNote", provider.Sources.Single(s => s.Id == "app").AttentionNote);
-        Assert.IsNull(provider.Sources.Single(s => s.Id == "cli").AttentionNote);
+        Assert.AreEqual("kimi.appSourceNote", provider.Sources.Single(s => s.Mode == ProviderSourceMode.App).AttentionNote);
+        Assert.IsNull(provider.Sources.Single(s => s.Mode == ProviderSourceMode.Cli).AttentionNote);
     }
 
     [TestMethod]
@@ -311,9 +354,9 @@ public sealed class KimiProviderTests
     {
         var provider = Provider(FreshCredentials());
 
-        Assert.AreEqual("kimi.appSourceNote", provider.Sources.Single(s => s.Id == "app").UnavailableRecovery?.DescriptionKey);
-        Assert.IsNull(provider.Sources.Single(s => s.Id == "cli").UnavailableRecovery);
-        Assert.IsNull(provider.Sources.Single(s => s.Id == "web").UnavailableRecovery);
+        Assert.AreEqual("kimi.appSourceNote", provider.Sources.Single(s => s.Mode == ProviderSourceMode.App).UnavailableRecovery?.DescriptionKey);
+        Assert.IsNull(provider.Sources.Single(s => s.Mode == ProviderSourceMode.Cli).UnavailableRecovery);
+        Assert.IsNull(provider.Sources.Single(s => s.Mode == ProviderSourceMode.Web).UnavailableRecovery);
     }
 
     [TestMethod]

@@ -1,48 +1,86 @@
-# QuotaLens
+# QuotaLens developer guide
 
-开发说明 · 版本始终是 1.0.0
+QuotaLens is an unpackaged, self-contained WinUI 3 application targeting `net10.0-windows`. Provider integrations are read-only monitors: they may read provider-owned sessions and call usage endpoints, but must not rewrite another application's credential store.
 
-给改代码的人。产品行为以 [使用说明](user-guide.md) 为准；这里只写怎么编、怎么测、配置页约定。
+User-facing setup and troubleshooting belong in [user-guide.md](user-guide.md); keep this document focused on implementation and validation.
 
-## 构建与测试
-
-Windows 11，.NET SDK（目标框架 `net10.0-windows`）。
+## Build, test, and package
 
 ```powershell
 dotnet build .\QuotaLens.slnx -c Debug -p:Platform=x64
-dotnet test  .\QuotaLens.slnx -c Debug -p:Platform=x64
+dotnet test  .\winui.Tests\QuotaLens.Tests.csproj -c Debug -p:Platform=x64 --no-build
 ```
 
-当前 727 个测试，覆盖额度计算、平台解析、刷新调度、加号流程和推荐逻辑。
+Run an isolated window with no tray, refresh, network traffic, or login popups:
 
-## 打包
+```powershell
+dotnet run --project .\winui\QuotaLens.csproj -c Debug -p:Platform=x64 -- --ui-smoke
+```
 
-需要本机安装 [Inno Setup 6](https://jrsoftware.org/isinfo.php)。版本号写死 **1.0.0**，不要加 1.0.1 / 1.1.x。
+Create the version `1.0.0` installer and portable archive with Inno Setup 6 installed:
 
 ```powershell
 .\scripts\package-windows.ps1 -Configuration Release -Platform x64 -Version 1.0.0
 ```
 
-## CI
+## Provider boundary
 
-每次推送只跑构建和测试（`.github/workflows/windows-installer.yml`）。安装包不在每次 push 打。打 `v*` 标签或手动跑 Release 工作流，才会打 1.0.0 安装包和便携版并生成 GitHub Release 草稿。
+A provider converts external data into shared models: `ProviderSnapshot`, `RateWindow`, `ModelQuota`, `AccountInfo`, and `BalanceInfo`. Shared UI, sorting, refresh, recovery, and file-watching code consumes those models and must not branch on provider ids.
 
-## 配置页
+- Put reset instants in `RateWindow.ResetsAt` and cadence in `WindowMinutes`. `ResetFormatter` alone produces text such as `resets in 3h 12m`.
+- Put non-reset usage, balance, or status prose in `DetailText`.
+- Put response-specific parsing and authentication inside the provider.
+- Put editable fields, default paths, environment mappings, launch targets, and setup probes in `Catalog`.
+- Put compatibility names in declarative aliases; do not scatter migration conditionals through providers or views.
 
-每个可添加平台都必须走同一张配置页。`ProviderAddFlow` 不再按 BrowserLogin / ApiKey / Local 分叉。登录按钮只出现在需要浏览器会话（或 CLI 登录器）的源上。选 App / CLI 时读本机会话，不要再弹一次网页登录。点「完成」必须先 Fetch 成功，否则对话框留下。
+## Provider and plan identity
 
-## 平台无关的数据架构
+Provider identity and plan identity are separate data:
 
-平台适配器只负责把各家的响应转换成 `ProviderSnapshot`：重置时刻写入 `ResetsAt`，周期写入 `WindowMinutes`，模型配额写入 `ModelQuotas`。卡片、时间线、可用率和排序逻辑只读取这些结构化字段，不得根据平台 ID 改分支。
+- `ProviderSnapshot.Name` leaves a provider parser as the stable provider name, never a presentation title.
+- `PlanId` is the provider's canonical machine identity when one exists.
+- `PlanName` is the provider's human-readable active plan name.
+- `ProviderSnapshotIdentity` is the only component allowed to compose the visible `Provider · Plan` title. It also normalizes missing/expired plans and upgrades titles persisted by older builds.
 
-所有卡片重置文案由 `ResetFormatter` 生成，例如 `resets in 3h 12m`。只要 `ResetsAt` 有效，就不显示平台返回的重置句子；`DetailText` 仅保留用量、余额、状态等非重置说明。
+Do not concatenate a provider name and plan inside a provider, web parser, source, or view model. `ProviderSnapshotMetadata.Apply` normalizes snapshots at the shared metadata boundary, while `ProviderSnapshotIdentity.ComposeTitle` handles instance names at display/persistence boundaries. Pricing and token rules consume `ProviderPlanIdentity` rather than reparsing the title.
 
-多数据源统一实现 `IProviderSource`。`ProviderSourceRunner` 在用户明确选择源时严格使用该源；未选择时才按顺序自动回退。源通过 `UnavailableRecovery` 声明无数据时的恢复动作，通过 `WatchPaths` 声明会话文件；刷新服务和卡片不探测平台类型。配置字段改名统一放进 `Catalog.ConfigKeyAliases`，由配置服务迁移全局或实例字段。
+`ProviderSnapshotIdentityTests.ProviderParsers_DoNotComposePresentationTitles` scans provider sources and fails if a parser assigns a title containing ` · `. Add parser assertions for bare `Name` plus structured `PlanId`/`PlanName` whenever a provider gains plan support.
 
-新增平台特殊性应留在解析器或 Catalog 数据中。不要在共享视图、刷新、排序、恢复或监视代码中增加平台名称判断。
+Some providers expose quota and plan metadata through different resources. Combining resources is valid when they belong to the selected source and authenticated account; it is enrichment, not a fallback to another data source. Keep valid quota when optional plan enrichment fails.
 
-未做事项见 [todo.md](todo.md)；近期系统与接口修改见 [recent-changes.md](recent-changes.md)。
+- Grok reads quota from `GET /billing?format=credits` and subscription identity from `GET /user?include=subscription` on the CLI backend. Current agent-stdio builds return `Method not found` for `x.ai/billing`; ACP remains compatibility fallback only.
+- Kimi App reads coding quota from `BillingService/GetUsages` and active goods identity from `MembershipService/GetSubscription`. The membership level becomes `PlanId` and the goods title becomes `PlanName`.
 
-## 卡片标题
+## App, CLI, and Web sources
 
-卡片标题只说明这是谁，不说明出了什么事。有套餐写「平台 · 套餐」，没有套餐或已过期只写「平台」。`expired`、`login required`、`trial ended` 这类状态放在卡片正文，不要写进标题。
+Every multi-source provider exposes `ProviderSource` entries. `ProviderSourceMode` is deliberately closed to exactly `App`, `Cli`, and `Web`; the stored values are `app`, `cli`, and `web`.
+
+Each source declares:
+
+- availability and fetch delegates;
+- the configuration fields visible for that mode;
+- optional legacy stored values;
+- optional attention and recovery metadata;
+- optional session files to watch.
+
+`ProviderSourceRunner` owns all selection behavior. An explicit selection is strict and never falls through to another account. With no selection, the first available source wins. It rejects duplicate modes. `EditProviderDialog` renders the same selector and fields for every provider from this metadata.
+
+App executable fields are optional overrides. Their matching `ProviderLaunchTarget` must contain usable default paths so an empty input displays and uses auto-detection. A provider that supports multiple compatible app variants should list all paths under one App source rather than inventing provider-specific source values.
+
+Gemini is the reference case: its App source reads the common local quota protocol exposed by Antigravity (`language_server.exe`) and Antigravity IDE (`language_server_windows_x64.exe`). One shared path field auto-detects either executable; one of the apps must be running for its local service to exist. Gemini's CLI source remains separate.
+
+Kimi is the short-lived-session reference case. Its desktop token is renewed only by Kimi while that app is in use; QuotaLens never rotates provider-owned credentials. An explicit App selection therefore remains invalid while the token is stale and exposes its launch recovery action. Automatic selection may use another ready source. The App source watches Kimi's token store and refreshes quota plus plan identity after Kimi renews the session.
+
+## Configuration and UI contracts
+
+All addable providers open the same settings dialog. Source selection determines visible fields. App/CLI/Web tabs have stable automation ids, and every input and browse action has an automation id derived from the instance and field key.
+
+An empty optional path is valid and means “use the displayed default.” A typed path must exist. **Done** saves the scoped/global values and performs a live fetch; failure keeps the dialog open with the error.
+
+Recovery actions are structural data on invalid snapshots. Healthy snapshots never show recovery controls. The card only executes a declared action and never probes provider identity or parses error wording.
+
+## Validation expectations
+
+Changes to provider routing require parser, source-order, strict-selection, migration, availability, and error-path tests. Changes to identity require bare-provider parser assertions, structured plan assertions, shared title-composition coverage, and the provider-source architecture guard. Changes to shared configuration UI also require a shadow-copy launch, UI Automation of the affected dialog states, and screenshots at the minimum, representative, and maximized sizes. Keep the working tree's build output separate from the launched copy to avoid locked WinUI files.
+
+The maintained Markdown set is intentionally small: the English and Chinese READMEs, their user guides, this developer guide, and the legally required third-party notices.

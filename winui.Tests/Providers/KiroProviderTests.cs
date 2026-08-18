@@ -49,7 +49,7 @@ public sealed class KiroProviderTests
         var snapshot = KiroProvider.ParseUsage("kiro-main", output, now);
 
         Assert.AreEqual("kiro-main", snapshot.ProviderId);
-        Assert.AreEqual("Kiro · Kiro Pro", snapshot.Name);
+        Assert.AreEqual("Kiro", snapshot.Name);
         Assert.AreEqual(25d, snapshot.Primary.UsedPercent);
         StringAssert.Contains(snapshot.Primary.DetailText, "Overage: 3 credits · $0.12 USD");
         Assert.IsNotNull(snapshot.Secondary);

@@ -5,7 +5,7 @@
 **One glance tells you which AI coding tool to use right now.**
 
 A native Windows dashboard for quota, usage, and balances across **48 AI coding providers**.<br>
-No backend, no telemetry, nothing to paste.
+No QuotaLens backend, no account, and no telemetry.
 
 [![Build](https://img.shields.io/github/actions/workflow/status/SpookySandwich/QuotaLens/windows-installer.yml?branch=main&label=build)](https://github.com/SpookySandwich/QuotaLens/actions/workflows/windows-installer.yml)
 [![Release](https://img.shields.io/github/v/release/SpookySandwich/QuotaLens?display_name=tag&label=release)](https://github.com/SpookySandwich/QuotaLens/releases/latest)
@@ -22,9 +22,9 @@ You open Claude Code, fire off a prompt, and *then* find out the weekly pool ran
 
 |  |  |  |
 | :-- | :-- | :-- |
-| **Use this now**<br>Hero card picks the highest-value plan that still has headroom. | **Usage timeline**<br>One bar, one segment per plan, width = tokens left this week. | **Per-window bars**<br>5-hour pool, weekly pool, monthly — with reset countdowns. |
-| **One settings page**<br>Every provider is configured the same way. Done only after a live fetch. | **Browser login**<br>Sign in once from settings; the session is reused. | **48 providers**<br>Ranked instant search, full keyboard flow. |
-| **Privacy toggle**<br>One click masks emails and balances for screen sharing. | **Sort your way**<br>By plan value, reset frequency, or next reset. | **Native Win11**<br>Mica, tray icon, single instance, quiet refresh. EN + 简体中文. |
+| **Use this now**<br>See which paid plan still has useful headroom. | **See all your runway**<br>Compare remaining capacity without opening every tool. | **Know when it returns**<br>Reset countdowns make it easy to plan around limits. |
+| **One calm dashboard**<br>Quota windows, balances, and accounts in one place. | **48 providers**<br>Bring a mixed AI coding toolkit into one view. | **Quick setup**<br>Add the tools you use and let QuotaLens keep watch. |
+| **Privacy toggle**<br>One click masks emails and balances for screen sharing. | **Sort your way**<br>Surface the plans and resets that matter to you. | **Native Win11**<br>A fast, focused desktop app in English and 简体中文. |
 
 ## Install
 
@@ -37,28 +37,13 @@ Download the latest **[release](https://github.com/SpookySandwich/QuotaLens/rele
 
 Requires **Windows 11 x64**. The build is self-contained — no separate .NET or Windows App SDK runtime to install.
 
-Then: launch it. Click **Add Provider**. Every platform opens the same settings page — sign in, paste a key, or confirm the local app — then **Done**. Read the top card — that's the tool to use.
+Then launch QuotaLens, add the providers you use, and check the top card whenever you need to choose a tool.
 
-## The dashboard
+## Why QuotaLens
 
-**Recommended** ranks your plans the way you would: the highest-value subscription you're already paying for that *still has headroom*, so you get your money's worth first. Pay-as-you-go API balances sit at the bottom of that ranking — a last resort, never the default pick.
+AI coding limits are scattered across apps, CLIs, websites, accounts, and reset windows. QuotaLens brings them together so you can stop guessing, avoid interrupted work, and get more value from the plans you already pay for.
 
-**The usage timeline** is one cumulative bar across every configured plan:
-
-- Each segment is one provider. Its **width is the estimated tokens you have left this week** — not a percentage, so a 5% sliver of a Max 20x plan is still visibly wider than a full free tier.
-- Segments run **slowest-refilling first**. The left end is a weekly pool you should spend carefully; the right end is a 5-hour pool that refills over lunch.
-- **Spent capacity is not drawn.** The bar is runway, not history.
-
-Below it, provider cards carry per-window progress bars, reset countdowns, green / amber / red status, credit balances, and per-account breakdowns for pooled setups. Sort the deck by plan value, reset frequency, or next reset.
-
-## Adding providers
-
-<p>Every provider uses the same settings page. A <b>Suggested</b> group floats what's likely already on your machine. Search is ranked and instant; the whole flow works from the keyboard.</p>
-<ul>
-<li><b>Browser login</b> — sign in once from the settings page.</li>
-<li><b>API key</b> — paste a key, then Done.</li>
-<li><b>Local app or CLI</b> — confirm the path; if you are already signed into the app, you do not sign in again.</li>
-</ul>
+The recommendation points you toward a useful plan now, the timeline shows your remaining runway, and provider cards show the limits and reset times behind that choice.
 
 <details>
 <summary><b>All 48 providers</b></summary>
@@ -84,38 +69,12 @@ Below it, provider cards carry per-window progress bars, reset countdowns, green
 
 ## Privacy
 
-QuotaLens is a local tool. There is no backend, no account, and no telemetry. It reads credentials that already exist on your machine — the login files your CLIs wrote, or logins you complete in the embedded browser — queries each provider's own usage endpoint, and caches the last result under `%LOCALAPPDATA%\QuotaLens`. Nothing leaves your machine except the calls to the providers you configured.
+QuotaLens runs locally, has no QuotaLens account or backend, and sends no telemetry. It contacts only the providers you configure.
 
-API keys you paste are stored in plain JSON there, protected by your Windows user account's file permissions rather than by additional encryption — the same protection your CLI credential files already have. If that isn't acceptable for a given key, prefer a provider that detects a local CLI login instead.
+## Documentation
 
-Sign-in happens on the provider settings page, not on the dashboard card.
-
-## Build from source
-
-Prerequisites: Windows 11 and the .NET SDK.
-
-```powershell
-dotnet build .\QuotaLens.slnx -c Debug -p:Platform=x64
-dotnet test  .\QuotaLens.slnx -c Debug -p:Platform=x64
-```
-
-727 tests cover quota math, provider response parsing, refresh scheduling, and the recommendation logic. Append `-- --ui-smoke` to `dotnet run` for a single isolated window with no tray, refreshes, network calls, or login windows — useful when UI automation shouldn't have its focus stolen.
-
-Package the installer and portable zip locally (needs [Inno Setup 6](https://jrsoftware.org/isinfo.php)):
-
-```powershell
-.\scripts\package-windows.ps1 -Configuration Release -Platform x64 -Version 1.0.0
-```
-
-CI builds and tests every push (`.github/workflows/windows-installer.yml`). Tagging `v*` (or running the Release workflow) packages `1.0.0` and drafts a GitHub release.
-
-## Reference
-
-| Document | What's in it |
-| :-- | :-- |
-| [docs/user-guide.md](docs/user-guide.md) | 使用说明 |
-| [docs/developer-guide.md](docs/developer-guide.md) | 开发说明 |
-| [docs/todo.md](docs/todo.md) | 待做 |
+- **[User guide](docs/user-guide.md)** — setup, provider connections, dashboard behavior, troubleshooting, and local data.
+- **[Developer guide](docs/developer-guide.md)** — architecture, build, test, and packaging conventions.
 
 ## Acknowledgements
 

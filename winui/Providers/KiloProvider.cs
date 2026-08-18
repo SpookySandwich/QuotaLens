@@ -115,7 +115,7 @@ public sealed class KiloProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = "kilo",
-            Name = string.IsNullOrWhiteSpace(usage.PlanName) ? "Kilo" : $"Kilo · {usage.PlanName}",
+            Name = "Kilo",
             PlanName = usage.PlanName,
             Primary = CreditsWindow(usage),
             Secondary = PassWindow(usage),

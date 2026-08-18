@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using QuotaLens.Core;
+using QuotaLens.Services;
 using QuotaLens.ViewModels;
 
 namespace QuotaLens.Tests.ViewModels;
@@ -50,8 +51,42 @@ public sealed class ProviderItemViewModelTests
             var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
 
             Assert.IsTrue(viewModel.CanLaunch);
-            Assert.AreEqual("Qoder", viewModel.IdeName);
+            Assert.AreEqual("Qoder", viewModel.LaunchTargetName);
             Assert.AreEqual("Launch Qoder", viewModel.LaunchAutomationName);
+        }
+        finally
+        {
+            File.Delete(executable);
+        }
+    }
+
+    [TestMethod]
+    public void Constructor_GeminiAutomaticCliFallbackKeepsDefaultAntigravityLaunch()
+    {
+        var executable = Path.Combine(
+            Path.GetTempPath(),
+            $"QuotaLensTest-{Guid.NewGuid():N}-Antigravity.exe");
+        var service = new FakeProviderService(
+            new ProviderInstance("gemini-work", "gemini", "Gemini"))
+        {
+            SnapshotOverride = new ProviderSnapshot
+            {
+                ProviderId = "gemini-work",
+                Name = "Gemini",
+                SourceState = new ProviderSourceState(null, "cli", UsedFallback: true),
+                Primary = new RateWindow { Label = "Daily", UsedPercent = 20 },
+            },
+        };
+        service.Config.Set("gemini_app_path", executable);
+
+        try
+        {
+            File.WriteAllBytes(executable, []);
+            var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+
+            Assert.IsTrue(viewModel.CanLaunch);
+            Assert.AreEqual("Antigravity", viewModel.LaunchTargetName);
+            Assert.AreEqual("Launch Antigravity", viewModel.LaunchAutomationName);
         }
         finally
         {
@@ -232,7 +267,7 @@ public sealed class ProviderItemViewModelTests
             viewModel.RefreshLaunchAvailability();
 
             Assert.IsTrue(viewModel.CanLaunch);
-            Assert.AreEqual("Default editor", viewModel.IdeName);
+            Assert.AreEqual("Default editor", viewModel.LaunchTargetName);
             Assert.AreEqual("Launch Default editor", viewModel.LaunchAutomationName);
         }
         finally
@@ -252,6 +287,17 @@ public sealed class ProviderItemViewModelTests
 
         Assert.AreEqual(CardKind.Error, viewModel.Kind);
         StringAssert.Contains(viewModel.ErrorText, "Login required");
+    }
+
+    [TestMethod]
+    public void LaunchCommand_DelegatesToTheSourceAwareProviderService()
+    {
+        var service = new FakeProviderService(new ProviderInstance("gemini-work", "gemini", "Gemini"));
+        var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+
+        viewModel.LaunchCommand.Execute(null);
+
+        CollectionAssert.AreEqual(new[] { "gemini-work" }, service.LaunchedIds.ToArray());
     }
 
     [TestMethod]
@@ -678,6 +724,8 @@ public sealed class ProviderItemViewModelTests
     private sealed class FakeProviderService : IProviderService
     {
         private readonly FakeConfig _config = new();
+        public List<string> LaunchedIds { get; } = new();
+        public ProviderSnapshot? SnapshotOverride { get; set; }
 
         public FakeProviderService()
             : this(new ProviderInstance("claude", "claude", "Claude Code"))
@@ -717,17 +765,18 @@ public sealed class ProviderItemViewModelTests
             remove { }
         }
 
-        public ProviderSnapshot? GetSnapshot(string instanceId) => new()
-        {
-            ProviderId = instanceId,
-            Name = "Claude Code",
-            Primary = new RateWindow
+        public ProviderSnapshot? GetSnapshot(string instanceId) =>
+            SnapshotOverride ?? new ProviderSnapshot
             {
-                Label = "5h Pool",
-                UsedPercent = 20,
-            },
-            UpdatedAt = DateTimeOffset.UtcNow,
-        };
+                ProviderId = instanceId,
+                Name = "Claude Code",
+                Primary = new RateWindow
+                {
+                    Label = "5h Pool",
+                    UsedPercent = 20,
+                },
+                UpdatedAt = DateTimeOffset.UtcNow,
+            };
 
         public bool IsRefreshing(string instanceId) => false;
 
@@ -744,11 +793,24 @@ public sealed class ProviderItemViewModelTests
         {
         }
 
-        public void LaunchIde(string instanceId)
+        public ProviderLaunchInfo? GetLaunchInfo(string instanceId)
         {
+            var instance = Instances.FirstOrDefault(candidate => candidate.Id == instanceId);
+            if (instance is null)
+                return null;
+
+            var provider = ProviderRegistry.Create(instance.Type);
+            return ProviderRegistry.LaunchActionFor(
+                    provider,
+                    instance.Id,
+                    Config)
+                ?.GetInfo(instance.Id, Config);
         }
 
-        public Task<bool> OpenLoginAsync(string providerId) => Task.FromResult(true);
+        public void LaunchProvider(string instanceId)
+        {
+            LaunchedIds.Add(instanceId);
+        }
 
         private sealed class FakeConfig : IConfigService
         {

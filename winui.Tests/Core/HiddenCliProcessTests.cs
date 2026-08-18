@@ -7,6 +7,22 @@ namespace QuotaLens.Tests.Core;
 public sealed class HiddenCliProcessTests
 {
     [TestMethod]
+    public void EnableUtf8StandardInput_UsesBomFreeEncoding()
+    {
+        var startInfo = new ProcessStartInfo();
+
+        HiddenCliProcess.EnableUtf8StandardInput(startInfo);
+
+        Assert.IsTrue(startInfo.RedirectStandardInput);
+        var encoding = startInfo.StandardInputEncoding
+            ?? throw new AssertFailedException("Redirected stdin must have an explicit encoding.");
+        Assert.AreEqual(0, encoding.GetPreamble().Length);
+        CollectionAssert.AreEqual(
+            "{}\n"u8.ToArray(),
+            encoding.GetBytes("{}\n"));
+    }
+
+    [TestMethod]
     public async Task BatchShim_IsResolvedAndRunsHeadlesslyWithStructuredArguments()
     {
         var directory = Path.Combine(Path.GetTempPath(), "quotalens-hidden-cli-" + Guid.NewGuid().ToString("N"));

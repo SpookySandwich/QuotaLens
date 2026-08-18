@@ -10,6 +10,60 @@ namespace QuotaLens.Tests.Core;
 public sealed class CatalogConsistencyTests
 {
     [TestMethod]
+    public void MultiSourceProviders_UseOnlyUniqueAppCliWebModes()
+    {
+        CollectionAssert.AreEqual(
+            new[] { "app", "cli", "web" },
+            Enum.GetValues<ProviderSourceMode>().Select(mode => mode.ConfigValue()).ToArray());
+
+        foreach (var type in Catalog.Types)
+        {
+            var modes = ProviderRegistry.Create(type.Id).Sources.Select(source => source.Mode).ToArray();
+            Assert.AreEqual(
+                modes.Length,
+                modes.Distinct().Count(),
+                $"{type.Id} declares a duplicate App/CLI/Web source mode.");
+        }
+    }
+
+    [TestMethod]
+    public void MultiSourceConfiguration_IsDeclaredBySourceAndReferencesEditableFields()
+    {
+        foreach (var type in Catalog.Types)
+        {
+            var sources = ProviderRegistry.Create(type.Id).Sources;
+            if (sources.Count == 0)
+                continue;
+
+            var editable = Catalog.Fields.TryGetValue(type.Id, out var fields)
+                ? fields.Select(field => field.Key).ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var source in sources)
+            {
+                foreach (var key in source.ConfigFieldKeys)
+                    Assert.IsTrue(editable.Contains(key), $"{type.Id}.{source.Mode.DisplayName()} references missing field {key}.");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void GlobalAppPathFields_AlwaysExposeAnAutomaticDefault()
+    {
+        foreach (var (providerType, fields) in Catalog.Fields)
+        {
+            foreach (var field in fields.Where(field => field.IsGlobal && field.IsFilePath))
+            {
+                Assert.IsTrue(Catalog.LaunchTargets.TryGetValue(providerType, out var target));
+                Assert.AreEqual(field.Key, target!.ConfigKey);
+                Assert.IsTrue(
+                    target.DefaultPaths.Length > 0 || !string.IsNullOrWhiteSpace(target.PackageFamilyName),
+                    $"{providerType}.{field.Key} has no auto-detectable default path.");
+                Assert.IsFalse(string.IsNullOrWhiteSpace(field.Placeholder));
+            }
+        }
+    }
+
+    [TestMethod]
     public void CatalogTypes_AreUniqueAndEveryTypeIsRegistered()
     {
         var ids = Catalog.Types.Select(type => type.Id).ToArray();

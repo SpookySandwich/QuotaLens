@@ -9,7 +9,10 @@ namespace QuotaLens.Services;
 /// Arguments that start the interactive sign-in. May be EMPTY when the CLI signs in by
 /// simply being launched (Gemini has no login verb — it opens a picker on start).
 /// </param>
-/// <param name="CliPathFieldKey">Per-instance config key holding a user-set CLI path.</param>
+/// <param name="CliPathFieldKey">
+/// Required per-instance field holding the CLI path. The edit dialog places the sign-in
+/// action immediately after this field and overlays its unsaved value for launch.
+/// </param>
 /// <param name="ProfileFieldKey">Config key appended as a profile argument (AWS SSO).</param>
 /// <param name="InstallUrl">Where to get the CLI. Always a page — never a pipe-to-shell command.</param>
 /// <param name="InteractiveHintKey">
@@ -20,7 +23,7 @@ public sealed record ProviderLoginDescriptor(
     string ProviderType,
     string CliCommand,
     IReadOnlyList<string> LoginArgs,
-    string? CliPathFieldKey = null,
+    string CliPathFieldKey,
     string? ProfileFieldKey = null,
     string? InstallUrl = null,
     string? InteractiveHintKey = null);
@@ -45,7 +48,7 @@ public static class ProviderLoginCatalog
                 "claude",
                 "claude",
                 ["auth", "login"],
-                CliPathFieldKey: "claude_path",
+                "claude_path",
                 InstallUrl: "https://docs.claude.com/en/docs/claude-code/setup"),
 
             // Verified: `codex login`. Resolves the .cmd shim, not the .ps1.
@@ -53,7 +56,7 @@ public static class ProviderLoginCatalog
                 "codex",
                 "codex",
                 ["login"],
-                CliPathFieldKey: "codex_path",
+                "codex_path",
                 InstallUrl: "https://developers.openai.com/codex/cli/"),
 
             // The Gemini CLI has NO login verb: launching it bare opens the Google
@@ -62,15 +65,24 @@ public static class ProviderLoginCatalog
                 "gemini",
                 "gemini",
                 [],
-                CliPathFieldKey: "gemini_path",
+                "gemini_path",
                 InstallUrl: "https://github.com/google-gemini/gemini-cli"),
+
+            // Verified locally: `kimi --help` lists "login  Authenticate with Kimi
+            // Code CLI via the device-code flow".
+            ["kimi"] = new(
+                "kimi",
+                "kimi",
+                ["login"],
+                "kimi_cli_path",
+                InstallUrl: "https://moonshotai.github.io/kimi-code/"),
 
             // Verified: kiro-cli --help lists "login  Log in to Kiro".
             ["kiro"] = new(
                 "kiro",
                 "kiro-cli",
                 ["login"],
-                CliPathFieldKey: "kiro_cli_path",
+                "kiro_cli_path",
                 InstallUrl: "https://kiro.dev"),
 
             // Verified: grok --help lists "login  Sign in to Grok".
@@ -78,7 +90,7 @@ public static class ProviderLoginCatalog
                 "grok",
                 "grok",
                 ["login"],
-                CliPathFieldKey: "grok_path",
+                "grok_path",
                 InstallUrl: "https://x.ai/cli"),
 
             // Azure CLI: `az login` opens the browser consent flow itself.
@@ -86,6 +98,7 @@ public static class ProviderLoginCatalog
                 "azureopenai",
                 "az",
                 ["login"],
+                "azureopenai_az_path",
                 InstallUrl: "https://learn.microsoft.com/cli/azure/install-azure-cli-windows"),
 
             // gcloud ADC login covers the whole Vertex flow in one command.
@@ -93,6 +106,7 @@ public static class ProviderLoginCatalog
                 "vertexai",
                 "gcloud",
                 ["auth", "application-default", "login"],
+                "vertexai_gcloud_path",
                 InstallUrl: "https://cloud.google.com/sdk/docs/install"),
 
             // AWS SSO is per-profile; the profile is appended when configured.
@@ -100,6 +114,7 @@ public static class ProviderLoginCatalog
                 "bedrock",
                 "aws",
                 ["sso", "login"],
+                "bedrock_aws_cli_path",
                 ProfileFieldKey: "bedrock_profile",
                 InstallUrl: "https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html"),
 
@@ -110,7 +125,7 @@ public static class ProviderLoginCatalog
                 "qoder",
                 "qodercli",
                 [],
-                CliPathFieldKey: "qoder_cli_path",
+                "qoder_cli_path",
                 InstallUrl: "https://qoder.com",
                 InteractiveHintKey: "login.interactiveHint.qoder"),
         };

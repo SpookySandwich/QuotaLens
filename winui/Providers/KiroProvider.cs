@@ -166,7 +166,7 @@ public sealed class KiroProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = instanceId,
-            Name = $"Kiro · {DisplayPlanName(planName)}",
+            Name = "Kiro",
             PlanName = ProviderSnapshotIdentity.NormalizePlanName("Kiro", DisplayPlanName(planName)),
             Primary = new RateWindow
             {

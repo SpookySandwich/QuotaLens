@@ -8,7 +8,7 @@ namespace QuotaLens.Core;
 /// </summary>
 public static class ProviderSourceRunner
 {
-    /// <summary>Per-instance config key holding the selected source id (e.g. "app").</summary>
+    /// <summary>Per-instance config key holding app, cli, or web.</summary>
     public const string SourceConfigKey = "provider_source";
 
     public static async Task<ProviderSnapshot> FetchAsync(
@@ -21,18 +21,37 @@ public static class ProviderSourceRunner
         if (sources.Count == 0)
             return await provider.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
 
+        var duplicateMode = sources
+            .GroupBy(source => source.Mode)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateMode is not null)
+            throw new InvalidOperationException($"Provider '{provider.Type}' declares more than one {duplicateMode.Key.DisplayName()} source.");
+
         var selectedId = config.GetScoped(instanceId, SourceConfigKey);
-        var selected = sources.FirstOrDefault(source =>
-            string.Equals(source.Id, selectedId, StringComparison.OrdinalIgnoreCase));
+        var selected = sources.Find(selectedId);
         if (selected is not null)
         {
+            await PrepareAsync(selected, instanceId, config, ct).ConfigureAwait(false);
             if (selected.IsAvailable(instanceId, config))
             {
-                return await FetchFromAsync(selected, selectedId, usedFallback: false, instanceId, config, ct)
+                return await FetchFromAsync(
+                        selected,
+                        selected.Mode.ConfigValue(),
+                        usedFallback: false,
+                        instanceId,
+                        config,
+                        ct)
                     .ConfigureAwait(false);
             }
 
-            throw new ProviderException($"Not available: selected data source '{selected.Name}' is not ready.")
+            var connectionKind = selected.ConnectionAction?.Kind;
+            throw new ProviderException(
+                connectionKind == ProviderConnectionActionKind.SignIn
+                    ? $"Login required: selected {selected.Mode.DisplayName()} data source is not signed in."
+                    : $"Not available: selected {selected.Mode.DisplayName()} data source is not ready.",
+                connectionKind == ProviderConnectionActionKind.SignIn
+                    ? ProviderErrorKind.AuthenticationRequired
+                    : ProviderErrorKind.Unknown)
             {
                 RecoveryAction = selected.UnavailableRecovery,
             };
@@ -41,6 +60,18 @@ public static class ProviderSourceRunner
         var preferred = sources[0];
         foreach (var source in sources)
         {
+            try
+            {
+                await PrepareAsync(source, instanceId, config, ct).ConfigureAwait(false);
+            }
+            catch (ProviderException)
+            {
+                // Automatic selection is allowed to fall through to the next source.
+                // An explicit selection above remains strict and surfaces preparation
+                // failures such as a bad app path.
+                continue;
+            }
+
             if (source.IsAvailable(instanceId, config))
             {
                 return await FetchFromAsync(
@@ -54,11 +85,25 @@ public static class ProviderSourceRunner
             }
         }
 
-        throw new ProviderException("Not available: no data source is ready. Open the app or pick another source.")
+        var preferredConnectionKind = preferred.ConnectionAction?.Kind;
+        throw new ProviderException(
+            preferredConnectionKind == ProviderConnectionActionKind.SignIn
+                ? "Login required: no signed-in data source is ready."
+                : "Not available: no data source is ready. Open the app or pick another source.",
+            preferredConnectionKind == ProviderConnectionActionKind.SignIn
+                ? ProviderErrorKind.AuthenticationRequired
+                : ProviderErrorKind.Unknown)
         {
             RecoveryAction = preferred.UnavailableRecovery,
         };
     }
+
+    private static Task PrepareAsync(
+        IProviderSource source,
+        string instanceId,
+        IConfig config,
+        CancellationToken ct) =>
+        source.ConnectionAction?.PrepareAsync(instanceId, config, ct) ?? Task.CompletedTask;
 
     private static async Task<ProviderSnapshot> FetchFromAsync(
         IProviderSource source,
@@ -71,7 +116,10 @@ public static class ProviderSourceRunner
         try
         {
             var snapshot = await source.FetchAsync(instanceId, config, ct).ConfigureAwait(false);
-            snapshot.SourceState = new ProviderSourceState(requestedSourceId, source.Id, usedFallback);
+            snapshot.SourceState = new ProviderSourceState(
+                requestedSourceId,
+                source.Mode.ConfigValue(),
+                usedFallback);
             snapshot.RecoveryAction = null;
             return snapshot;
         }

@@ -1,29 +1,39 @@
-# QuotaLens Session Handoff — 2026-08-16
+# QuotaLens handoff
 
-## Current architecture
+## Current status
 
-Shared quota behavior is provider-agnostic:
+The completed provider, launch, connection, plan-identity, and documentation work is preserved in the working tree. The attempted token-efficiency implementation from the latest discussion was reverted completely; no token-efficiency UI or ranking changes are currently implemented.
 
-- Providers parse external data into `ProviderSnapshot`, `RateWindow`, `ModelQuota`, and `AccountInfo`.
-- `ResetFormatter` owns card reset wording. A valid `ResetsAt` renders as compact text such as `resets in 3h 12m`; provider reset prose and ISO strings do not reach the card.
-- `ProviderSourceRunner` owns multi-source selection. Explicit selections are strict; automatic mode uses the first available source.
-- `ProviderRecoveryAction` is carried only by invalid snapshots. Healthy data never displays the recovery button.
-- `IProviderSource.WatchPaths` and `ProviderSourceFileWatcher` provide generic session-file monitoring.
-- Availability, model-family grouping, cadence, and priority derive from structured snapshot fields, not provider IDs.
-- Renamed configuration fields are data in `Catalog.ConfigKeyAliases` and migrate generically.
+The last full validation before the final documentation-only edits passed all 800 tests with no warnings. The Markdown-only follow-up passed `git diff --check` and local-link validation.
 
-## Kimi
+## Completed work awaiting/covered by the current commit
 
-- The App source reads Electron `safeStorage.v1` and legacy token stores through the generic safe-storage reader.
-- Windows DPAPI unwraps the Electron master key; Chromium `v10` / `v11` values use AES-GCM.
-- The App usage response exposes `totalQuota`, which is shown together with Weekly and the 5h rate limit.
-- Kimi owns token rotation and renews the short-lived token during real app activity. QuotaLens does not replay private refresh behavior. It observes token-store changes and refetches automatically; an explicitly selected invalid App source offers `Open Kimi to refresh`.
+- Provider launch and connection behavior is represented by shared, provider-agnostic metadata and actions rather than dashboard provider-name branches.
+- App, CLI, and Web sources have strict explicit selection, source-specific launch behavior, and shared connection helpers.
+- Gemini App supports Antigravity and Antigravity IDE detection from one App source, background startup, and readiness verification.
+- Launch labels/icons follow the effective source and executable; CLI launch uses a terminal.
+- Provider titles are composed centrally from structured provider and plan identity. Grok and Kimi plan enrichment no longer concatenate display titles inside individual providers.
+- The English and Chinese READMEs are product-facing. Configuration, provider behavior, troubleshooting, architecture, build, and test details live under `docs/`.
+- Outdated temporary planning/change-log documents were removed and the user/developer guides were refreshed.
 
-## Validation
+## Latest product discussion — not implemented
 
-- x64 Debug build: zero warnings and zero errors.
-- Automated suite: 727 passed, 0 failed.
-- Shadow-copy UI smoke used isolated config/snapshots and covered 520×720, 620×720, and maximized layouts, healthy/error cards, compact reset text, Kimi total quota, recovery-button visibility, Settings navigation, and UI Automation semantics.
-- `System.Security.Cryptography.ProtectedData` is pinned to NuGet's latest stable version, `10.0.11`.
+The user no longer finds the dashboard usage bar chart or the sort selector below it useful. They want the product to answer one simple question:
 
-The user's installed app, real configuration, sessions, and provider data were not modified.
+> Which provider should I use for token efficiency, considering that token allowances reset?
+
+This was a request for discussion, not authorization to change the app. Do not implement it until the recommendation semantics are agreed with the user.
+
+The key unresolved decision is what “token efficiency” means:
+
+1. **Nearest reset:** use remaining quota that will expire soonest.
+2. **Fastest refill:** prefer the provider whose quota replenishes most frequently.
+3. **Waste pressure:** combine estimated remaining tokens with time until reset, prioritizing the largest amount of capacity at risk per hour.
+
+These can produce different recommendations. The next conversation should use concrete examples (for example, a 27% weekly pool, a 60% five-hour pool, and a 100% five-hour pool) and agree on the expected winner before choosing an algorithm or changing the UI.
+
+Once the meaning is settled, discuss whether provider cards should keep a fixed order, follow the same recommendation score, or remain independently sortable. The only agreed UI direction so far is to simplify the dashboard by removing the bar chart and visible sort choices in favor of a direct answer.
+
+## Suggested next step
+
+Discuss two or three example quota/reset scenarios with the user and write the expected recommendation for each. Turn those examples into policy tests only after the user confirms the behavior.

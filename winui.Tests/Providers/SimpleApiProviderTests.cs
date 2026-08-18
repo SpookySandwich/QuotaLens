@@ -667,7 +667,7 @@ public sealed class SimpleApiProviderTests
         """));
 
         Assert.AreEqual("copilot", snapshot.ProviderId);
-        Assert.AreEqual("Copilot · Business", snapshot.Name);
+        Assert.AreEqual("Copilot", snapshot.Name);
         Assert.AreEqual("Premium", snapshot.Primary.Label);
         Assert.AreEqual(60, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("60/100", snapshot.Primary.DetailText);
@@ -693,7 +693,7 @@ public sealed class SimpleApiProviderTests
         }
         """));
 
-        Assert.AreEqual("Copilot · Pro", snapshot.Name);
+        Assert.AreEqual("Copilot", snapshot.Name);
         Assert.AreEqual(80, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(75, snapshot.Secondary!.UsedPercent, 0.001);
     }
@@ -715,7 +715,7 @@ public sealed class SimpleApiProviderTests
         }
         """));
 
-        Assert.AreEqual("Copilot · Individual", snapshot.Name);
+        Assert.AreEqual("Copilot", snapshot.Name);
         Assert.AreEqual(RateWindowKind.Informational, snapshot.Primary.Kind);
         Assert.AreEqual("Plan quota", snapshot.Primary.Label);
         Assert.AreEqual("Unlimited", snapshot.Primary.ValueText);
@@ -787,7 +787,7 @@ public sealed class SimpleApiProviderTests
         """));
 
         Assert.AreEqual("elevenlabs", snapshot.ProviderId);
-        Assert.AreEqual("ElevenLabs · Creator", snapshot.Name);
+        Assert.AreEqual("ElevenLabs", snapshot.Name);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("Voice slots", snapshot.Secondary!.Label);
         Assert.AreEqual(2d / 4d * 100d, snapshot.Tertiary!.UsedPercent, 0.001);
@@ -1085,7 +1085,7 @@ public sealed class SimpleApiProviderTests
         """));
 
         Assert.AreEqual("synthetic", snapshot.ProviderId);
-        Assert.AreEqual("Synthetic · Team", snapshot.Name);
+        Assert.AreEqual("Synthetic", snapshot.Name);
         Assert.AreEqual("Rolling Five Hour Limit", snapshot.Primary.Label);
         Assert.AreEqual(20, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("Weekly Token Limit", snapshot.Secondary!.Label);
@@ -1171,7 +1171,7 @@ public sealed class SimpleApiProviderTests
         """));
 
         Assert.AreEqual("zai", snapshot.ProviderId);
-        Assert.AreEqual("z.ai · Pro", snapshot.Name);
+        Assert.AreEqual("z.ai", snapshot.Name);
         Assert.AreEqual("1 week window", snapshot.Primary.Label);
         Assert.AreEqual(25, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("Monthly", snapshot.Secondary!.DetailText);

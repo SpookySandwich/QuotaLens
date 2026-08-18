@@ -19,12 +19,12 @@ public enum ProviderErrorKind
 public sealed class ProviderException : Exception
 {
     public ProviderException(string message)
-        : this(message, ProviderErrorKind.Unknown)
+        : this(message, InferKind(message))
     {
     }
 
     public ProviderException(string message, Exception inner)
-        : this(message, ProviderErrorKind.Unknown, inner)
+        : this(message, InferKind(message), inner)
     {
     }
 
@@ -47,6 +47,20 @@ public sealed class ProviderException : Exception
 
     public static ProviderException RateLimited(string message) =>
         new(message, ProviderErrorKind.RateLimited);
+
+    /// <summary>
+    /// Providers already share stable error prefixes for user-facing localization. Use
+    /// the same contract for behavior so every "Login required" failure is actionable
+    /// without duplicating an error-kind argument across dozens of adapters.
+    /// </summary>
+    internal static ProviderErrorKind InferKind(string message)
+    {
+        if (message.StartsWith("Login required", StringComparison.OrdinalIgnoreCase))
+            return ProviderErrorKind.AuthenticationRequired;
+        if (message.StartsWith("Not configured", StringComparison.OrdinalIgnoreCase))
+            return ProviderErrorKind.Misconfigured;
+        return ProviderErrorKind.Unknown;
+    }
 }
 
 /// <summary>

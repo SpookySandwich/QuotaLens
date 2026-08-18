@@ -32,10 +32,9 @@ public interface IProviderService
     ProviderInstance AddInstance(string providerType, bool refreshImmediately = true);
     void RemoveInstance(string instanceId);
 
-    /// Launch an IDE provider (antigravity/kiro).
-    void LaunchIde(string instanceId);
+    /// <summary>Resolved everyday launch metadata for this instance's selected source.</summary>
+    ProviderLaunchInfo? GetLaunchInfo(string instanceId);
 
-    /// Open the interactive login window for a webview-login provider instance.
-    /// Returns true when the provider captured usable data during the login flow.
-    Task<bool> OpenLoginAsync(string instanceId);
+    /// <summary>Launch this instance's selected/effective source.</summary>
+    void LaunchProvider(string instanceId);
 }

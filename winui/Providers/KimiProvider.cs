@@ -38,6 +38,10 @@ namespace QuotaLens.Providers;
 public sealed class KimiProvider : IProvider
 {
     private const string UsageEndpoint = "https://api.kimi.com/coding/v1/usages";
+    private const string AppUsageEndpoint =
+        "https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages";
+    private const string AppSubscriptionEndpoint =
+        "https://www.kimi.com/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscription";
     private const int ExpiryGraceSeconds = 60;
     private const int CliRefreshTimeoutSeconds = 20;
 
@@ -64,13 +68,44 @@ public sealed class KimiProvider : IProvider
         _sendUsageAsync = sendUsageAsync;
         _refreshViaCliAsync = refreshViaCliAsync ?? ((_, _, _) => Task.FromResult(false));
 
+        var isAppAvailable = appIsAvailable ?? (() => false);
+        var fetchFromApp = fetchAppAsync
+            ?? (_ => throw new ProviderException("Not available: Kimi app source is not configured."));
+        var isWebAvailable = webIsAvailable ?? WebSessionExists;
+        var fetchFromWeb = fetchWebAsync ?? FetchWebAsync;
+        var appRecovery = new ProviderRecoveryAction(
+            ProviderRecoveryKind.LaunchApp,
+            "kimi.appSourceNote");
+
         _sources = new IProviderSource[]
         {
-            new KimiAppSource(appIsAvailable ?? (() => false), fetchAppAsync ?? ((_) => throw new ProviderException("Not available: Kimi app source is not configured."))),
-            new KimiCliSource(this),
-            new KimiWebSource(
-                webIsAvailable ?? WebSessionExists,
-                fetchWebAsync ?? FetchWebAsync),
+            new ProviderSource(
+                ProviderSourceMode.App,
+                (_, _) => isAppAvailable(),
+                (_, _, ct) => fetchFromApp(ct),
+                configFieldKeys: new[] { "kimi_app_path" },
+                attentionNote: "kimi.appSourceNote",
+                unavailableRecovery: appRecovery,
+                connectionAction: new AppProviderConnectionAction(
+                    "kimi",
+                    "kimi_app_path",
+                    isAppAvailable),
+                launchAction: new AppProviderLaunchAction("kimi"),
+                watchPaths: (_, _) => new[] { DesktopTokenStorePath(), DesktopLocalStatePath() }),
+            new ProviderSource(
+                ProviderSourceMode.Cli,
+                (_, _) => _readCredentials() is not null,
+                FetchCliSourceAsync,
+                configFieldKeys: new[] { "kimi_cli_path" },
+                connectionAction: new CliProviderConnectionAction("kimi"),
+                launchAction: new CliProviderLaunchAction("kimi")),
+            new ProviderSource(
+                ProviderSourceMode.Web,
+                isWebAvailable,
+                fetchFromWeb,
+                configFieldKeys: new[] { "kimi_url" },
+                connectionAction: new WebProviderConnectionAction("kimi", "kimi_url"),
+                launchAction: new WebProviderLaunchAction("kimi", "kimi_url")),
         };
     }
 
@@ -89,82 +124,23 @@ public sealed class KimiProvider : IProvider
     public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
         ProviderSourceRunner.FetchAsync(this, _sources, instanceId, config, ct);
 
-    // ---- sources -------------------------------------------------------------
-
-    private sealed class KimiAppSource : IProviderSource
+    private async Task<ProviderSnapshot> FetchCliSourceAsync(
+        string instanceId,
+        IConfig config,
+        CancellationToken ct)
     {
-        private static readonly ProviderRecoveryAction Recovery = new(
-            ProviderRecoveryKind.LaunchApp,
-            "kimi.appSourceNote");
-
-        private readonly Func<bool> _isAvailable;
-        private readonly Func<CancellationToken, Task<ProviderSnapshot>> _fetch;
-
-        public KimiAppSource(Func<bool> isAvailable, Func<CancellationToken, Task<ProviderSnapshot>> fetch)
+        var creds = _readCredentials()
+            ?? throw new ProviderException("Login required: Kimi Code CLI is not signed in.");
+        try
         {
-            _isAvailable = isAvailable;
-            _fetch = fetch;
+            return await FetchWithCliAsync(instanceId, creds, config, ct).ConfigureAwait(false);
         }
-
-        public string Id => "app";
-        public string Name => "App";
-        public IReadOnlyList<string> ConfigFieldKeys => new[] { "kimi_app_path" };
-        public string? AttentionNote => "kimi.appSourceNote";
-        public ProviderRecoveryAction? UnavailableRecovery => Recovery;
-        public IReadOnlyList<string> WatchPaths(string instanceId, IConfig config) =>
-            new[] { DesktopTokenStorePath(), DesktopLocalStatePath() };
-        public bool IsAvailable(string instanceId, IConfig config) => _isAvailable();
-        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) => _fetch(ct);
-    }
-
-    private sealed class KimiCliSource : IProviderSource
-    {
-        private readonly KimiProvider _owner;
-
-        public KimiCliSource(KimiProvider owner) => _owner = owner;
-
-        public string Id => "cli";
-        public string Name => "CLI";
-        public IReadOnlyList<string> ConfigFieldKeys => new[] { "kimi_cli_path" };
-
-        public bool IsAvailable(string instanceId, IConfig config) => _owner._readCredentials() is not null;
-
-        public async Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct)
+        catch (KimiCliAuthException error)
         {
-            var creds = _owner._readCredentials()
-                ?? throw new ProviderException("Login required: Kimi Code CLI is not signed in.");
-            try
-            {
-                return await _owner.FetchWithCliAsync(instanceId, creds, config, ct).ConfigureAwait(false);
-            }
-            catch (KimiCliAuthException error)
-            {
-                throw new ProviderException(
-                    $"Login required: Kimi Code CLI session is not usable ({error.Message}). " +
-                    "Run any 'kimi' command to refresh it, or open Kimi in browser.");
-            }
+            throw new ProviderException(
+                $"Login required: Kimi Code CLI session is not usable ({error.Message}). " +
+                "Run any 'kimi' command to refresh it, or open Kimi in browser.");
         }
-    }
-
-    private sealed class KimiWebSource : IProviderSource
-    {
-        private readonly Func<string, IConfig, bool> _isAvailable;
-        private readonly Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>> _fetch;
-
-        public KimiWebSource(
-            Func<string, IConfig, bool> isAvailable,
-            Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>> fetch)
-        {
-            _isAvailable = isAvailable;
-            _fetch = fetch;
-        }
-
-        public string Id => "web";
-        public string Name => "Web";
-        public IReadOnlyList<string> ConfigFieldKeys => new[] { "kimi_url" };
-        public bool IsAvailable(string instanceId, IConfig config) => _isAvailable(instanceId, config);
-        public Task<ProviderSnapshot> FetchAsync(string instanceId, IConfig config, CancellationToken ct) =>
-            _fetch(instanceId, config, ct);
     }
 
     private static bool WebSessionExists(string instanceId, IConfig _) =>
@@ -352,9 +328,7 @@ public sealed class KimiProvider : IProvider
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(WebTotalQuotaTimeout);
 
-        using var request = new HttpRequestMessage(
-            HttpMethod.Post,
-            "https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages")
+        using var request = new HttpRequestMessage(HttpMethod.Post, AppUsageEndpoint)
         {
             Content = new StringContent("{\"scope\":[\"FEATURE_CODING\"]}", Encoding.UTF8, "application/json"),
         };
@@ -367,7 +341,43 @@ public sealed class KimiProvider : IProvider
                 ProviderErrorKind.AuthenticationRequired);
 
         var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
-        return ParseAppUsage(json);
+        var planIdentity = await FetchAppPlanIdentityAsync(token, timeout.Token).ConfigureAwait(false);
+        return ParseAppUsage(json, planIdentity);
+    }
+
+    /// <summary>
+    /// Kimi's usage response intentionally contains only normalized percentages.
+    /// Its membership service is the authoritative source for the active goods title,
+    /// so App snapshots enrich quota data with that structured plan identity. Failure
+    /// remains non-fatal because a plan label must never hide otherwise valid quota.
+    /// </summary>
+    private static async Task<ProviderPlanIdentity> FetchAppPlanIdentityAsync(
+        string token,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, AppSubscriptionEndpoint)
+            {
+                Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+            };
+            ApplyKimiAppHeaders(request, token);
+
+            using var response = await Http.Client.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                AppLog.Warn($"kimi: app plan enrichment returned HTTP {(int)response.StatusCode}");
+                return default;
+            }
+
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return ParseAppSubscription(json);
+        }
+        catch (Exception error)
+        {
+            AppLog.Warn($"kimi: app plan enrichment failed ({error.Message})");
+            return default;
+        }
     }
 
     internal static void ApplyKimiAppHeaders(HttpRequestMessage request, string token)
@@ -508,7 +518,9 @@ public sealed class KimiProvider : IProvider
             : detail;
     }
 
-    internal static ProviderSnapshot ParseAppUsage(string json)
+    internal static ProviderSnapshot ParseAppUsage(
+        string json,
+        ProviderPlanIdentity planIdentity = default)
     {
         KimiAppUsageResponse? data;
         try
@@ -551,6 +563,8 @@ public sealed class KimiProvider : IProvider
         {
             ProviderId = "kimi",
             Name = "Kimi",
+            PlanId = planIdentity.PlanId,
+            PlanName = planIdentity.PlanName,
             // Total quota leads when present; otherwise weekly leads.
             Primary = total ?? weeklyWindow,
             Secondary = total is not null ? weeklyWindow : rateWindow,
@@ -561,10 +575,59 @@ public sealed class KimiProvider : IProvider
         };
     }
 
+    internal static ProviderPlanIdentity ParseAppSubscription(string json)
+    {
+        KimiAppSubscriptionResponse? data;
+        try
+        {
+            data = JsonSerializer.Deserialize<KimiAppSubscriptionResponse>(json);
+        }
+        catch (Exception error)
+        {
+            throw new ProviderException($"Parse error: Invalid Kimi app subscription JSON: {error.Message}", error);
+        }
+
+        var subscription = data?.Subscription is { Active: true } active
+            ? active
+            : data?.PurchaseSubscription is { Active: true } purchase
+                ? purchase
+                : data?.Subscribed == true
+                    ? data.Subscription ?? data.PurchaseSubscription
+                    : null;
+        var goods = subscription?.Goods;
+        return new ProviderPlanIdentity(
+            CleanPlanValue(goods?.MembershipLevel ?? goods?.Id),
+            ProviderSnapshotIdentity.NormalizePlanName("Kimi", goods?.Title));
+    }
+
+    private static string? CleanPlanValue(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
     private sealed class KimiAppUsageResponse
     {
         [JsonPropertyName("usages")] public List<KimiAppUsage>? Usages { get; set; }
         [JsonPropertyName("totalQuota")] public CliUsageDetail? TotalQuota { get; set; }
+    }
+
+    private sealed class KimiAppSubscriptionResponse
+    {
+        [JsonPropertyName("subscription")] public KimiAppSubscription? Subscription { get; set; }
+        [JsonPropertyName("purchaseSubscription")] public KimiAppSubscription? PurchaseSubscription { get; set; }
+        [JsonPropertyName("subscribed")] public bool? Subscribed { get; set; }
+    }
+
+    private sealed class KimiAppSubscription
+    {
+        [JsonPropertyName("goods")] public KimiAppGoods? Goods { get; set; }
+        [JsonPropertyName("status")] public string? Status { get; set; }
+        [JsonPropertyName("active")] public bool? Active { get; set; }
+    }
+
+    private sealed class KimiAppGoods
+    {
+        [JsonPropertyName("id")] public string? Id { get; set; }
+        [JsonPropertyName("title")] public string? Title { get; set; }
+        [JsonPropertyName("membershipLevel")] public string? MembershipLevel { get; set; }
     }
 
     private sealed class KimiAppUsage
@@ -693,7 +756,7 @@ public sealed class KimiProvider : IProvider
         return new ProviderSnapshot
         {
             ProviderId = Type,
-            Name = string.IsNullOrWhiteSpace(tier) ? "Kimi" : $"Kimi · {tier}",
+            Name = "Kimi",
             PlanName = tier,
             Primary = primary,
             Secondary = secondary,

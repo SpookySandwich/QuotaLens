@@ -16,6 +16,10 @@ public static class ProviderLoginLauncher
     public static string? CliCommandFor(string providerType) =>
         ProviderLoginCatalog.TryGet(providerType, out var descriptor) ? descriptor.CliCommand : null;
 
+    /// <summary>The catalog field after which the shared dialog places the action.</summary>
+    public static string? CliPathFieldKeyFor(string providerType) =>
+        ProviderLoginCatalog.TryGet(providerType, out var descriptor) ? descriptor.CliPathFieldKey : null;
+
     public static string? InstallUrlFor(string providerType) =>
         ProviderLoginCatalog.TryGet(providerType, out var descriptor) ? descriptor.InstallUrl : null;
 

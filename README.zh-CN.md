@@ -5,7 +5,7 @@
 **一眼就知道现在该用哪个 AI 编程工具。**
 
 一款原生 Windows 面板，统一查看 **48 家 AI 编程服务商**的额度、用量与余额。<br>
-无后端，无遥测，无需粘贴任何东西。
+QuotaLens 无后端、无需注册账号，也没有遥测。
 
 [![Build](https://img.shields.io/github/actions/workflow/status/SpookySandwich/QuotaLens/windows-installer.yml?branch=main&label=build)](https://github.com/SpookySandwich/QuotaLens/actions/workflows/windows-installer.yml)
 [![Release](https://img.shields.io/github/v/release/SpookySandwich/QuotaLens?display_name=tag&label=release)](https://github.com/SpookySandwich/QuotaLens/releases/latest)
@@ -22,9 +22,9 @@
 
 |  |  |  |
 | :-- | :-- | :-- |
-| **现在用这个**<br>主卡片挑出仍有余量的最高价值套餐。 | **用量时间线**<br>一条横条，每个套餐一段，宽度 = 本周剩余 token。 | **分周期进度条**<br>5 小时池、每周池、每月池 —— 附带重置倒计时。 |
-| **同一张配置页**<br>每个平台都在这里配完。完成前会先拉一次额度。 | **浏览器登录**<br>在配置页登录一次，会话自动复用。 | **48 家服务商**<br>即时排序搜索、全键盘操作。 |
-| **隐私开关**<br>一键遮蔽邮箱和余额，方便共享屏幕。 | **随你排序**<br>按套餐价值、重置频率或下次重置时间排序。 | **原生 Win11 体验**<br>Mica 材质、托盘图标、单实例、静默刷新。支持英文 + 简体中文。 |
+| **现在用这个**<br>一眼看出哪个付费套餐仍有可用余量。 | **看清全部余量**<br>不用逐个打开工具，也能比较剩余容量。 | **知道何时恢复**<br>重置倒计时让你更容易安排工作。 |
+| **一个清爽面板**<br>额度周期、余额和账号集中在一处。 | **48 家服务商**<br>把混用的 AI 编程工具放进同一个视图。 | **快速开始**<br>添加常用工具，剩下的交给 QuotaLens。 |
+| **隐私开关**<br>一键遮蔽邮箱和余额，方便共享屏幕。 | **随你排序**<br>优先显示你最关心的套餐与重置时间。 | **原生 Win11 体验**<br>快速、专注，支持英文和简体中文。 |
 
 ## 安装
 
@@ -37,28 +37,13 @@
 
 需要 **Windows 11 x64**。构建产物为自包含格式 —— 无需另行安装 .NET 或 Windows App SDK 运行时。
 
-然后：启动，点 **添加平台**。每一个平台都会打开同一张配置页 —— 登录、粘贴密钥，或确认本机应用 —— 再点 **完成**。看最上面那张卡片 —— 那就是现在该用的工具。
+然后启动 QuotaLens，添加你常用的服务商；每次需要选择工具时，看最上面的卡片即可。
 
-## 面板
+## 为什么用 QuotaLens
 
-**Recommended** 会按你自己的思路给套餐排序：优先推荐你已经在付费、且**仍有余量**的最高价值订阅，让钱先花在刀刃上。按量付费的 API 余额排在最后 —— 那是兜底选项，永远不会成为默认推荐。
+AI 编程额度散落在不同的应用、CLI、网站、账号和重置周期里。QuotaLens 把它们集中起来，让你不再靠猜、不再因为额度耗尽打断工作，也能更充分地利用已经付费的套餐。
 
-**用量时间线**是一条覆盖全部已配置套餐的累计横条：
-
-- 每一段代表一家服务商，**宽度是你本周估算的剩余 token** —— 不是百分比，所以 Max 20x 套餐哪怕只剩 5%，看起来仍然明显宽于一个满格的免费套餐。
-- 各段按**恢复速度从慢到快**排列。左端是需要省着用的周额度池，右端是吃顿午饭就能回血的 5 小时池。
-- **已消耗的容量不会绘制。** 这条横条表示剩余续航，而不是历史记录。
-
-下方的服务商卡片提供分周期进度条、重置倒计时、绿 / 黄 / 红状态、信用余额，以及共享额度场景下的分账号明细。整组卡片可按套餐价值、重置频率或下次重置时间排序。
-
-## 添加服务商
-
-<p>每个平台都走同一张配置页。<b>Suggested</b> 分组会把你机器上大概率已经装了的服务商顶到前面。搜索是即时的且带排序；整个流程都能纯键盘完成。</p>
-<ul>
-<li><b>浏览器登录</b> —— 在配置页点登录。</li>
-<li><b>API key</b> —— 粘贴密钥，再点完成。</li>
-<li><b>本地应用或 CLI</b> —— 确认路径；软件里已经登录过的，不必再登一遍。</li>
-</ul>
+推荐卡片告诉你现在适合使用哪个套餐，时间线展示整体续航，服务商卡片则呈现这项选择背后的额度与重置时间。
 
 <details>
 <summary><b>全部 48 家服务商</b></summary>
@@ -84,38 +69,12 @@
 
 ## 隐私
 
-QuotaLens 是一个纯本地工具。没有后端，不需要注册账号，也没有任何遥测。它读取你机器上已有的凭据 —— CLI 写下的登录文件，或者你在内嵌浏览器里完成的登录 —— 然后请求各家服务商自己的用量接口，并把最近一次结果缓存在 `%LOCALAPPDATA%\QuotaLens` 下。除了访问你自己配置的服务商之外，没有任何数据离开你的机器。
+QuotaLens 在本机运行，无需注册 QuotaLens 账号、没有 QuotaLens 后端，也不会发送遥测；它只访问你主动配置的服务商。
 
-你粘贴的 API key 以明文 JSON 形式保存在那里，依靠 Windows 用户账户的文件权限保护，而不是额外加密 —— 和你的 CLI 凭据文件本来就有的保护级别相同。如果某个 key 对你来说不能接受这种存放方式，建议改用能自动识别本地 CLI 登录的服务商。
+## 文档
 
-登录在配置页完成，不在仪表盘卡片上。
-
-## 从源码构建
-
-前置条件：Windows 11 和 .NET SDK。
-
-```powershell
-dotnet build .\QuotaLens.slnx -c Debug -p:Platform=x64
-dotnet test  .\QuotaLens.slnx -c Debug -p:Platform=x64
-```
-
-727 个测试覆盖了额度计算、服务商响应解析、刷新调度以及推荐逻辑。在 `dotnet run` 后追加 `-- --ui-smoke`，可启动一个隔离的单窗口实例，不带托盘、刷新、网络请求和登录窗口 —— 在做 UI 自动化、不希望焦点被抢走时很有用。
-
-在本地打包安装程序和便携版 zip（需要 [Inno Setup 6](https://jrsoftware.org/isinfo.php)）：
-
-```powershell
-.\scripts\package-windows.ps1 -Configuration Release -Platform x64 -Version 1.0.0
-```
-
-CI 会对每次推送执行构建和测试（`.github/workflows/windows-installer.yml`）。打 `v*` 标签或手动跑 Release 工作流会打 `1.0.0` 包并生成 GitHub release 草稿。
-
-## 参考文档
-
-| 文档 | 内容 |
-| :-- | :-- |
-| [docs/user-guide.md](docs/user-guide.md) | 使用说明 |
-| [docs/developer-guide.md](docs/developer-guide.md) | 开发说明 |
-| [docs/todo.md](docs/todo.md) | 待做 |
+- **[使用指南](docs/user-guide.zh-CN.md)** —— 配置、平台连接、面板说明、故障排查与本地数据。
+- **[开发指南](docs/developer-guide.md)** —— 架构、构建、测试与打包约定。
 
 ## 致谢
 

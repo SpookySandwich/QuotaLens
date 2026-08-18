@@ -16,6 +16,7 @@ public sealed class ProviderLoginLauncherTests
     /// </summary>
     [TestMethod]
     [DataRow("gemini")]
+    [DataRow("kimi")]
     [DataRow("claude")]
     [DataRow("codex")]
     [DataRow("kiro")]
@@ -30,6 +31,19 @@ public sealed class ProviderLoginLauncherTests
             ProviderLoginLauncher.IsSupported(providerType),
             $"{providerType} tells the user to sign in via a CLI, so it must offer a login action.");
         Assert.IsFalse(string.IsNullOrWhiteSpace(ProviderLoginLauncher.CliCommandFor(providerType)));
+    }
+
+    [TestMethod]
+    public void Descriptors_EveryLoginHasAVisibleExecutablePathField()
+    {
+        foreach (var (providerType, descriptor) in ProviderLoginCatalog.Descriptors)
+        {
+            Assert.IsTrue(Catalog.Fields.TryGetValue(providerType, out var fields), providerType);
+            var pathField = fields.SingleOrDefault(field =>
+                string.Equals(field.Key, descriptor.CliPathFieldKey, StringComparison.OrdinalIgnoreCase));
+            Assert.IsNotNull(pathField, $"{providerType} must expose {descriptor.CliPathFieldKey} before sign-in.");
+            Assert.IsTrue(pathField.IsFilePath, $"{providerType}.{descriptor.CliPathFieldKey} must validate as a path.");
+        }
     }
 
     [TestMethod]
@@ -142,6 +156,22 @@ public sealed class ProviderLoginLauncherTests
     }
 
     [TestMethod]
+    public void EncodeCliScript_InvokesBareBinaryAndKeepsOnlyFailuresOpen()
+    {
+        const string path = @"C:\Program Files\A & B\cli's.exe";
+
+        var encoded = TerminalLauncher.EncodeCliScript(path, "gemini");
+        var script = System.Text.Encoding.Unicode.GetString(System.Convert.FromBase64String(encoded));
+
+        StringAssert.Contains(script, path.Replace("'", "''"));
+        StringAssert.Contains(script, "& $binary");
+        Assert.IsFalse(script.Contains("$cliArguments", StringComparison.Ordinal));
+        Assert.IsFalse(script.Contains("login", StringComparison.OrdinalIgnoreCase));
+        StringAssert.Contains(script, "exit 0");
+        StringAssert.Contains(script, "Read-Host");
+    }
+
+    [TestMethod]
     public void TryResolveCli_TreatsAnUnresolvedBareNameAsMissing()
     {
         // HiddenCliProcess.ResolveBinary echoes the bare name back when nothing matches,
@@ -165,6 +195,59 @@ public sealed class ProviderLoginLauncherTests
         var arguments = TerminalLauncher.LoginArguments(descriptor, "bedrock", config);
 
         CollectionAssert.AreEqual(new[] { "sso", "login", "--profile", "my-sso" }, arguments.ToArray());
+    }
+
+    [TestMethod]
+    public void TryResolveCli_OverlayUsesUnsavedExecutablePath()
+    {
+        var descriptor = ProviderLoginCatalog.Descriptors["gemini"];
+        var draftPath = @"C:\Draft Tools\gemini.exe";
+        var config = new OverlayConfig(
+            new EmptyConfig(),
+            "gemini",
+            scopedValues: new Dictionary<string, string>
+            {
+                [descriptor.CliPathFieldKey] = draftPath,
+            });
+
+        var resolved = TerminalLauncher.TryResolveCli(
+            descriptor,
+            "gemini",
+            config,
+            out var path,
+            resolve: candidate => candidate,
+            fileExists: candidate => string.Equals(candidate, draftPath, StringComparison.Ordinal));
+
+        Assert.IsTrue(resolved);
+        Assert.AreEqual(draftPath, path);
+    }
+
+    [TestMethod]
+    public void ResolveTerminalIconExecutable_PrefersWindowsTerminalAppAlias()
+    {
+        const string localAppData = @"C:\Users\test\AppData\Local";
+        var expected = Path.Combine(localAppData, "Microsoft", "WindowsApps", "wt.exe");
+
+        var resolved = TerminalLauncher.ResolveTerminalIconExecutable(
+            localAppData,
+            resolve: _ => @"C:\Other\wt.exe",
+            fileExists: path => path == expected);
+
+        Assert.AreEqual(expected, resolved);
+    }
+
+    [TestMethod]
+    public void ProviderException_StandardPrefixesInferBehavioralKinds()
+    {
+        Assert.AreEqual(
+            ProviderErrorKind.AuthenticationRequired,
+            new ProviderException("Login required: expired").Kind);
+        Assert.AreEqual(
+            ProviderErrorKind.Misconfigured,
+            new ProviderException("Not configured: missing path").Kind);
+        Assert.AreEqual(
+            ProviderErrorKind.Unknown,
+            new ProviderException("Network error: offline").Kind);
     }
 
     private sealed class EmptyConfig : IConfig

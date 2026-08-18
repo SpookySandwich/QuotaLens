@@ -5,13 +5,53 @@ using QuotaLens.Providers;
 namespace QuotaLens.Tests.Providers;
 
 /// <summary>
-/// Covers the Grok credits-config path: the REST surface the grok CLI's own
-/// x.ai/billing extension calls. This is the path that keeps the card working
-/// on CLI releases where the ACP stdio surface returns -32601 Method not found.
+/// Covers the Grok CLI backend resources used for quota and subscription identity.
+/// These keep the card working on releases where ACP stdio returns -32601 for
+/// x.ai/billing.
 /// </summary>
 [TestClass]
 public sealed class GrokProviderTests
 {
+    [TestMethod]
+    public void ParseUserPlanIdentity_MapsCurrentSubscriptionResponse()
+    {
+        var identity = GrokProvider.ParseUserPlanIdentity("""
+        {
+          "userId": "user-123",
+          "hasGrokCodeAccess": true,
+          "subscriptionTier": "XPremiumPlus"
+        }
+        """);
+
+        Assert.AreEqual("x_premium_plus", identity.PlanId);
+        Assert.AreEqual("X Premium+", identity.PlanName);
+    }
+
+    [TestMethod]
+    [DataRow("SuperGrokHeavy", "supergrok_heavy", "SuperGrok Heavy")]
+    [DataRow("supergrok_plus", "supergrok_plus", "SuperGrok Plus")]
+    [DataRow("X Premium+", "x_premium_plus", "X Premium+")]
+    [DataRow("x_basic", "x_basic", "X Basic")]
+    [DataRow("FutureUltra", "FutureUltra", "FutureUltra")]
+    public void SubscriptionTierIdentity_NormalizesKnownTiersAndPreservesUnknownOnes(
+        string raw,
+        string expectedId,
+        string expectedName)
+    {
+        var identity = GrokProvider.SubscriptionTierIdentity(raw);
+
+        Assert.AreEqual(expectedId, identity.PlanId);
+        Assert.AreEqual(expectedName, identity.PlanName);
+    }
+
+    [TestMethod]
+    public void UserSubscriptionUrl_UsesValidatedCliBackendEndpoint()
+    {
+        Assert.AreEqual(
+            "https://cli-chat-proxy.grok.com/v1/user?include=subscription",
+            GrokProvider.UserSubscriptionUrl(GrokProvider.DefaultProxyBaseUrl).AbsoluteUri);
+    }
+
     [TestMethod]
     public void ParseCreditsConfig_MapsTheNewCreditsShape()
     {
@@ -43,6 +83,48 @@ public sealed class GrokProviderTests
         Assert.AreEqual("SuperGrok", config.SubscriptionTier);
         Assert.IsNull(config.MonthlyLimitCents);
         Assert.IsNull(config.UsedCents);
+    }
+
+    [TestMethod]
+    public void ParseCreditsConfig_AcceptsCliSnakeCasePlanIdentity()
+    {
+        var config = GrokProvider.ParseCreditsConfig("""
+        {
+          "config": {
+            "creditUsagePercent": 12,
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_WEEKLY",
+              "start": "2026-08-11T00:00:00Z",
+              "end": "2026-08-18T00:00:00Z"
+            }
+          },
+          "subscription_tier": "X Premium+"
+        }
+        """);
+
+        Assert.AreEqual("X Premium+", config.SubscriptionTier);
+    }
+
+    [TestMethod]
+    public void SnapshotFromRpc_CurrentCreditsShapePreservesStructuredPlan()
+    {
+        var snapshot = GrokProvider.SnapshotFromRpc("""
+        {
+          "config": {
+            "creditUsagePercent": 12,
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_WEEKLY",
+              "start": "2026-08-11T00:00:00Z",
+              "end": "2026-08-18T00:00:00Z"
+            }
+          },
+          "subscription_tier": "X Premium+"
+        }
+        """);
+
+        Assert.AreEqual("Grok", snapshot.Name);
+        Assert.AreEqual("X Premium+", snapshot.PlanName);
+        Assert.AreEqual("Weekly included", snapshot.Primary.Label);
     }
 
     [TestMethod]

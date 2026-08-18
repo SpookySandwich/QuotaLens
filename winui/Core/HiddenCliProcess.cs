@@ -40,6 +40,18 @@ internal static class HiddenCliProcess
             : CreateNativeStartInfo(resolvedBinary, resolvedArguments);
     }
 
+    /// <summary>
+    /// Enables redirected UTF-8 stdin for line-oriented CLI protocols. The first write
+    /// must not carry a byte-order mark: JSON-RPC/ACP servers treat that preamble as part
+    /// of the first message and may silently ignore an otherwise-valid request.
+    /// </summary>
+    public static void EnableUtf8StandardInput(ProcessStartInfo startInfo)
+    {
+        ArgumentNullException.ThrowIfNull(startInfo);
+        startInfo.RedirectStandardInput = true;
+        startInfo.StandardInputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+    }
+
     internal static string ResolveBinary(
         string binary,
         IEnumerable<string>? searchDirectories = null,

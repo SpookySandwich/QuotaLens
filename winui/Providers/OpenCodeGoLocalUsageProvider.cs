@@ -113,7 +113,7 @@ internal static class OpenCodeGoLocalUsageProvider
         return new ProviderSnapshot
         {
             ProviderId = "opencodego",
-            Name = "OpenCode Go · Go",
+            Name = "OpenCode Go",
             PlanId = "opencode-go-recurring",
             PlanName = "Go",
             Primary = UsageWindow(

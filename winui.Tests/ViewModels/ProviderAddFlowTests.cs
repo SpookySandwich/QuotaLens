@@ -127,7 +127,6 @@ public sealed class ProviderAddFlowTests
         public bool AddRefreshImmediately { get; private set; }
         public List<string> RefreshedIds { get; } = new();
         public List<string> RemovedIds { get; } = new();
-        public List<string> LoginIds { get; } = new();
         public List<ProviderInstance> InstanceStore { get; } = new();
 
         public IConfigService Config => ConfigImpl;
@@ -163,15 +162,12 @@ public sealed class ProviderAddFlowTests
             InstanceStore.RemoveAll(instance => instance.Id == instanceId);
         }
 
-        public void LaunchIde(string instanceId)
+        public ProviderLaunchInfo? GetLaunchInfo(string instanceId) => null;
+
+        public void LaunchProvider(string instanceId)
         {
         }
 
-        public Task<bool> OpenLoginAsync(string instanceId)
-        {
-            LoginIds.Add(instanceId);
-            return Task.FromResult(true);
-        }
     }
 
     private sealed class FakeConfig : IConfigService

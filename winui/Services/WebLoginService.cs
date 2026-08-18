@@ -1668,7 +1668,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "bayesdl",
-            Name = combo is null ? "BayesDL" : $"BayesDL · {comboName}",
+            Name = "BayesDL",
             PlanName = comboName == I18n.T("quota.noPlan") ? null : comboName,
             Primary = new RateWindow
             {
@@ -1867,7 +1867,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "mimo",
-            Name = isExpired || string.IsNullOrWhiteSpace(planName) ? "MiMo" : $"MiMo · {planName}",
+            Name = "MiMo",
             PlanId = isExpired ? null : ProviderConfig.Clean(planCode),
             PlanName = isExpired ? null : planName,
             Primary = primary,
@@ -2070,7 +2070,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "kimi",
-            Name = string.IsNullOrWhiteSpace(tier) ? "Kimi" : $"Kimi · {tier}",
+            Name = "Kimi",
             PlanName = tier,
             Primary = weeklyWindow,
             Secondary = rateWindow,
@@ -2219,9 +2219,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "amp",
-            Name = subscriptionPlan is not null
-                ? $"Amp · {subscriptionPlan}"
-                : freeWindow is not null ? "Amp · Free" : "Amp",
+            Name = "Amp",
             PlanName = subscriptionPlan ?? (freeWindow is null ? null : "Free"),
             Primary = windows[0],
             Secondary = windows.ElementAtOrDefault(1),
@@ -2355,7 +2353,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "cursor",
-            Name = string.IsNullOrWhiteSpace(membership) ? "Cursor" : $"Cursor · {membership}",
+            Name = "Cursor",
             PlanName = membership,
             Primary = primary,
             Secondary = autoPercent is null
@@ -2456,7 +2454,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "augment",
-            Name = string.IsNullOrWhiteSpace(plan) ? "Augment" : $"Augment · {plan}",
+            Name = "Augment",
             PlanName = plan,
             Primary = new RateWindow
             {
@@ -2507,7 +2505,7 @@ public sealed class WebLoginService
             return new ProviderSnapshot
             {
                 ProviderId = "factory",
-                Name = string.IsNullOrWhiteSpace(displayPlan) ? "Factory" : $"Factory · {displayPlan}",
+                Name = "Factory",
                 PlanName = displayPlan,
                 Primary = FactoryLimitRate("5h Window", FirstObject(standardPool, "fiveHour"), 5 * 60),
                 Secondary = FactoryLimitRate("Weekly", FirstObject(standardPool, "weekly"), 7 * 24 * 60),
@@ -2536,7 +2534,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "factory",
-            Name = string.IsNullOrWhiteSpace(displayPlan) ? "Factory" : $"Factory · {displayPlan}",
+            Name = "Factory",
             PlanName = displayPlan,
             Primary = FactoryTokenRate("Standard", standard, periodEnd),
             Secondary = premium is { } premiumObj ? FactoryTokenRate("Premium", premiumObj, periodEnd) : null,
@@ -2646,7 +2644,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "minimax",
-            Name = string.IsNullOrWhiteSpace(plan) ? "MiniMax" : $"MiniMax · {plan}",
+            Name = "MiniMax",
             PlanName = plan,
             Primary = primary,
             Secondary = remaining.Count > 0 ? remaining[0] : null,
@@ -3037,7 +3035,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "windsurf",
-            Name = string.IsNullOrWhiteSpace(plan) ? "Windsurf" : $"Windsurf · {plan}",
+            Name = "Windsurf",
             PlanName = plan,
             Primary = primary ?? new RateWindow { Label = "Daily", UsedPercent = 0 },
             Secondary = secondary,
@@ -3260,7 +3258,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "t3chat",
-            Name = string.IsNullOrWhiteSpace(plan) ? "T3 Chat" : $"T3 Chat · {plan}",
+            Name = "T3 Chat",
             PlanName = plan,
             Primary = new RateWindow
             {
@@ -3313,7 +3311,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "commandcode",
-            Name = plan is null ? "Command Code" : $"Command Code · {plan.Value.Name}",
+            Name = "Command Code",
             PlanName = plan?.Name,
             Primary = new RateWindow
             {
@@ -3352,7 +3350,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "ollama",
-            Name = string.IsNullOrWhiteSpace(plan) ? "Ollama" : $"Ollama · {plan}",
+            Name = "Ollama",
             PlanName = plan,
             Primary = new RateWindow
             {
@@ -3405,7 +3403,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "abacus",
-            Name = string.IsNullOrWhiteSpace(plan) ? "Abacus AI" : $"Abacus AI · {plan}",
+            Name = "Abacus AI",
             PlanName = plan,
             Primary = new RateWindow
             {
@@ -3497,7 +3495,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "stepfun",
-            Name = string.IsNullOrWhiteSpace(plan) ? "StepFun" : $"StepFun · {plan}",
+            Name = "StepFun",
             PlanName = plan,
             Primary = primary,
             Secondary = secondary,
@@ -3838,7 +3836,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "alibabatokenplan",
-            Name = displayPlan is null ? "Alibaba Token Plan" : $"Alibaba Token Plan · {displayPlan}",
+            Name = "Alibaba Token Plan",
             PlanName = displayPlan,
             Primary = new RateWindow
             {
@@ -3909,7 +3907,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "alibabatokenplan",
-            Name = $"Alibaba Token Plan · {plan}",
+            Name = "Alibaba Token Plan",
             PlanName = ProviderSnapshotIdentity.NormalizePlanName("Alibaba Token Plan", plan),
             Primary = windows[0],
             Secondary = windows.Count > 1 ? windows[1] : null,
@@ -4024,7 +4022,7 @@ public sealed class WebLoginService
         return new ProviderSnapshot
         {
             ProviderId = "alibaba",
-            Name = displayPlan is null ? "Alibaba" : $"Alibaba · {displayPlan}",
+            Name = "Alibaba",
             PlanName = displayPlan,
             Primary = windows[0],
             Secondary = windows.Count > 1 ? windows[1] : null,

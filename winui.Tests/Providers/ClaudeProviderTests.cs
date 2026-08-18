@@ -135,7 +135,7 @@ public sealed class ClaudeProviderTests
         var snapshot = await provider.FetchAsync("claude", new EmptyConfig(), CancellationToken.None);
 
         // Assert
-        Assert.AreEqual("Claude Code · Max", snapshot.Name);
+        Assert.AreEqual("Claude Code", snapshot.Name);
         Assert.AreEqual("5h Pool", snapshot.Primary.Label);
         Assert.AreEqual(30.0, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("7d Pool", snapshot.Secondary!.Label);
@@ -160,7 +160,7 @@ public sealed class ClaudeProviderTests
         var snapshot = await provider.FetchAsync("claude", new EmptyConfig(), CancellationToken.None);
 
         // Assert
-        Assert.AreEqual($"Claude Code · {expectedPlan}", snapshot.Name);
+        Assert.AreEqual("Claude Code", snapshot.Name);
     }
 
     [TestMethod]
@@ -340,7 +340,7 @@ public sealed class ClaudeProviderTests
         var snapshot = await provider.FetchAsync("claude", new EmptyConfig(), CancellationToken.None);
 
         // Assert
-        Assert.AreEqual("Claude Code · Max", snapshot.Name);
+        Assert.AreEqual("Claude Code", snapshot.Name);
         Assert.IsNotNull(snapshot.Balance);
         Assert.AreEqual("USD", snapshot.Balance!.Currency);
         Assert.AreEqual(8.35, snapshot.Balance.Total, 0.001);
