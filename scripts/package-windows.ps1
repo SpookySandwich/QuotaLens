@@ -72,7 +72,7 @@ $IsccCandidates = @(
 )
 
 if ($IsccCandidates.Count -eq 0) {
-    throw "Inno Setup 6 (ISCC.exe) was not found. Install it or rerun with -SkipInstaller."
+    throw "Inno Setup (ISCC.exe) was not found. Install it or rerun with -SkipInstaller."
 }
 
 $InstallerScript = Join-Path $RepoRoot "installer\QuotaLens.iss"

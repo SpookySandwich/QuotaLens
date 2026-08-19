@@ -64,8 +64,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           draft: true
+          # Without an explicit tag the action falls back to GITHUB_REF, which is a
+          # branch ref on workflow_dispatch - so the manual path could build for 45
+          # minutes and then fail at the last step with nothing to attach to.
+          tag_name: v${{ steps.version.outputs.version }}
           name: QuotaLens ${{ steps.version.outputs.version }}
           generate_release_notes: true
+          body: |
+            A native Windows desktop app that tracks your AI coding quota across
+            50 providers in one window.
+
+            **Install:** download `QuotaLens-Setup-${{ steps.version.outputs.version }}-win-x64.exe` and run it.
+            Prefer no installer? `QuotaLens-portable-${{ steps.version.outputs.version }}-win-x64.zip` runs from any folder.
+
+            Windows 10 1809 or newer, x64. Self-contained - no .NET install required.
           files: |
             artifacts/dist/QuotaLens-Setup-*-win-x64.exe
             artifacts/dist/QuotaLens-portable-*-win-x64.zip
