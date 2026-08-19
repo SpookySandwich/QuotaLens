@@ -45,22 +45,31 @@ dotnet publish $ProjectPath `
     -p:PublishSingleFile=false `
     -p:PublishDir="$PublishDir\"
 
+# $ErrorActionPreference does not cover native tools: without this a partial publish
+# still yields a zip and an installer, and CI goes green on a broken build.
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
+
 $ZipPath = Join-Path $DistDir "QuotaLens-portable-$Version-win-$Platform.zip"
 if (Test-Path $ZipPath) {
     Remove-Item -LiteralPath $ZipPath -Force
 }
 
 Compress-Archive -Path (Join-Path $PublishDir "*") -DestinationPath $ZipPath
+if (-not (Test-Path -LiteralPath $ZipPath)) { throw "Portable zip was not produced at $ZipPath." }
 Write-Host "Portable package: $ZipPath"
 
 if ($SkipInstaller) {
     return
 }
 
-$IsccCandidates = @(@(
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
-) | Where-Object { $_ -and (Test-Path $_) })
+$IsccCandidates = @(
+    "${env:ProgramFiles(x86)}", "${env:ProgramFiles}" |
+        Where-Object { $_ } |
+        ForEach-Object { Get-ChildItem -Path $_ -Filter "Inno Setup *" -Directory -ErrorAction SilentlyContinue } |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName "ISCC.exe" } |
+        Where-Object { Test-Path -LiteralPath $_ }
+)
 
 if ($IsccCandidates.Count -eq 0) {
     throw "Inno Setup 6 (ISCC.exe) was not found. Install it or rerun with -SkipInstaller."
@@ -75,5 +84,9 @@ $InstallerScript = Join-Path $RepoRoot "installer\QuotaLens.iss"
     "/DInstallerArchitecture=$InstallerArchitecture" `
     $InstallerScript
 
+if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE." }
+
 $InstallerPath = Join-Path $DistDir "QuotaLens-Setup-$Version-win-$Platform.exe"
+# Never announce an artifact that was never verified to exist.
+if (-not (Test-Path -LiteralPath $InstallerPath)) { throw "Installer was not produced at $InstallerPath." }
 Write-Host "Installer: $InstallerPath"
