@@ -23,12 +23,11 @@ TestResults/
 # Local reference checkouts and generated visual artifacts
 _CodexBar_ref/
 .pi/
-_visual_*.png
-preview*.png
-concept.png
-aurora.png
-fluent*.png
-luxe.png
+# Scratch screenshots land at the repo root; images we actually ship live in
+# docs/images/, assets-source/ and winui/Assets/, so nothing real is caught here.
+/*.png
+# "nul" is a reserved device name: a mistyped redirect on Windows creates a file
+# by that name instead of discarding the output.
 nul
 
 # Local agent/tooling state (kept out of the repo, not just the global ignore)
