@@ -6,9 +6,10 @@ internal sealed class ProviderSortOrderCache<T>
 {
     private static readonly ProviderSortMode[] SortModes =
     {
+        ProviderSortMode.FiveHour,
+        ProviderSortMode.Weekly,
+        ProviderSortMode.Monthly,
         ProviderSortMode.PlanValue,
-        ProviderSortMode.ResetFrequency,
-        ProviderSortMode.NextReset,
     };
 
     private readonly Func<T, string> _keySelector;

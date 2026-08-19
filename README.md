@@ -4,7 +4,7 @@
 
 **One glance tells you which AI coding tool to use right now.**
 
-A native Windows dashboard for quota, usage, and balances across **48 AI coding providers**.<br>
+A native Windows dashboard for quota, usage, and balances across **50 AI coding providers**.<br>
 No QuotaLens backend, no account, and no telemetry.
 
 [![Build](https://img.shields.io/github/actions/workflow/status/SpookySandwich/QuotaLens/windows-installer.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=build)](https://github.com/SpookySandwich/QuotaLens/actions/workflows/windows-installer.yml)
@@ -12,7 +12,7 @@ No QuotaLens backend, no account, and no telemetry.
 ![Platform](https://img.shields.io/badge/platform-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
 ![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?style=flat-square&logo=windows&logoColor=white)
-![Providers](https://img.shields.io/badge/providers-48%20supported-10B981?style=flat-square)
+![Providers](https://img.shields.io/badge/providers-50%20supported-10B981?style=flat-square)
 ![Privacy](https://img.shields.io/badge/privacy-100%25%20local-success?style=flat-square)
 [![License](https://img.shields.io/github/license/SpookySandwich/QuotaLens?style=flat-square&label=license)](LICENSE)
 
@@ -27,7 +27,7 @@ You open Claude Code, fire off a prompt, and *then* find out the weekly pool ran
 |  |  |  |
 | :-- | :-- | :-- |
 | **Use this now**<br>See which paid plan still has useful headroom. | **See all your runway**<br>Compare remaining capacity without opening every tool. | **Know when it returns**<br>Reset countdowns make it easy to plan around limits. |
-| **One calm dashboard**<br>Quota windows, balances, and accounts in one place. | **48 providers**<br>Bring a mixed AI coding toolkit into one view. | **Quick setup**<br>Add the tools you use and let QuotaLens keep watch. |
+| **One calm dashboard**<br>Quota windows, balances, and accounts in one place. | **50 providers**<br>Bring a mixed AI coding toolkit into one view. | **Quick setup**<br>Add the tools you use and let QuotaLens keep watch. |
 | **Privacy toggle**<br>One click masks emails and balances for screen sharing. | **Sort your way**<br>Surface the plans and resets that matter to you. | **Native Win11**<br>A fast, focused desktop app in English and 简体中文. |
 
 ## Install
@@ -50,7 +50,7 @@ AI coding limits are scattered across apps, CLIs, websites, accounts, and reset 
 The recommendation points you toward a useful plan now, the timeline shows your remaining runway, and provider cards show the limits and reset times behind that choice.
 
 <details>
-<summary><b>All 48 providers</b></summary>
+<summary><b>All 50 providers</b></summary>
 
 <br>
 

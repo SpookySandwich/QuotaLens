@@ -301,7 +301,8 @@ public static class Catalog
         new ProviderType("warp", "Warp"),
         new ProviderType("codebuff", "Codebuff"),
         new ProviderType("synthetic", "Synthetic"),
-        new ProviderType("zai", "z.ai"),
+        new ProviderType("zai", "z.ai (API)"),
+        new ProviderType("zcode", "ZCode"),
         new ProviderType("llmproxy", "LLM Proxy"),
         new ProviderType("doubao", "Doubao"),
         new ProviderType("groq", "Groq"),
@@ -324,8 +325,9 @@ public static class Catalog
 
     private static readonly IReadOnlySet<string> InternalProviderTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
+        // Cloud account balance is the same Alibaba card's pay-as-you-go overflow
+        // once the coding-plan tokens run out — not a separate product.
         "alibabacloud",
-        "alibabatokenplan",
     };
 
     public static readonly IReadOnlySet<string> RetiredProviderTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -384,7 +386,7 @@ public static class Catalog
         ["gemini_app_path"] = "",
         ["openai_app_path"] = "",
         ["moonshot_app_path"] = "",
-        ["zai_app_path"] = "",
+        ["zcode_app_path"] = "",
         ["alibaba_app_path"] = "",
         ["cursor_app_path"] = "",
         ["windsurf_app_path"] = "",
@@ -422,6 +424,7 @@ public static class Catalog
         "jetbrains_base_path",
         "kimik2_key",
         "codex_home", "codex_app_path", "claude_path", "claude_app_path", "antigravity_path", "kiro_app_path", "kiro_cli_path",
+        "zcode_home", "zcode_app_path",
         "codex_lb_app_path", "qoder_app_path", "qoder_cli_path", DefaultLaunchEditorPathKey,
     };
 
@@ -518,9 +521,9 @@ public static class Catalog
             new ProviderField("alibaba_url", "Coding Plan URL", "https://bailian.console.aliyun.com/cn-beijing/?tab=model#/efm/coding_plan",
                 Description: "Capture/return page after signing in. Leave empty for Aliyun/Bailian CN; set an alibabacloud.com ModelStudio URL only if your Coding Plan lives in the international console."),
             new ProviderField("alibabacloud_key_id", "AccessKey ID", "...",
-                Description: "Optional. When present, QuotaLens also shows Alibaba Cloud account balance on this card."),
+                Description: "Optional. Reads the same-account pay-as-you-go balance used after Coding Plan tokens run out."),
             new ProviderField("alibabacloud_key_secret", "AccessKey Secret", "...", IsPassword: true,
-                Description: "Optional. Used with AccessKey ID to query account balance."),
+                Description: "Optional. Used with the AccessKey ID to read the overflow API balance on this card."),
         },
         ["alibabacloud"] = new[]
         {
@@ -669,15 +672,18 @@ public static class Catalog
         },
         ["zai"] = new[]
         {
-            new ProviderField("zai_key", "API Key", "...", IsPassword: true,
-                Description: "z.ai API key for the API Key source. Leave empty when using the local ZCode login (ZCode source) — the two measure different pools."),
+            new ProviderField("zai_key", "API Key", "...", IsPassword: true, IsRequired: true,
+                Description: "z.ai API key from https://open.bigmodel.cn or https://api.z.ai to track API token packs and balance. This is a different pool than the ZCode token plan."),
             new ProviderField("zai_base_url", "API base URL", "https://api.z.ai",
                 Description: "Optional z.ai API base URL. Use https://open.bigmodel.cn for BigModel CN accounts."),
             new ProviderField("zai_quota_url", "Quota URL", "https://api.z.ai/api/monitor/usage/quota/limit",
                 Description: "Optional full quota URL. Leave empty to derive it from the base URL."),
-            new ProviderField("zai_home", "ZCode data folder", @"%USERPROFILE%\.zcode", IsFilePath: true,
+        },
+        ["zcode"] = new[]
+        {
+            new ProviderField("zcode_home", "ZCode data folder", @"%USERPROFILE%\.zcode", IsFilePath: true,
                 Description: "Where ZCode keeps its signed-in session (credentials live under v2). Set this if ZCode stores its data somewhere other than the default."),
-            new ProviderField("zai_app_path", "ZCode app location", @"%LOCALAPPDATA%\Programs\ZCode\ZCode.exe", IsFilePath: true,
+            new ProviderField("zcode_app_path", "ZCode app location", @"%LOCALAPPDATA%\Programs\ZCode\ZCode.exe", IsFilePath: true,
                 Description: "Only needed if ZCode is installed outside the default location."),
         },
         ["llmproxy"] = new[]
@@ -1006,10 +1012,14 @@ public static class Catalog
         },
         ["gemini"] = new[]
         {
-            new ProviderPlanValueRule("ultra", 250),
+            OfficialMonthlyPlan("ultra", 250, "google-ai-ultra", "https://one.google.com/about/google-ai-plans"),
+            OfficialMonthlyPlan("google ai pro", 20, "google-ai-pro", "https://one.google.com/about/google-ai-plans"),
+            OfficialMonthlyPlan("ai pro", 20, "google-ai-pro", "https://one.google.com/about/google-ai-plans"),
+            OfficialMonthlyPlan("gemini pro", 20, "google-ai-pro", "https://one.google.com/about/google-ai-plans"),
+            OfficialMonthlyPlan("pro", 20, "google-ai-pro", "https://one.google.com/about/google-ai-plans"),
             new ProviderPlanValueRule("paid", 20),
             new ProviderPlanValueRule("workspace", 0),
-            new ProviderPlanValueRule("free", 0),
+            OfficialMonthlyPlan("free", 0, "google-ai-free", "https://one.google.com/about/google-ai-plans"),
         },
         ["bedrock"] = new[]
         {
@@ -1069,9 +1079,12 @@ public static class Catalog
         },
         ["kimi"] = new[]
         {
-            new ProviderPlanValueRule("allegretto", 28),
-            new ProviderPlanValueRule("moderato", 14),
+            new ProviderPlanValueRule("vivace", 199),
+            new ProviderPlanValueRule("allegro", 99),
+            new ProviderPlanValueRule("allegretto", 39),
+            new ProviderPlanValueRule("moderato", 19),
             new ProviderPlanValueRule("andante", 7),
+            new ProviderPlanValueRule("adagio", 0),
         },
         ["amp"] = new[]
         {
@@ -1137,6 +1150,7 @@ public static class Catalog
         ["codebuff"] = Array.Empty<ProviderPlanValueRule>(),
         ["synthetic"] = Array.Empty<ProviderPlanValueRule>(),
         ["zai"] = Array.Empty<ProviderPlanValueRule>(),
+        ["zcode"] = Array.Empty<ProviderPlanValueRule>(),
         ["doubao"] = new[]
         {
             new ProviderPlanValueRule("doubao", -1),
@@ -1151,9 +1165,15 @@ public static class Catalog
         },
         ["grok"] = new[]
         {
-            new ProviderPlanValueRule("supergrok heavy", 300),
-            new ProviderPlanValueRule("supergrok", 30),
-            new ProviderPlanValueRule("free", 0),
+            OfficialMonthlyPlan("supergrok heavy", 300, "supergrok_heavy", "https://x.ai/grok"),
+            OfficialMonthlyPlan("supergrok plus", 30, "supergrok_plus", "https://x.ai/grok"),
+            OfficialMonthlyPlan("supergrok", 30, "supergrok", "https://x.ai/grok"),
+            OfficialMonthlyPlan("premium+", 40, "x_premium_plus", "https://help.x.com/en/using-x/x-premium"),
+            OfficialMonthlyPlan("x premium+", 40, "x_premium_plus", "https://help.x.com/en/using-x/x-premium"),
+            OfficialMonthlyPlan("premium plus", 40, "x_premium_plus", "https://help.x.com/en/using-x/x-premium"),
+            OfficialMonthlyPlan("x premium", 16, "x_premium", "https://help.x.com/en/using-x/x-premium"),
+            OfficialMonthlyPlan("premium", 16, "x_premium", "https://help.x.com/en/using-x/x-premium"),
+            OfficialMonthlyPlan("free", 0, "grok-free", "https://x.ai/grok"),
         },
         ["kilo"] = new[]
         {
@@ -1490,9 +1510,9 @@ public static class Catalog
                 @"%ProgramFiles%\Kimi\Kimi.exe",
             },
             new[] { "Kimi.exe" }),
-        ["zai"] = new(
+        ["zcode"] = new(
             "ZCode",
-            "zai_app_path",
+            "zcode_app_path",
             new[]
             {
                 @"%LOCALAPPDATA%\Programs\ZCode\ZCode.exe",

@@ -359,7 +359,7 @@ public sealed class ReadOnlyProviderSafetyTests
         var files = new[]
         {
             FindRepositoryFile("winui", "Providers", "ZcodeCredentials.cs"),
-            FindRepositoryFile("winui", "Providers", "ZaiProvider.cs"),
+            FindRepositoryFile("winui", "Providers", "ZcodeProvider.cs"),
         };
 
         foreach (var forbidden in new[]

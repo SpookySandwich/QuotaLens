@@ -14,8 +14,8 @@ public sealed class DashboardViewModelTests
         // Arrange
         var items = new[]
         {
-            Item("claude", ProviderPriority.UsableSubscriptionBucket, planValue: 100, availability: 80, resetTier: ProviderPriority.LongResetTier),
-            Item("antigravity", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 10, resetTier: ProviderPriority.ShortResetTier),
+            Item("claude", ProviderPriority.UsableSubscriptionBucket, planValue: 100, availability: 80, hasWeekly: true, weeklyMinutesUntil: 100),
+            Item("antigravity", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 10, hasFiveHour: true, fiveHourMinutesUntil: 30),
         };
 
         var planValueSorted = ProviderSortPolicy.Order(
@@ -24,9 +24,9 @@ public sealed class DashboardViewModelTests
                 item => item.Score,
                 new[] { ProviderSortTerm.PlanValue, ProviderSortTerm.ResetFrequency, ProviderSortTerm.NextReset })
             .Select(item => item.ProviderType);
-        var resetFrequencySorted = ProviderSortPolicy.Order(
+        var fiveHourSorted = ProviderSortPolicy.Order(
                 items,
-                ProviderSortMode.ResetFrequency,
+                ProviderSortMode.FiveHour,
                 item => item.Score,
                 new[] { ProviderSortTerm.PlanValue, ProviderSortTerm.ResetFrequency, ProviderSortTerm.NextReset })
             .Select(item => item.ProviderType);
@@ -38,7 +38,7 @@ public sealed class DashboardViewModelTests
 
         Assert.AreEqual(
             "antigravity",
-            DashboardViewModel.AmbientProviderTypeFor(resetFrequencySorted, heroHasPick: true, heroPickProviderType: "claude"));
+            DashboardViewModel.AmbientProviderTypeFor(fiveHourSorted, heroHasPick: true, heroPickProviderType: "claude"));
     }
 
     [TestMethod]
@@ -79,8 +79,21 @@ public sealed class DashboardViewModelTests
         int bucket,
         double planValue,
         double availability,
-        int resetTier = ProviderPriority.NoResetTier) =>
-        new(providerType, new ProviderPriorityScore(bucket, planValue, availability, IsPayAsYouGo: false, resetTier));
+        bool hasFiveHour = false,
+        double fiveHourMinutesUntil = double.PositiveInfinity,
+        bool hasWeekly = false,
+        double weeklyMinutesUntil = double.PositiveInfinity) =>
+        new(providerType, new ProviderPriorityScore(
+            bucket,
+            planValue,
+            availability,
+            IsPayAsYouGo: false,
+            HasFiveHour: hasFiveHour,
+            FiveHourMinutesUntil: fiveHourMinutesUntil,
+            FiveHourAvailability: availability,
+            HasWeekly: hasWeekly,
+            WeeklyMinutesUntil: weeklyMinutesUntil,
+            WeeklyAvailability: availability));
 
     private sealed record SortItem(string ProviderType, ProviderPriorityScore Score);
 }

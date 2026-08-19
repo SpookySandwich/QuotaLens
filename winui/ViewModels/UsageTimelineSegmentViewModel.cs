@@ -14,19 +14,22 @@ public sealed class UsageTimelineSegmentViewModel
         string? resetFrequencyText = null,
         double resetFrequencySortMinutes = double.PositiveInfinity,
         bool isRemainder = false,
-        string instanceId = "")
+        string instanceId = "",
+        bool isGrayedOut = false,
+        string? customAvailableText = null)
     {
         InstanceId = instanceId;
         ProviderType = providerType;
         Label = label;
         Weight = Math.Max(0, weight);
         AvailablePercent = Math.Clamp(availablePercent, 0, 100);
-        AvailableText = QuotaLens.Core.Quota.DisplayPct(AvailablePercent);
+        AvailableText = customAvailableText ?? QuotaLens.Core.Quota.DisplayPct(AvailablePercent);
         ResetText = resetText;
         ResetToolTip = resetToolTip;
         ResetFrequencyText = resetFrequencyText;
         ResetFrequencySortMinutes = resetFrequencySortMinutes;
         IsRemainder = isRemainder;
+        IsGrayedOut = isGrayedOut;
     }
 
     public string InstanceId { get; }
@@ -40,6 +43,7 @@ public sealed class UsageTimelineSegmentViewModel
     public string? ResetFrequencyText { get; }
     public double ResetFrequencySortMinutes { get; }
     public bool IsRemainder { get; }
+    public bool IsGrayedOut { get; }
     public bool IsInteractive => !IsRemainder && !string.IsNullOrWhiteSpace(InstanceId);
     public bool HasResetText => !string.IsNullOrWhiteSpace(ResetText);
     public bool HasResetFrequencyText => !string.IsNullOrWhiteSpace(ResetFrequencyText);

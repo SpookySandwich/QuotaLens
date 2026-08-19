@@ -7,38 +7,28 @@ using static QuotaLens.Core.JsonUtil;
 namespace QuotaLens.Providers;
 
 /// <summary>
-/// z.ai with CLI-first detection. When ZCode is installed and signed in, its local
-/// session (read from ~/.zcode/v2/credentials.json, see <see cref="ZcodeCredentials"/>)
-/// authorizes the official coding-plan endpoint
-/// GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance — the token pool ZCode
-/// actually consumes (per-entitlement total/used/remaining units). Without a local
-/// session this falls back to the z.ai API-key flow (SimpleApiProvider), which
-/// measures API-key resource packs — a different pool than coding plans.
+/// ZCode Coding Plan provider. Reads the local session (~/.zcode/v2/credentials.json)
+/// and queries the official ZCode coding-plan balance endpoint:
+/// GET https://zcode.z.ai/api/v1/zcode-plan/billing/balance.
 /// </summary>
-public sealed class ZaiProvider : IProvider
+public sealed class ZcodeProvider : IProvider
 {
     private const string BalanceEndpoint = "https://zcode.z.ai/api/v1/zcode-plan/billing/balance";
     private static readonly TimeSpan BalanceTimeout = TimeSpan.FromSeconds(15);
 
     private readonly IReadOnlyList<IProviderSource> _sources;
 
-    public ZaiProvider()
+    public ZcodeProvider()
         : this(ZcodeCredentials.HasSession, SendBalanceAsync, ZcodeCredentials.TryReadSessionToken)
     {
     }
 
-    internal ZaiProvider(
+    internal ZcodeProvider(
         Func<bool> cliIsAvailable,
         Func<string, CancellationToken, Task<HttpResponseMessage>> sendBalanceAsync,
-        Func<string?>? readSessionToken = null,
-        Func<bool>? apiIsAvailable = null,
-        Func<string, IConfig, CancellationToken, Task<ProviderSnapshot>>? apiFetchAsync = null)
+        Func<string?>? readSessionToken = null)
     {
         var readToken = readSessionToken ?? ZcodeCredentials.TryReadSessionToken;
-        var isApiAvailable = apiIsAvailable ?? (() => true);
-        var fetchFromApi = apiFetchAsync
-            ?? ((string instanceId, IConfig config, CancellationToken ct) =>
-                new SimpleApiProvider("zai").FetchAsync(instanceId, config, ct));
         var recovery = new ProviderRecoveryAction(
             ProviderRecoveryKind.LaunchApp,
             "zcode.cliSourceNote");
@@ -49,29 +39,23 @@ public sealed class ZaiProvider : IProvider
                 ProviderSourceMode.Cli,
                 (_, _) => cliIsAvailable(),
                 (_, _, ct) => FetchZcodeAsync(readToken, sendBalanceAsync, ct),
-                configFieldKeys: new[] { "zai_home", "zai_app_path" },
+                configFieldKeys: new[] { "zcode_home", "zcode_app_path" },
+                legacyConfigValues: new[] { "zai_home", "zai_app_path" },
                 attentionNote: "zcode.cliSourceNote",
                 unavailableRecovery: recovery,
                 connectionAction: new AppProviderConnectionAction(
-                    "zai",
-                    "zai_app_path",
+                    "zcode",
+                    "zcode_app_path",
                     cliIsAvailable,
-                    verificationFieldKeys: new[] { "zai_home", "zai_app_path" }),
-                launchAction: new AppProviderLaunchAction("zai"),
+                    verificationFieldKeys: new[] { "zcode_home", "zcode_app_path" }),
+                launchAction: new AppProviderLaunchAction("zcode"),
                 watchPaths: (instanceId, config) =>
                     new[] { ZcodeCredentials.StorePath(config, instanceId) }),
-            new ProviderSource(
-                ProviderSourceMode.Web,
-                (_, _) => isApiAvailable(),
-                fetchFromApi,
-                configFieldKeys: new[] { "zai_key", "zai_base_url", "zai_quota_url" },
-                legacyConfigValues: new[] { "key" },
-                attentionNote: "zai.webSourceNote"),
         };
     }
 
-    public string Type => "zai";
-    public string Name => "z.ai";
+    public string Type => "zcode";
+    public string Name => "ZCode";
     public string SourceLabel => "ZCode CLI";
     public Confidence Confidence => Confidence.Official;
     public IReadOnlyList<IProviderSource> Sources => _sources;
@@ -112,8 +96,6 @@ public sealed class ZaiProvider : IProvider
         return await Http.Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct).ConfigureAwait(false);
     }
 
-    // ---- coding-plan balance parsing -------------------------------------------
-
     internal static ProviderSnapshot ParseBalance(string json)
     {
         using var doc = JsonDocument.Parse(json);
@@ -136,12 +118,8 @@ public sealed class ZaiProvider : IProvider
         }
 
         if (balances.Count == 0)
-            // The call succeeded and the account is signed in — there simply is no plan
-            // attached (e.g. a promotional plan that has ended). Reporting that as a parse
-            // error blames the app for a fact about the account, and no button can fix it.
             throw new ProviderException(
-                "Not available: this z.ai account has no active ZCode plan. Buy a coding plan, "
-                + "or switch this card to the API Key source to track API credit instead.",
+                "Not available: this z.ai account has no active ZCode plan. Buy a coding plan to track ZCode tokens.",
                 ProviderErrorKind.Unsupported);
 
         var ordered = balances
@@ -153,8 +131,8 @@ public sealed class ZaiProvider : IProvider
 
         return new ProviderSnapshot
         {
-            ProviderId = "zai",
-            Name = "z.ai",
+            ProviderId = "zcode",
+            Name = "ZCode",
             PlanName = planName,
             Primary = ToWindow(ordered[0]),
             Secondary = ordered.Count > 1 ? ToWindow(ordered[1]) : null,

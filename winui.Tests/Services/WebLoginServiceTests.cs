@@ -48,14 +48,44 @@ public sealed class WebLoginServiceTests
 
         Assert.AreEqual("kimi", snapshot.ProviderId);
         Assert.AreEqual("Kimi", snapshot.Name);
-        Assert.AreEqual("Weekly Requests", snapshot.Primary.Label);
+        Assert.AreEqual("Weekly", snapshot.Primary.Label);
         Assert.AreEqual(214d / 2048d * 100d, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("214/2048 requests", snapshot.Primary.DetailText);
+        Assert.AreEqual(10080, snapshot.Primary.WindowMinutes);
         Assert.IsNotNull(snapshot.Secondary);
         Assert.AreEqual("5h Rate Limit", snapshot.Secondary!.Label);
         Assert.AreEqual(139d / 200d * 100d, snapshot.Secondary.UsedPercent, 0.001);
         Assert.AreEqual(300, snapshot.Secondary.WindowMinutes);
-        Assert.AreEqual("Rate: 139/200 per 5 hours", snapshot.Secondary.DetailText);
+        Assert.AreEqual("Rate: 139/200 requests", snapshot.Secondary.DetailText);
+        Assert.AreEqual("Kimi WebView", snapshot.SourceLabel);
+    }
+
+    [TestMethod]
+    public void ParseKimi_WithTotalQuota_LeadsMonthlyAndUsesPeriodEndFallback()
+    {
+        var json = """
+        {
+          "usages": [{
+            "scope": "FEATURE_CODING",
+            "detail": {
+              "limit": "100",
+              "used": "16",
+              "remaining": "84",
+              "resetTime": "2026-01-09T15:23:13.716839300Z"
+            }
+          }],
+          "totalQuota": { "limit": "100", "used": "68", "remaining": "32" }
+        }
+        """;
+
+        var snapshot = WebLoginService.ParseKimi(json, periodEnd: "2026-09-12T16:00:00Z");
+
+        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        Assert.AreEqual(68d, snapshot.Primary.UsedPercent, 0.001);
+        Assert.AreEqual(QuotaCadencePolicy.MonthlyMinutes, snapshot.Primary.WindowMinutes);
+        Assert.IsTrue(snapshot.Primary.CountsForAvailability);
+        Assert.AreEqual("2026-09-12T16:00:00Z", snapshot.Primary.ResetsAt);
+        Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
         Assert.AreEqual("Kimi WebView", snapshot.SourceLabel);
     }
 
@@ -169,7 +199,7 @@ public sealed class WebLoginServiceTests
 
         Assert.AreEqual("alibabatokenplan", snapshot.ProviderId);
         Assert.AreEqual("Alibaba Token Plan", snapshot.Name);
-        Assert.AreEqual("Credits", snapshot.Primary.Label);
+        Assert.AreEqual("Monthly credits", snapshot.Primary.Label);
         Assert.AreEqual(75, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("25,000 / 100,000 credits left", snapshot.Primary.DetailText);
         Assert.AreEqual(30L * 24L * 60L, snapshot.Primary.WindowMinutes);
@@ -909,9 +939,16 @@ public sealed class WebLoginServiceTests
             "https://www.kimi.com/apiv2/kimi.gateway.billing.v1.BillingService/GetUsages",
             request.RequestUri!.ToString());
         Assert.AreEqual("Bearer token-123", request.Headers.GetValues("Authorization").Single());
+        Assert.AreEqual("kimi-auth=token-123", request.Headers.GetValues("Cookie").Single());
         Assert.AreEqual("1", request.Headers.GetValues("connect-protocol-version").Single());
         Assert.AreEqual("web", request.Headers.GetValues("x-msh-platform").Single());
         StringAssert.Contains(request.Content!.ReadAsStringAsync().Result, "FEATURE_CODING");
+
+        using var subscription = WebLoginService.KimiNativeSubscriptionRequestForTesting("token-123");
+        Assert.AreEqual(
+            "https://www.kimi.com/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscription",
+            subscription.RequestUri!.ToString());
+        Assert.AreEqual("Bearer token-123", subscription.Headers.GetValues("Authorization").Single());
     }
 
     [TestMethod]

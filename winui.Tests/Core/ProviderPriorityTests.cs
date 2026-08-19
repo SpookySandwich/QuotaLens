@@ -584,18 +584,106 @@ public sealed class ProviderPriorityTests
     }
 
     [TestMethod]
-    public void Score_WithMonthlyResetLabel_KeepsLongResetPriority()
+    public void Score_WithCreditLabelAndSoonReset_UsesResetTimeNotMonthlyGuess()
     {
-        // Arrange
         var snapshot = Snapshot("Qoder", usedPercent: 100);
         snapshot.Primary.Label = "Plan Credits";
         snapshot.Primary.ResetsAt = DateTimeOffset.UtcNow.AddMinutes(1).ToString("O");
 
-        // Act
         var score = ProviderPriority.Score("qoder", snapshot);
 
-        // Assert
+        Assert.AreEqual(ProviderPriority.ShortResetTier, score.ResetTier);
+        Assert.IsFalse(score.HasMonthly);
+    }
+
+    [TestMethod]
+    public void Score_WithKimiTotalQuota_TreatsItAsMonthly()
+    {
+        var snapshot = Snapshot("Kimi · Allegro", usedPercent: 68);
+        snapshot.Primary.Label = "Total quota";
+        snapshot.Primary.WindowMinutes = QuotaCadencePolicy.MonthlyMinutes;
+        snapshot.Primary.CountsForAvailability = true;
+        snapshot.Secondary = new RateWindow
+        {
+            Label = "Weekly",
+            UsedPercent = 16,
+            WindowMinutes = 7 * 24 * 60,
+        };
+
+        var score = ProviderPriority.Score("kimi", snapshot);
+
+        Assert.IsTrue(score.HasMonthly);
+        Assert.AreEqual(32, score.MonthlyAvailability, 0.001);
+        Assert.IsTrue(score.HasWeekly);
+    }
+
+    [TestMethod]
+    public void Score_WithMonthlyCreditsLabel_UsesMonthlyCadence()
+    {
+        var snapshot = Snapshot("MiMo · Standard", usedPercent: 25);
+        snapshot.Primary.Label = "Monthly credits";
+        snapshot.Primary.WindowMinutes = 30 * 24 * 60;
+
+        var score = ProviderPriority.Score("mimo", snapshot);
+
+        Assert.IsTrue(score.HasMonthly);
+        Assert.IsFalse(score.HasFiveHour);
+        Assert.AreEqual(75, score.MonthlyAvailability, 0.001);
         Assert.AreEqual(ProviderPriority.LongResetTier, score.ResetTier);
+    }
+
+    [TestMethod]
+    public void Score_WithCodexLbEffectiveWindows_ExposesEachCadence()
+    {
+        var snapshot = Snapshot("codex-lb", usedPercent: 70);
+        snapshot.Primary.Label = "Effective Usage";
+        snapshot.AdditionalWindows.Add(new RateWindow
+        {
+            Label = "Effective 5h",
+            UsedPercent = 40,
+            WindowMinutes = 5 * 60,
+        });
+        snapshot.AdditionalWindows.Add(new RateWindow
+        {
+            Label = "Effective Weekly",
+            UsedPercent = 70,
+            WindowMinutes = 7 * 24 * 60,
+        });
+        snapshot.AdditionalWindows.Add(new RateWindow
+        {
+            Label = "Effective Monthly",
+            UsedPercent = 20,
+            WindowMinutes = 30 * 24 * 60,
+        });
+
+        var score = ProviderPriority.Score("codex-lb", snapshot);
+
+        Assert.IsTrue(score.HasFiveHour);
+        Assert.IsTrue(score.HasWeekly);
+        Assert.IsTrue(score.HasMonthly);
+        Assert.AreEqual(30, score.FiveHourAvailability, 0.001);
+        Assert.AreEqual(30, score.WeeklyAvailability, 0.001);
+        Assert.AreEqual(80, score.MonthlyAvailability, 0.001);
+    }
+
+    [TestMethod]
+    public void Score_WithGrokOnDemandSecondary_DoesNotInventMonthlyCadence()
+    {
+        var snapshot = Snapshot("Grok · X Premium+", usedPercent: 5);
+        snapshot.Primary.Label = "Weekly included";
+        snapshot.Primary.WindowMinutes = 7 * 24 * 60;
+        snapshot.Secondary = new RateWindow
+        {
+            Label = "On-demand",
+            UsedPercent = 0,
+            WindowMinutes = 7 * 24 * 60,
+        };
+
+        var score = ProviderPriority.Score("grok", snapshot);
+
+        Assert.IsTrue(score.HasWeekly);
+        Assert.IsFalse(score.HasMonthly);
+        Assert.AreEqual(95, score.WeeklyAvailability, 0.001);
     }
 
     [TestMethod]

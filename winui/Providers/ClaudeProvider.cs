@@ -453,6 +453,7 @@ public sealed class ClaudeProvider : IProvider
         var subType = string.IsNullOrWhiteSpace(oauth.SubscriptionType)
             ? "?"
             : oauth.SubscriptionType.Trim();
+
         return subType.ToLowerInvariant() switch
         {
             "max" => "Max",

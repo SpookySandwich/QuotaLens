@@ -4,9 +4,10 @@ namespace QuotaLens.ViewModels;
 
 public enum ProviderSortMode
 {
+    FiveHour,
+    Weekly,
+    Monthly,
     PlanValue,
-    ResetFrequency,
-    NextReset,
 }
 
 public enum ProviderSortTerm
@@ -144,7 +145,7 @@ public static class ProviderSortPolicy
 
         var priorityOrder = EffectivePriorityOrder(mode, secondaryPriorityOrder ?? ProviderSortPriorityOrder.Default);
         return indexed
-            .OrderBy(x => x, PriorityComparer<T>.For(priorityOrder, deprioritizeEmptyProviders))
+            .OrderBy(x => x, PriorityComparer<T>.For(mode, priorityOrder, deprioritizeEmptyProviders))
             .Select(x => x.Item)
             .ToList();
     }
@@ -161,10 +162,15 @@ public static class ProviderSortPolicy
             .ToList();
     }
 
+    private static double EffectiveValue(ProviderPriorityScore score) =>
+        score.PlanValue > 0
+            ? score.PlanValue
+            : (score.HasBalance || score.IsPayAsYouGo ? score.BalanceAmount : 0.0);
+
     private static int CompareTerm(ProviderPriorityScore left, ProviderPriorityScore right, ProviderSortTerm term) =>
         term switch
         {
-            ProviderSortTerm.PlanValue => CompareDouble(right.PlanValue, left.PlanValue),
+            ProviderSortTerm.PlanValue => CompareDouble(EffectiveValue(right), EffectiveValue(left)),
             ProviderSortTerm.ResetFrequency => left.ResetTier.CompareTo(right.ResetTier),
             ProviderSortTerm.NextReset => CompareDouble(left.ResetMinutesUntil, right.ResetMinutesUntil),
             _ => 0,
@@ -175,23 +181,17 @@ public static class ProviderSortPolicy
 
     private static ProviderSortTerm PrimaryTerm(ProviderSortMode mode) => mode switch
     {
-        ProviderSortMode.ResetFrequency => ProviderSortTerm.ResetFrequency,
-        ProviderSortMode.NextReset => ProviderSortTerm.NextReset,
+        ProviderSortMode.FiveHour => ProviderSortTerm.ResetFrequency,
+        ProviderSortMode.Weekly => ProviderSortTerm.NextReset,
+        ProviderSortMode.Monthly => ProviderSortTerm.NextReset,
         _ => ProviderSortTerm.PlanValue,
     };
-
-    private static int LastResortRank(ProviderPriorityScore score)
-    {
-        if (score.Bucket == ProviderPriority.ErrorOrPendingBucket)
-            return 2;
-        if (score.IsPayAsYouGo)
-            return 1;
-        return 0;
-    }
 
     private static int ActionabilityRank(ProviderPriorityScore score)
     {
         if (score.Bucket == ProviderPriority.UsableSubscriptionBucket)
+            return 0;
+        if (score.IsPayAsYouGo && score.BalanceAmount > 0)
             return 0;
         if (score.Bucket == ProviderPriority.ExhaustedSubscriptionBucket)
             return 1;
@@ -199,6 +199,14 @@ public static class ProviderSortPolicy
             return 2;
         return 3;
     }
+
+    private static int CadenceTier(ProviderPriorityScore score, ProviderSortMode mode) => mode switch
+    {
+        ProviderSortMode.FiveHour => score.HasFiveHour ? 0 : (score.HasWeekly ? 1 : (score.HasMonthly ? 2 : 3)),
+        ProviderSortMode.Weekly => score.HasWeekly ? 0 : (score.HasMonthly ? 1 : (score.HasFiveHour ? 2 : 3)),
+        ProviderSortMode.Monthly => score.HasMonthly ? 0 : (score.HasWeekly ? 1 : (score.HasFiveHour ? 2 : 3)),
+        _ => 0,
+    };
 
     private static int CompareDouble(double left, double right)
     {
@@ -215,17 +223,19 @@ public static class ProviderSortPolicy
 
     private sealed class PriorityComparer<T> : IComparer<IndexedItem<T>>
     {
+        private readonly ProviderSortMode _mode;
         private readonly IReadOnlyList<ProviderSortTerm> _priorityOrder;
         private readonly bool _deprioritizeEmptyProviders;
 
-        private PriorityComparer(IReadOnlyList<ProviderSortTerm> priorityOrder, bool deprioritizeEmptyProviders)
+        private PriorityComparer(ProviderSortMode mode, IReadOnlyList<ProviderSortTerm> priorityOrder, bool deprioritizeEmptyProviders)
         {
+            _mode = mode;
             _priorityOrder = priorityOrder;
             _deprioritizeEmptyProviders = deprioritizeEmptyProviders;
         }
 
-        public static PriorityComparer<T> For(IReadOnlyList<ProviderSortTerm> priorityOrder, bool deprioritizeEmptyProviders) =>
-            new(priorityOrder, deprioritizeEmptyProviders);
+        public static PriorityComparer<T> For(ProviderSortMode mode, IReadOnlyList<ProviderSortTerm> priorityOrder, bool deprioritizeEmptyProviders) =>
+            new(mode, priorityOrder, deprioritizeEmptyProviders);
 
         public int Compare(IndexedItem<T>? left, IndexedItem<T>? right)
         {
@@ -244,6 +254,94 @@ public static class ProviderSortPolicy
                     return comparison;
             }
 
+            if (_mode is ProviderSortMode.FiveHour or ProviderSortMode.Weekly or ProviderSortMode.Monthly)
+            {
+                var leftTier = CadenceTier(left.Score, _mode);
+                var rightTier = CadenceTier(right.Score, _mode);
+                comparison = leftTier.CompareTo(rightTier);
+                if (comparison != 0)
+                    return comparison;
+
+                if (leftTier == 0)
+                {
+                    if (_mode == ProviderSortMode.FiveHour)
+                    {
+                        comparison = CompareDouble(left.Score.FiveHourMinutesUntil, right.Score.FiveHourMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.FiveHourAvailability, left.Score.FiveHourAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    else if (_mode == ProviderSortMode.Weekly)
+                    {
+                        comparison = CompareDouble(left.Score.WeeklyMinutesUntil, right.Score.WeeklyMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.WeeklyAvailability, left.Score.WeeklyAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    else if (_mode == ProviderSortMode.Monthly)
+                    {
+                        comparison = CompareDouble(left.Score.MonthlyMinutesUntil, right.Score.MonthlyMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.MonthlyAvailability, left.Score.MonthlyAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    comparison = CompareDouble(EffectiveValue(right.Score), EffectiveValue(left.Score));
+                    if (comparison != 0) return comparison;
+                }
+                else if (leftTier == 1)
+                {
+                    if (_mode == ProviderSortMode.FiveHour)
+                    {
+                        comparison = CompareDouble(left.Score.WeeklyMinutesUntil, right.Score.WeeklyMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.WeeklyAvailability, left.Score.WeeklyAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    else if (_mode == ProviderSortMode.Weekly)
+                    {
+                        comparison = CompareDouble(left.Score.MonthlyMinutesUntil, right.Score.MonthlyMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.MonthlyAvailability, left.Score.MonthlyAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    else if (_mode == ProviderSortMode.Monthly)
+                    {
+                        comparison = CompareDouble(left.Score.WeeklyMinutesUntil, right.Score.WeeklyMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.WeeklyAvailability, left.Score.WeeklyAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    comparison = CompareDouble(EffectiveValue(right.Score), EffectiveValue(left.Score));
+                    if (comparison != 0) return comparison;
+                }
+                else if (leftTier == 2)
+                {
+                    if (_mode == ProviderSortMode.FiveHour)
+                    {
+                        comparison = CompareDouble(left.Score.MonthlyMinutesUntil, right.Score.MonthlyMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.MonthlyAvailability, left.Score.MonthlyAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    else if (_mode == ProviderSortMode.Weekly)
+                    {
+                        comparison = CompareDouble(left.Score.FiveHourMinutesUntil, right.Score.FiveHourMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.FiveHourAvailability, left.Score.FiveHourAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    else if (_mode == ProviderSortMode.Monthly)
+                    {
+                        comparison = CompareDouble(left.Score.FiveHourMinutesUntil, right.Score.FiveHourMinutesUntil);
+                        if (comparison != 0) return comparison;
+                        comparison = CompareDouble(right.Score.FiveHourAvailability, left.Score.FiveHourAvailability);
+                        if (comparison != 0) return comparison;
+                    }
+                    comparison = CompareDouble(EffectiveValue(right.Score), EffectiveValue(left.Score));
+                    if (comparison != 0) return comparison;
+                }
+            }
+
             foreach (var term in _priorityOrder)
             {
                 comparison = CompareTerm(left.Score, right.Score, term);
@@ -252,10 +350,6 @@ public static class ProviderSortPolicy
             }
 
             comparison = CompareUtilization(left.Score, right.Score);
-            if (comparison != 0)
-                return comparison;
-
-            comparison = LastResortRank(left.Score).CompareTo(LastResortRank(right.Score));
             if (comparison != 0)
                 return comparison;
 

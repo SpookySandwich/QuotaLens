@@ -157,10 +157,10 @@ public sealed class CatalogConsistencyTests
     public void ProviderRegistry_FactoryCategories_DoNotOverlap()
     {
         // Custom providers that intentionally wrap another factory category. Kimi wraps
-        // the WebView flow; zai wraps the SimpleApi API-key flow (CLI-first detection
-        // with an API-key fallback). Any other overlap is a registration bug.
+        // the WebView flow. z.ai API is a plain SimpleApi provider; ZCode is a separate
+        // token-plan provider. Any other overlap is a registration bug.
         var webWrappers = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "kimi" };
-        var simpleWrappers = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "zai" };
+        var simpleWrappers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         var custom = ProviderRegistry.CustomProviderTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var simple = SimpleApiProvider.SupportedTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -441,9 +441,7 @@ public sealed class CatalogConsistencyTests
     [TestMethod]
     public void SimpleApiProviders_HaveRegistryAndRequiredConfigFields()
     {
-        // zai's API-key flow is wrapped by ZaiProvider (local ZCode session first),
-        // so its required-field and instance-type rules differ; see ZaiProviderTests.
-        var wrapped = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "zai" };
+        var wrapped = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var known = Catalog.Types.Select(type => type.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var registered = ProviderRegistry.RegisteredTypes.ToHashSet(StringComparer.OrdinalIgnoreCase);
         var failures = new List<string>();

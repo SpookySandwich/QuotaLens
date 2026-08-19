@@ -44,22 +44,24 @@ public sealed class KimiProviderTests
 
         Assert.AreEqual("kimi", snapshot.ProviderId);
         Assert.AreEqual("Kimi", snapshot.Name);
-        Assert.AreEqual("Weekly", snapshot.Primary.Label);
-        Assert.AreEqual(16.0, snapshot.Primary.UsedPercent);
-        Assert.AreEqual(10080, snapshot.Primary.WindowMinutes);
-        Assert.AreEqual("2026-07-22T16:39:20.750079Z", snapshot.Primary.ResetsAt);
-        Assert.AreEqual("16% used", snapshot.Primary.DetailText);
+        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        Assert.AreEqual(1.0, snapshot.Primary.UsedPercent);
+        Assert.AreEqual("1% used", snapshot.Primary.DetailText);
+        Assert.AreEqual(QuotaCadencePolicy.MonthlyMinutes, snapshot.Primary.WindowMinutes);
+        Assert.IsTrue(snapshot.Primary.CountsForAvailability);
 
         Assert.IsNotNull(snapshot.Secondary);
-        Assert.AreEqual("5h Rate Limit", snapshot.Secondary!.Label);
-        Assert.AreEqual(66.0, snapshot.Secondary.UsedPercent);
-        Assert.AreEqual(300, snapshot.Secondary.WindowMinutes);
-        Assert.AreEqual("Rate: 66% used", snapshot.Secondary.DetailText);
+        Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
+        Assert.AreEqual(16.0, snapshot.Secondary.UsedPercent);
+        Assert.AreEqual(10080, snapshot.Secondary.WindowMinutes);
+        Assert.AreEqual("2026-07-22T16:39:20.750079Z", snapshot.Secondary.ResetsAt);
+        Assert.AreEqual("16% used", snapshot.Secondary.DetailText);
 
         Assert.IsNotNull(snapshot.Tertiary);
-        Assert.AreEqual("Total quota", snapshot.Tertiary!.Label);
-        Assert.AreEqual(1.0, snapshot.Tertiary.UsedPercent);
-        Assert.AreEqual("1% used", snapshot.Tertiary.DetailText);
+        Assert.AreEqual("5h Rate Limit", snapshot.Tertiary!.Label);
+        Assert.AreEqual(66.0, snapshot.Tertiary.UsedPercent);
+        Assert.AreEqual(300, snapshot.Tertiary.WindowMinutes);
+        Assert.AreEqual("Rate: 66% used", snapshot.Tertiary.DetailText);
 
         Assert.AreEqual(1, snapshot.AdditionalWindows.Count);
         Assert.AreEqual("Concurrency", snapshot.AdditionalWindows[0].Label);
@@ -92,6 +94,66 @@ public sealed class KimiProviderTests
         Assert.AreEqual("100", detail!.Limit);
         Assert.AreEqual("59", detail.Used);
         Assert.AreEqual("41", detail.Remaining);
+        Assert.IsNull(detail.ResetTime);
+    }
+
+    [TestMethod]
+    public void ParseWebTotalQuota_ReadsResetTimeWhenPresent()
+    {
+        var detail = KimiProvider.ParseWebTotalQuota(
+            """{ "totalQuota": { "limit": "100", "used": "68", "remaining": "32", "resetTime": "2026-09-01T00:00:00Z" } }""");
+
+        Assert.IsNotNull(detail);
+        Assert.AreEqual("2026-09-01T00:00:00Z", detail!.ResetTime);
+    }
+
+    [TestMethod]
+    public void ParseAppSubscriptionPeriodEnd_ReadsExpireTime()
+    {
+        var periodEnd = KimiProvider.ParseAppSubscriptionPeriodEnd("""
+            {
+              "subscription": {
+                "goods": { "title": "Allegro" },
+                "expireTime": "2026-09-12T16:00:00Z",
+                "active": true
+              }
+            }
+            """);
+
+        Assert.AreEqual("2026-09-12T16:00:00Z", periodEnd);
+    }
+
+    [TestMethod]
+    public void ParseAppSubscriptionPeriodEnd_ReadsSnakeCaseExpireTime()
+    {
+        var periodEnd = KimiProvider.ParseAppSubscriptionPeriodEnd("""
+            {
+              "subscription": {
+                "expire_time": "2026-09-01T00:00:00Z",
+                "active": true
+              }
+            }
+            """);
+
+        Assert.AreEqual("2026-09-01T00:00:00Z", periodEnd);
+    }
+
+    [TestMethod]
+    public void ParseAppUsage_UsesSubscriptionPeriodEndWhenTotalQuotaHasNoReset()
+    {
+        var snapshot = KimiProvider.ParseAppUsage(
+            """
+            {
+              "usages": [{ "scope": "FEATURE_CODING",
+                "detail": { "limit": "100", "used": "10", "remaining": "90" }
+              }],
+              "totalQuota": { "limit": "100", "used": "68", "remaining": "32" }
+            }
+            """,
+            periodEnd: "2026-09-12T16:00:00Z");
+
+        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        Assert.AreEqual("2026-09-12T16:00:00Z", snapshot.Primary.ResetsAt);
     }
 
     [TestMethod]
@@ -185,6 +247,8 @@ public sealed class KimiProviderTests
 
         Assert.AreEqual("Total quota", snapshot.Primary.Label);
         Assert.AreEqual(59.0, snapshot.Primary.UsedPercent);
+        Assert.AreEqual(QuotaCadencePolicy.MonthlyMinutes, snapshot.Primary.WindowMinutes);
+        Assert.IsTrue(snapshot.Primary.CountsForAvailability);
         Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
         Assert.AreEqual(69.0, snapshot.Secondary.UsedPercent);
         Assert.AreEqual("5h Rate Limit", snapshot.Tertiary!.Label);

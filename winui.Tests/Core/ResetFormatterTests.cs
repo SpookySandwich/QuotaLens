@@ -40,7 +40,7 @@ public sealed class ResetFormatterTests
             DetailText = "provider-specific reset prose",
         };
 
-        Assert.AreEqual("resets in 3h 12m", ResetFormatter.FormatCaption(window, Now));
+        Assert.AreEqual("provider-specific reset prose · resets in 3h 12m", ResetFormatter.FormatCaption(window, Now));
     }
 
     [TestMethod]

@@ -50,7 +50,8 @@ public sealed partial class HeroViewModel : ObservableObject
     public void Update(
         IProviderService svc,
         IReadOnlyList<ProviderSortTerm>? recommendedPriorityOrder = null,
-        bool hideSensitiveInfo = false)
+        bool hideSensitiveInfo = false,
+        ProviderSortMode sortMode = ProviderSortMode.PlanValue)
     {
         var present = svc.Instances
             .Select(i => (Id: i.Id, Snap: svc.GetSnapshot(i.Id)))
@@ -111,7 +112,7 @@ public sealed partial class HeroViewModel : ObservableObject
         else if (connected < total) { OnlineDetail = $"{total - connected} {I18n.T("summary.pending")}"; OnlineSeverity = Severity.Busy; }
         else { OnlineDetail = I18n.T("summary.allChecked"); OnlineSeverity = Severity.Good; }
 
-        BuildUsageTimeline(svc, present, recommendedPriorityOrder, hideSensitiveInfo);
+        BuildUsageTimeline(svc, present, recommendedPriorityOrder, hideSensitiveInfo, sortMode);
 
         // Computed i18n strings: re-notify so OneWay bindings refresh on language change.
         OnPropertyChanged(nameof(Eyebrow));
@@ -143,12 +144,46 @@ public sealed partial class HeroViewModel : ObservableObject
         IProviderService svc,
         IReadOnlyList<(string Id, ProviderSnapshot Snap)> present,
         IReadOnlyList<ProviderSortTerm>? recommendedPriorityOrder,
-        bool hideSensitiveInfo)
+        bool hideSensitiveInfo,
+        ProviderSortMode sortMode)
     {
-        UsageTimelineSegments.Clear();
+        ReplaceUsageTimeline(BuildUsageTimelineSegments(
+            svc.Config,
+            present,
+            recommendedPriorityOrder,
+            hideSensitiveInfo,
+            sortMode));
+    }
 
-        foreach (var segment in BuildUsageTimelineSegments(svc.Config, present, recommendedPriorityOrder, hideSensitiveInfo))
-            UsageTimelineSegments.Add(segment);
+    private void ReplaceUsageTimeline(IReadOnlyList<UsageTimelineSegmentViewModel> next)
+    {
+        var unchanged = UsageTimelineSegments.Count == next.Count
+            && UsageTimelineSegments
+                .Zip(next, (current, candidate) =>
+                    current.InstanceId == candidate.InstanceId
+                    && current.Weight == candidate.Weight
+                    && current.AvailableText == candidate.AvailableText
+                    && current.Label == candidate.Label
+                    && current.ResetFrequencyText == candidate.ResetFrequencyText
+                    && current.IsGrayedOut == candidate.IsGrayedOut)
+                .All(same => same);
+        if (unchanged)
+        {
+            HasUsageTimeline = UsageTimelineSegments.Count > 0;
+            return;
+        }
+
+        var index = 0;
+        for (; index < next.Count; index++)
+        {
+            if (index < UsageTimelineSegments.Count)
+                UsageTimelineSegments[index] = next[index];
+            else
+                UsageTimelineSegments.Add(next[index]);
+        }
+
+        while (UsageTimelineSegments.Count > next.Count)
+            UsageTimelineSegments.RemoveAt(UsageTimelineSegments.Count - 1);
 
         HasUsageTimeline = UsageTimelineSegments.Count > 0;
     }
@@ -157,7 +192,8 @@ public sealed partial class HeroViewModel : ObservableObject
         IConfig config,
         IReadOnlyList<(string Id, ProviderSnapshot Snap)> present,
         IReadOnlyList<ProviderSortTerm>? recommendedPriorityOrder = null,
-        bool hideSensitiveInfo = false)
+        bool hideSensitiveInfo = false,
+        ProviderSortMode sortMode = ProviderSortMode.PlanValue)
     {
         var ranked = ProviderSortPolicy.Order(
                 present
@@ -166,48 +202,110 @@ public sealed partial class HeroViewModel : ObservableObject
                         x.Id,
                         x.Snap,
                         ProviderPriority.Score(x.Id, x.Snap, config)))
-                    .Where(x => x.Score.Bucket == ProviderPriority.UsableSubscriptionBucket),
-                ProviderSortMode.PlanValue,
+                    .Where(x => x.Score.Bucket == ProviderPriority.UsableSubscriptionBucket
+                                || (x.Score.IsPayAsYouGo && x.Score.BalanceAmount > 0)),
+                sortMode,
                 x => x.Score,
                 recommendedPriorityOrder)
             .Take(MaxUsageTimelineSegments)
-            .Select(x => TimelineCandidate.From(x, config, hideSensitiveInfo))
-            .Where(x => x.AvailablePercent > 0.1)
-            .OrderByDescending(x => x.ResetFrequencySortMinutes)
-            .ThenByDescending(x => x.ResetSortMinutes)
-            .ThenByDescending(x => x.Priority.Score.PlanValue)
-            .ThenBy(x => x.Label, StringComparer.CurrentCultureIgnoreCase)
+            .Select(x => TimelineCandidate.From(x, config, hideSensitiveInfo, sortMode))
             .ToList();
 
         if (ranked.Count == 0)
             return Array.Empty<UsageTimelineSegmentViewModel>();
 
-        // The bar answers "what should I use now": each segment is a provider's
-        // estimated tokens REMAINING this week (consistent community-estimate units
-        // across providers). Order comes from the ranked pipeline above: slowest
-        // reset cadence on the left (a weekly pool spent today is gone for days;
-        // a 5h pool replenishes over lunch). Spent capacity is deliberately not
-        // rendered: a mostly-grey bar answers a question nobody is asking.
+        var matching = ranked.Where(x => x.HasMatchingCadence && (x.AvailablePercent > 0.1 || x.Priority.Score.IsPayAsYouGo || sortMode == ProviderSortMode.PlanValue)).ToList();
+        var displayCandidates = sortMode is ProviderSortMode.FiveHour or ProviderSortMode.Weekly or ProviderSortMode.Monthly
+            ? matching
+            : ranked;
+        displayCandidates = displayCandidates
+            .OrderByDescending(x => sortMode == ProviderSortMode.PlanValue
+                ? x.Money.AmountUsd
+                : x.ResetFrequencySortMinutes)
+            .ThenByDescending(x => x.Priority.Score.PlanValue)
+            .ThenBy(x => x.Priority.Id, StringComparer.Ordinal)
+            .ToList();
+
         var segments = new List<UsageTimelineSegmentViewModel>();
-        foreach (var candidate in ranked)
+        foreach (var candidate in displayCandidates)
         {
+            var isValueMode = sortMode == ProviderSortMode.PlanValue;
             var tokensRemaining = candidate.WeeklyTokensMillions * candidate.AvailablePercent / 100.0;
-            if (tokensRemaining <= 0)
+            if (isValueMode)
+            {
+                if (candidate.Money.AmountUsd <= 0)
+                    continue;
+            }
+            else if (!candidate.Priority.Score.IsPayAsYouGo && tokensRemaining <= 0)
+            {
                 continue;
+            }
+
+            bool isGrayedOut = candidate.Priority.Score.IsPayAsYouGo
+                               || (matching.Count == 0 && !candidate.HasMatchingCadence);
+
+            double weight;
+            string availableText;
+            string? customAvailableText;
+            if (isValueMode)
+            {
+                availableText = Quota.FormatUsd(candidate.Money.AmountUsd);
+                customAvailableText = availableText;
+                weight = Math.Max(candidate.Money.AmountUsd, 0.01);
+            }
+            else if (candidate.Priority.Score.IsPayAsYouGo)
+            {
+                var bal = candidate.Priority.Snapshot.Balance;
+                var total = bal?.Total > 0 ? bal.Total : (bal?.Paid ?? 0.0);
+                var sym = bal?.Currency?.ToUpperInvariant() switch { "CNY" or "RMB" => "¥", _ => "$" };
+                availableText = $"{sym}{total:0.##}";
+                customAvailableText = availableText;
+                weight = Math.Max(candidate.Priority.Score.BalanceAmount, 0.01);
+            }
+            else
+            {
+                var percent = Quota.DisplayPct(candidate.AvailablePercent);
+                var reset = string.IsNullOrWhiteSpace(candidate.ResetText)
+                    ? null
+                    : candidate.ResetText.TrimStart('~').Trim();
+                availableText = percent;
+                customAvailableText = string.IsNullOrWhiteSpace(reset) ? null : $"{percent} · {reset}";
+                weight = tokensRemaining;
+            }
 
             segments.Add(new UsageTimelineSegmentViewModel(
                 candidate.ProviderType,
                 candidate.Label,
-                tokensRemaining,
+                weight,
                 candidate.AvailablePercent,
                 candidate.ResetText,
-                AppendTokenEstimate(candidate.ResetToolTip, candidate),
+                isValueMode
+                    ? AppendValueEstimate(candidate.ResetToolTip, candidate)
+                    : candidate.Priority.Score.IsPayAsYouGo
+                        ? $"Balance: {availableText}"
+                        : AppendTokenEstimate(candidate.ResetToolTip, candidate),
                 candidate.ResetFrequencyText,
                 candidate.ResetFrequencySortMinutes,
-                instanceId: candidate.Priority.Id));
+                instanceId: candidate.Priority.Id,
+                isGrayedOut: isGrayedOut,
+                customAvailableText: customAvailableText));
         }
 
         return segments;
+    }
+
+    private static string? AppendValueEstimate(string? toolTip, TimelineCandidate candidate)
+    {
+        if (candidate.Money.AmountUsd <= 0)
+            return toolTip;
+
+        var line = candidate.Money.Kind switch
+        {
+            ProviderMoneyKind.Balance => $"Balance: {Quota.FormatUsd(candidate.Money.AmountUsd)}",
+            ProviderMoneyKind.Estimate => $"{Quota.FormatUsd(candidate.Money.AmountUsd)}/mo {I18n.T("timeline.tokensEstimateUnknownPlan")}",
+            _ => $"{Quota.FormatUsd(candidate.Money.AmountUsd)}/mo plan",
+        };
+        return string.IsNullOrWhiteSpace(toolTip) ? line : $"{toolTip}\n{line}";
     }
 
     private static string? AppendTokenEstimate(string? toolTip, TimelineCandidate candidate)
@@ -223,7 +321,7 @@ public sealed partial class HeroViewModel : ObservableObject
             _ => I18n.T("timeline.tokensEstimate"),
         };
         var line = string.Format(
-            System.Globalization.CultureInfo.CurrentCulture,
+            CultureInfo.CurrentCulture,
             I18n.T("timeline.tokensRemaining"),
             FormatTokensMillions(remaining),
             FormatTokensMillions(candidate.WeeklyTokensMillions),
@@ -235,7 +333,7 @@ public sealed partial class HeroViewModel : ObservableObject
         if (candidate.Priority.Snapshot.MeasuredWeeklyTokensMillions is > 0)
         {
             line += "\n" + string.Format(
-                System.Globalization.CultureInfo.CurrentCulture,
+                CultureInfo.CurrentCulture,
                 I18n.T("timeline.tokensMeasuredThroughput"),
                 FormatTokensMillions(candidate.Priority.Snapshot.MeasuredWeeklyTokensMillions.Value));
         }
@@ -245,8 +343,8 @@ public sealed partial class HeroViewModel : ObservableObject
 
     internal static string FormatTokensMillions(double millions) =>
         millions >= 1000
-            ? string.Format(System.Globalization.CultureInfo.CurrentCulture, "{0:0.#}B", millions / 1000)
-            : string.Format(System.Globalization.CultureInfo.CurrentCulture, "{0:0.#}M", millions);
+            ? string.Format(CultureInfo.CurrentCulture, "{0:0.#}B", millions / 1000)
+            : string.Format(CultureInfo.CurrentCulture, "{0:0.#}M", millions);
 
     private sealed record TimelineCandidate(
         ProviderPriorityCandidate Priority,
@@ -259,15 +357,18 @@ public sealed partial class HeroViewModel : ObservableObject
         string? ResetFrequencyText,
         double ResetFrequencySortMinutes,
         double WeeklyTokensMillions,
-        PlanTokenRules.TokenEstimateKind TokenEstimateKind)
+        PlanTokenRules.TokenEstimateKind TokenEstimateKind,
+        bool HasMatchingCadence,
+        ProviderMoney Money)
     {
         public static TimelineCandidate From(
             ProviderPriorityCandidate candidate,
             IConfig config,
-            bool hideSensitiveInfo)
+            bool hideSensitiveInfo,
+            ProviderSortMode sortMode = ProviderSortMode.PlanValue)
         {
             var providerType = Catalog.ProviderTypeForInstance(candidate.Id, config);
-            var reset = TimelineReset.For(candidate.Snapshot);
+            var reset = TimelineReset.For(candidate.Snapshot, sortMode);
             var label = SensitiveDisplay.ProviderName(candidate.Snapshot.Name, hideSensitiveInfo);
             var weeklyTokens = PlanTokenRules.EstimateWeeklyTokensMillions(
                 providerType,
@@ -275,18 +376,56 @@ public sealed partial class HeroViewModel : ObservableObject
                 config,
                 out var tokenEstimateKind,
                 preferMeasured: false);
+
+            var availablePct = sortMode switch
+            {
+                ProviderSortMode.FiveHour => Math.Clamp(candidate.Score.FiveHourAvailability, 0, 100),
+                ProviderSortMode.Weekly => Math.Clamp(candidate.Score.WeeklyAvailability, 0, 100),
+                ProviderSortMode.Monthly => Math.Clamp(candidate.Score.MonthlyAvailability, 0, 100),
+                _ => Math.Clamp(candidate.Score.Availability, 0, 100),
+            };
+
+            var hasMatchingCadence = sortMode switch
+            {
+                ProviderSortMode.FiveHour => candidate.Score.HasFiveHour,
+                ProviderSortMode.Weekly => candidate.Score.HasWeekly,
+                ProviderSortMode.Monthly => candidate.Score.HasMonthly,
+                _ => true,
+            };
+
+            var frequencyText = FrequencyTextFor(sortMode, hasMatchingCadence, reset.FrequencyText);
+
             return new TimelineCandidate(
                 candidate,
                 providerType,
                 label,
-                Math.Clamp(candidate.Score.Availability, 0, 100),
+                availablePct,
                 reset.SortMinutes,
                 reset.DisplayText,
                 reset.ToolTip,
-                reset.FrequencyText,
+                frequencyText,
                 reset.FrequencyMinutes,
                 weeklyTokens,
-                tokenEstimateKind);
+                tokenEstimateKind,
+                hasMatchingCadence,
+                ProviderMoney.For(candidate.Id, candidate.Snapshot, candidate.Score, config));
+        }
+
+        private static string? FrequencyTextFor(
+            ProviderSortMode sortMode,
+            bool hasMatchingCadence,
+            string? fallback)
+        {
+            if (!hasMatchingCadence)
+                return fallback;
+
+            return sortMode switch
+            {
+                ProviderSortMode.FiveHour => I18n.T("timeline.effective5h"),
+                ProviderSortMode.Weekly => I18n.T("timeline.effectiveWeekly"),
+                ProviderSortMode.Monthly => I18n.T("timeline.effectiveMonthly"),
+                _ => fallback,
+            };
         }
     }
 
@@ -295,9 +434,10 @@ public sealed partial class HeroViewModel : ObservableObject
         string? DisplayText,
         string? ToolTip,
         double FrequencyMinutes,
-        string? FrequencyText)
+        string? FrequencyText,
+        double AvailablePercent = 0.0)
     {
-        public static TimelineReset For(ProviderSnapshot snapshot)
+        public static TimelineReset For(ProviderSnapshot snapshot, ProviderSortMode sortMode = ProviderSortMode.PlanValue)
         {
             var candidates = ResetCandidates(snapshot)
                 .Select(ResetCandidate.From)
@@ -306,19 +446,35 @@ public sealed partial class HeroViewModel : ObservableObject
                 .ToList();
 
             if (candidates.Count == 0)
-                return new TimelineReset(double.PositiveInfinity, null, null, double.PositiveInfinity, null);
+                return new TimelineReset(double.PositiveInfinity, null, null, double.PositiveInfinity, null, 0);
 
-            var selected = candidates
+            IEnumerable<ResetCandidate> filtered = sortMode switch
+            {
+                ProviderSortMode.FiveHour => candidates.Where(c => c.Cadence == QuotaCadence.FiveHour),
+                ProviderSortMode.Weekly => candidates.Where(c => c.Cadence == QuotaCadence.Weekly),
+                ProviderSortMode.Monthly => candidates.Where(c => c.Cadence == QuotaCadence.Monthly),
+                _ => candidates,
+            };
+
+            var selected = filtered
                 .OrderBy(candidate => candidate.WindowSortMinutes)
                 .ThenBy(candidate => candidate.MinutesUntil)
-                .First();
+                .FirstOrDefault()
+                ?? candidates
+                    .OrderBy(candidate => candidate.WindowSortMinutes)
+                    .ThenBy(candidate => candidate.MinutesUntil)
+                    .FirstOrDefault();
+
+            if (selected is null)
+                return new TimelineReset(double.PositiveInfinity, null, null, double.PositiveInfinity, null, 0);
 
             return new TimelineReset(
                 selected.MinutesUntil,
                 selected.DisplayText,
                 selected.ToolTip,
                 selected.WindowSortMinutes,
-                selected.FrequencyText);
+                selected.FrequencyText,
+                selected.AvailablePercent);
         }
 
         private static IEnumerable<SnapshotRateWindow> ResetCandidates(ProviderSnapshot snapshot)
@@ -341,11 +497,13 @@ public sealed partial class HeroViewModel : ObservableObject
     }
 
     private sealed record ResetCandidate(
+        QuotaCadence Cadence,
         double WindowSortMinutes,
         double MinutesUntil,
         string? DisplayText,
         string? ToolTip,
-        string? FrequencyText)
+        string? FrequencyText,
+        double AvailablePercent)
     {
         public static ResetCandidate? From(SnapshotRateWindow window)
         {
@@ -370,13 +528,22 @@ public sealed partial class HeroViewModel : ObservableObject
                 }
             }
 
-            var windowSortMinutes = ResolveWindowSortMinutes(window, minutesUntil);
+            var cadence = QuotaCadencePolicy.For(window.Label, window.WindowMinutes, minutesUntil);
+            double windowSortMinutes = window.WindowMinutes is > 0
+                ? window.WindowMinutes.Value
+                : QuotaCadencePolicy.DefaultWindowMinutes(cadence);
+            if (windowSortMinutes <= 0)
+                windowSortMinutes = double.IsFinite(minutesUntil) ? minutesUntil : double.PositiveInfinity;
+
+            var avail = Math.Clamp(100.0 - window.UsedPercent, 0, 100);
             return new ResetCandidate(
+                cadence,
                 windowSortMinutes,
                 minutesUntil,
                 displayText,
                 toolTip,
-                FormatFrequency(windowSortMinutes));
+                FormatFrequency(windowSortMinutes),
+                avail);
         }
 
         private static string? FormatFrequency(double minutes)
@@ -403,44 +570,6 @@ public sealed partial class HeroViewModel : ObservableObject
                 return I18n.T("timeline.resetEveryH", "n", (minutes / hour).ToString("0", CultureInfo.InvariantCulture));
 
             return I18n.T("timeline.resetEveryM", "n", minutes.ToString("0", CultureInfo.InvariantCulture));
-        }
-
-        private static double ResolveWindowSortMinutes(SnapshotRateWindow window, double minutesUntil)
-        {
-            if (window.WindowMinutes is > 0)
-                return window.WindowMinutes.Value;
-
-            var label = window.Label.ToLowerInvariant();
-            if (label.Contains("5h", StringComparison.Ordinal)
-                || label.Contains("hour", StringComparison.Ordinal)
-                || label.Contains("today", StringComparison.Ordinal)
-                || label.Contains("short", StringComparison.Ordinal))
-            {
-                return 5 * 60;
-            }
-
-            if (label.Contains("daily", StringComparison.Ordinal))
-                return 24 * 60;
-
-            if (label.Contains("7d", StringComparison.Ordinal)
-                || label.Contains("week", StringComparison.Ordinal))
-            {
-                return 7 * 24 * 60;
-            }
-
-            if (label.Contains("month", StringComparison.Ordinal)
-                || label.Contains("credit", StringComparison.Ordinal)
-                || label.Contains("token plan", StringComparison.Ordinal)
-                || label.Contains("compensation", StringComparison.Ordinal))
-            {
-                return 30 * 24 * 60;
-            }
-
-            return minutesUntil <= 24 * 60
-                ? 5 * 60
-                : minutesUntil <= 14 * 24 * 60
-                    ? 7 * 24 * 60
-                    : 30 * 24 * 60;
         }
     }
 }

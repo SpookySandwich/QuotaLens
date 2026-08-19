@@ -174,6 +174,8 @@ public sealed class KiroProvider : IProvider
                 UsedPercent = Quota.ClampPercent(percent ?? 0),
                 ResetsAt = reset,
                 DetailText = description,
+                WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
+                CountsForAvailability = true,
             },
             Secondary = bonus is null || bonus.Value.Total <= 0
                 ? null

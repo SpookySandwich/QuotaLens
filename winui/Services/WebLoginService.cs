@@ -113,7 +113,7 @@ public sealed class WebLoginService
                 "kimi",
                 KimiInitScript,
                 null,
-                ParseKimi),
+                json => ParseKimi(json)),
             ["alibaba"] = new(
                 "alibaba",
                 AlibabaCodingPlanInitScript,
@@ -711,11 +711,53 @@ public sealed class WebLoginService
         {
             Content = new StringContent("{\"scope\":[\"FEATURE_CODING\"]}", Encoding.UTF8, "application/json"),
         };
-        req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
-        req.Headers.TryAddWithoutValidation("connect-protocol-version", "1");
-        req.Headers.TryAddWithoutValidation("x-msh-platform", "web");
-        req.Headers.TryAddWithoutValidation("x-language", "en-US");
+        ApplyKimiNativeHeaders(req, token);
         return req;
+    }
+
+    private static HttpRequestMessage KimiNativeSubscriptionRequest(string token)
+    {
+        var req = new HttpRequestMessage(
+            HttpMethod.Post,
+            "https://www.kimi.com/apiv2/kimi.gateway.membership.v2.MembershipService/GetSubscription")
+        {
+            Content = new StringContent("{}", Encoding.UTF8, "application/json"),
+        };
+        ApplyKimiNativeHeaders(req, token);
+        return req;
+    }
+
+    private static void ApplyKimiNativeHeaders(HttpRequestMessage request, string token)
+    {
+        request.Headers.TryAddWithoutValidation("Authorization", $"Bearer {token}");
+        request.Headers.TryAddWithoutValidation("Cookie", "kimi-auth=" + token);
+        request.Headers.TryAddWithoutValidation("connect-protocol-version", "1");
+        request.Headers.TryAddWithoutValidation("x-msh-platform", "web");
+        request.Headers.TryAddWithoutValidation("x-language", "en-US");
+        request.Headers.TryAddWithoutValidation("Origin", "https://www.kimi.com");
+        request.Headers.TryAddWithoutValidation("Referer", "https://www.kimi.com/code/console");
+    }
+
+    internal static HttpRequestMessage KimiNativeSubscriptionRequestForTesting(string token) =>
+        KimiNativeSubscriptionRequest(token);
+
+    private static async Task<string?> TryFetchKimiPeriodEndAsync(string token, CancellationToken ct)
+    {
+        try
+        {
+            using var request = KimiNativeSubscriptionRequest(token);
+            using var response = await Http.Client.SendAsync(request, ct).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+                return null;
+
+            var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return KimiProvider.ParseAppSubscriptionPeriodEnd(json);
+        }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            AppLog.Warn($"kimi: web period-end enrichment failed ({error.Message})");
+            return null;
+        }
     }
 
     private static HttpRequestMessage ManusNativeCreditsRequest(string token)
@@ -793,7 +835,11 @@ public sealed class WebLoginService
                 return false;
 
             var json = await resp.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
-            if (string.IsNullOrWhiteSpace(json) || !TryCompleteCaptureFromJson(request, json, closeWindow: false))
+            var periodEnd = string.Equals(request.ProviderType, "kimi", StringComparison.OrdinalIgnoreCase)
+                ? await TryFetchKimiPeriodEndAsync(token, timeout.Token).ConfigureAwait(false)
+                : null;
+            if (string.IsNullOrWhiteSpace(json)
+                || !TryCompleteCaptureFromJson(request, json, closeWindow: false, periodEnd: periodEnd))
                 return false;
 
             await RunOnUiAsync(() => { CloseWindow(request.InstanceId); return true; }).ConfigureAwait(false);
@@ -893,7 +939,11 @@ public sealed class WebLoginService
         return TryCompleteCaptureFromJson(request, json, closeWindow);
     }
 
-    private bool TryCompleteCaptureFromJson(WebLoginCaptureRequest request, string json, bool closeWindow)
+    private bool TryCompleteCaptureFromJson(
+        WebLoginCaptureRequest request,
+        string json,
+        bool closeWindow,
+        string? periodEnd = null)
     {
         if (TryReadCaptureError(json) is { } error)
         {
@@ -916,7 +966,11 @@ public sealed class WebLoginService
         ProviderSnapshot snapshot;
         try
         {
-            snapshot = NormalizeSnapshot(request.ProviderType, definition.Parse(json));
+            snapshot = NormalizeSnapshot(
+                request.ProviderType,
+                string.Equals(request.ProviderType, "kimi", StringComparison.OrdinalIgnoreCase)
+                    ? ParseKimi(json, periodEnd)
+                    : definition.Parse(json));
         }
         catch (ProviderException)
         {
@@ -1993,136 +2047,14 @@ public sealed class WebLoginService
         return Fmt0(v);
     }
 
-    // ---- Kimi parse (from CodexBar KimiUsageSnapshot) --------------------
+    // ---- Kimi parse (same GetUsages shape as the desktop app source) ------
 
-    private sealed class KimiUsageResponse
+    internal static ProviderSnapshot ParseKimi(string json, string? periodEnd = null)
     {
-        [JsonPropertyName("usages")] public List<KimiUsage>? Usages { get; set; }
+        var snapshot = KimiProvider.ParseAppUsage(json, periodEnd: periodEnd);
+        snapshot.SourceLabel = "Kimi WebView";
+        return snapshot;
     }
-
-    private sealed class KimiUsage
-    {
-        [JsonPropertyName("scope")] public string? Scope { get; set; }
-        [JsonPropertyName("detail")] public KimiUsageDetail? Detail { get; set; }
-        [JsonPropertyName("limits")] public List<KimiUsageLimit>? Limits { get; set; }
-    }
-
-    private sealed class KimiUsageLimit
-    {
-        [JsonPropertyName("window")] public KimiUsageWindow? Window { get; set; }
-        [JsonPropertyName("detail")] public KimiUsageDetail? Detail { get; set; }
-    }
-
-    private sealed class KimiUsageWindow
-    {
-        [JsonPropertyName("duration")] public long? Duration { get; set; }
-        [JsonPropertyName("timeUnit")] public string? TimeUnit { get; set; }
-    }
-
-    private sealed class KimiUsageDetail
-    {
-        [JsonPropertyName("limit")] public string? Limit { get; set; }
-        [JsonPropertyName("used")] public string? Used { get; set; }
-        [JsonPropertyName("remaining")] public string? Remaining { get; set; }
-        [JsonPropertyName("resetTime")] public string? ResetTime { get; set; }
-    }
-
-    internal static ProviderSnapshot ParseKimi(string json)
-    {
-        KimiUsageResponse? resp;
-        try
-        {
-            resp = JsonSerializer.Deserialize<KimiUsageResponse>(json);
-        }
-        catch (Exception e)
-        {
-            throw new ProviderException($"Parse error: Invalid JSON: {e.Message}", e);
-        }
-
-        var codingUsage = resp?.Usages?.FirstOrDefault(u => u.Scope == "FEATURE_CODING")
-            ?? throw new ProviderException("Parse error: FEATURE_CODING scope not found");
-        var weekly = codingUsage.Detail
-            ?? throw new ProviderException("Parse error: Weekly Kimi usage detail missing");
-
-        var weeklyWindow = BuildKimiWindow(
-            label: "Weekly Requests",
-            detail: weekly,
-            descriptionSuffix: "requests",
-            windowMinutes: null,
-            descriptionPrefix: null);
-
-        var rateLimit = codingUsage.Limits?
-            .OrderBy(l => l.Window?.Duration ?? long.MaxValue)
-            .FirstOrDefault(l => l.Detail is not null);
-        RateWindow? rateWindow = null;
-        if (rateLimit?.Detail is not null)
-        {
-            var minutes = rateLimit.Window?.Duration;
-            rateWindow = BuildKimiWindow(
-                label: minutes == 300 ? "5h Rate Limit" : "Rate Limit",
-                detail: rateLimit.Detail,
-                descriptionSuffix: minutes == 300 ? "per 5 hours" : "requests",
-                windowMinutes: minutes,
-                descriptionPrefix: "Rate: ");
-        }
-
-        var tier = KimiTierName(ParseLong(weekly.Limit));
-        return new ProviderSnapshot
-        {
-            ProviderId = "kimi",
-            Name = "Kimi",
-            PlanName = tier,
-            Primary = weeklyWindow,
-            Secondary = rateWindow,
-            SourceLabel = "Kimi WebView",
-            Confidence = Confidence.Official,
-            UpdatedAt = DateTimeOffset.UtcNow,
-            Error = null,
-        };
-    }
-
-    private static RateWindow BuildKimiWindow(
-        string label,
-        KimiUsageDetail detail,
-        string descriptionSuffix,
-        long? windowMinutes,
-        string? descriptionPrefix)
-    {
-        var limit = ParseLong(detail.Limit);
-        var remaining = ParseLong(detail.Remaining);
-        var used = ParseLong(detail.Used);
-        if (used is null && limit is not null && remaining is not null)
-            used = Math.Max(0, limit.Value - remaining.Value);
-
-        var resolvedLimit = Math.Max(0, limit ?? 0);
-        var resolvedUsed = Math.Max(0, used ?? 0);
-        var usedPercent = resolvedLimit > 0
-            ? Quota.UtilizationToUsedPercent((double)resolvedUsed / resolvedLimit)
-            : 0.0;
-
-        var prefix = descriptionPrefix ?? "";
-        return new RateWindow
-        {
-            Label = label,
-            UsedPercent = usedPercent,
-            ResetsAt = detail.ResetTime,
-            DetailText = $"{prefix}{resolvedUsed}/{resolvedLimit} {descriptionSuffix}",
-            WindowMinutes = windowMinutes,
-        };
-    }
-
-    private static long? ParseLong(string? value) =>
-        long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
-            ? parsed
-            : null;
-
-    private static string? KimiTierName(long? weeklyLimit) => weeklyLimit switch
-    {
-        1024 => "Andante",
-        2048 => "Moderato",
-        7168 => "Allegretto",
-        _ => null,
-    };
 
     // ---- Amp parse (from CodexBar AmpUsageSnapshot) ----------------------
 
@@ -2509,7 +2441,9 @@ public sealed class WebLoginService
                 PlanName = displayPlan,
                 Primary = FactoryLimitRate("5h Window", FirstObject(standardPool, "fiveHour"), 5 * 60),
                 Secondary = FactoryLimitRate("Weekly", FirstObject(standardPool, "weekly"), 7 * 24 * 60),
-                Tertiary = FactoryLimitRate("Monthly", FirstObject(standardPool, "monthly"), 30 * 24 * 60),
+                Tertiary = FirstObject(standardPool, "monthly") is { } monthly
+                    ? FactoryLimitRate("Monthly", monthly, QuotaCadencePolicy.MonthlyMinutes)
+                    : null,
                 Balance = extraBalanceCents is null
                     ? null
                     : new BalanceInfo
@@ -3105,6 +3039,8 @@ public sealed class WebLoginService
                 Label = "Monthly credits",
                 UsedPercent = Quota.ClampPercent((proMonthlyCredits - periodicCredits) / proMonthlyCredits * 100),
                 DetailText = $"Total {Fmt0(totalCredits)} · Free {Fmt0(freeCredits)}",
+                WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
+                CountsForAvailability = true,
             }
             : null;
         var secondary = maxRefreshCredits > 0
@@ -3319,6 +3255,8 @@ public sealed class WebLoginService
                 UsedPercent = total is > 0 ? Quota.ClampPercent(used / total.Value * 100) : monthlyRemaining > 0 || purchasedCredits > 0 ? 0 : 100,
                 ResetsAt = periodEnd,
                 DetailText = description,
+                WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
+                CountsForAvailability = true,
             },
             Balance = new BalanceInfo
             {
@@ -3798,6 +3736,8 @@ public sealed class WebLoginService
             Label = "Monthly Plan",
             UsedPercent = percent,
             ResetsAt = JDateIso(vibe, "reset_at") ?? JDateIso(vibe, "resetAt"),
+            WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
+            CountsForAvailability = true,
         };
     }
 
@@ -3840,11 +3780,12 @@ public sealed class WebLoginService
             PlanName = displayPlan,
             Primary = new RateWindow
             {
-                Label = "Credits",
+                Label = "Monthly credits",
                 UsedPercent = usedPercent,
                 ResetsAt = resetsAt,
                 DetailText = detail,
-                WindowMinutes = 30L * 24L * 60L,
+                WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
+                CountsForAvailability = true,
             },
             Balance = balance,
             SourceLabel = "Alibaba Token Plan WebView",

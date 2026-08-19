@@ -50,6 +50,10 @@ public sealed class CodexLbProviderTests
         Assert.AreEqual(100.0, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual("Effective Usage", snapshot.Primary.Label);
         Assert.IsNull(snapshot.Secondary);
+        Assert.AreEqual("Effective 5h", snapshot.AdditionalWindows[0].Label);
+        Assert.AreEqual(100.0, snapshot.AdditionalWindows[0].UsedPercent, 0.001);
+        Assert.AreEqual("Effective Weekly", snapshot.AdditionalWindows[1].Label);
+        Assert.AreEqual(200.0 / 3.0, snapshot.AdditionalWindows[1].UsedPercent, 0.001);
         Assert.AreEqual(3, snapshot.Accounts.Count);
         Assert.IsTrue(snapshot.Accounts.All(a => a.UsedPercent is >= 99.999));
         Assert.IsTrue(snapshot.Accounts.All(a => a.PrimaryUsedPercent.HasValue));
@@ -210,6 +214,8 @@ public sealed class CodexLbProviderTests
 
         Assert.AreEqual(25.0, snapshot.Primary.UsedPercent, 0.001);
         Assert.AreEqual(monthlyReset, snapshot.Primary.ResetsAt);
+        Assert.AreEqual("Effective Monthly", snapshot.AdditionalWindows[0].Label);
+        Assert.AreEqual(25.0, snapshot.AdditionalWindows[0].UsedPercent, 0.001);
         Assert.AreEqual(1, snapshot.Accounts.Count);
         Assert.AreEqual("Monthly", snapshot.Accounts[0].PrimaryLabel);
         Assert.AreEqual(25.0, snapshot.Accounts[0].PrimaryUsedPercent!.Value, 0.001);
@@ -347,22 +353,23 @@ public sealed class CodexLbProviderTests
         Assert.IsNotNull(snapshot.Balance);
         Assert.AreEqual("credits", snapshot.Balance.Currency);
         Assert.AreEqual(20.0, snapshot.Balance.Total, 0.001);
-        Assert.HasCount(3, snapshot.AdditionalWindows);
+        Assert.IsTrue(snapshot.AdditionalWindows.Any(window => window.Label == "Effective 5h"));
+        Assert.IsTrue(snapshot.AdditionalWindows.Any(window => window.Label == "Effective Weekly"));
 
-        var primaryModelWindow = snapshot.AdditionalWindows[0];
+        var primaryModelWindow = snapshot.AdditionalWindows.Single(window => window.Label == "GPT-5.3-Codex-Spark · 5h");
         Assert.AreEqual("GPT-5.3-Codex-Spark · 5h", primaryModelWindow.Label);
         Assert.AreEqual(25.5, primaryModelWindow.UsedPercent, 0.001);
         Assert.AreEqual(300L, primaryModelWindow.WindowMinutes);
         Assert.AreEqual("2030-01-01T00:00:00.0000000+00:00", primaryModelWindow.ResetsAt);
         Assert.IsFalse(primaryModelWindow.CountsForAvailability);
 
-        var secondaryModelWindow = snapshot.AdditionalWindows[1];
+        var secondaryModelWindow = snapshot.AdditionalWindows.Single(window => window.Label == "GPT-5.3-Codex-Spark · Weekly");
         Assert.AreEqual("GPT-5.3-Codex-Spark · Weekly", secondaryModelWindow.Label);
         Assert.AreEqual(75.25, secondaryModelWindow.UsedPercent, 0.001);
         Assert.AreEqual(10080L, secondaryModelWindow.WindowMinutes);
         Assert.AreEqual("2030-01-08T00:00:00.0000000+00:00", secondaryModelWindow.ResetsAt);
 
-        var resetCredits = snapshot.AdditionalWindows[2];
+        var resetCredits = snapshot.AdditionalWindows.Single(window => window.Label == "Reset credits");
         Assert.AreEqual(RateWindowKind.Informational, resetCredits.Kind);
         Assert.AreEqual("Reset credits", resetCredits.Label);
         Assert.AreEqual("3 available", resetCredits.ValueText);
@@ -390,7 +397,7 @@ public sealed class CodexLbProviderTests
         Assert.AreEqual(15.0, snapshot.Balance.Total, 0.001);
 
         var modelWindows = snapshot.AdditionalWindows
-            .Where(window => window.Kind == RateWindowKind.Quota)
+            .Where(window => window.Kind == RateWindowKind.Quota && window.Label.Contains("Spark", StringComparison.Ordinal))
             .ToArray();
         Assert.HasCount(2, modelWindows);
         CollectionAssert.AreEqual(

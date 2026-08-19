@@ -92,25 +92,25 @@ public sealed class HeroViewModelTests
 
         var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
 
-        // Slowest reset cadence leftmost (monthly → 5h), widths ∝ tokens remaining:
-        // MiMo Standard 53×75% ≈ 40M, Claude Max 350×90% ≈ 315M, codex-lb
-        // (unrecognized plan → smallest paid Codex tier 11) ×80% ≈ 8.8M.
+        // Value sort: full monthly plan price, highest first.
         var visible = segments.Where(segment => !segment.IsRemainder).ToList();
-        Assert.AreEqual("MiMo · Standard", visible[0].Label);
-        Assert.AreEqual("mimo", visible[0].InstanceId);
-        Assert.AreEqual("reset monthly", visible[0].ResetFrequencyText);
-        Assert.AreEqual("Claude Code · Max", visible[1].Label);
-        Assert.AreEqual("claude", visible[1].InstanceId);
-        Assert.AreEqual("codex-lb", visible[2].Label);
-        Assert.AreEqual("codex-lb", visible[2].InstanceId);
-        Assert.AreEqual("~3h 12m", visible[2].ResetText);
+        Assert.AreEqual("Claude Code · Max", visible[0].Label);
+        Assert.AreEqual("claude", visible[0].InstanceId);
+        Assert.AreEqual("$100", visible[0].AvailableText);
+        Assert.AreEqual("codex-lb", visible[1].Label);
+        Assert.AreEqual("codex-lb", visible[1].InstanceId);
+        Assert.AreEqual("$70", visible[1].AvailableText);
+        Assert.AreEqual("~3h 12m", visible[1].ResetText);
+        Assert.AreEqual("MiMo · Standard", visible[2].Label);
+        Assert.AreEqual("mimo", visible[2].InstanceId);
+        Assert.AreEqual("reset monthly", visible[2].ResetFrequencyText);
+        Assert.AreEqual("reset every 5h", visible[0].ResetFrequencyText);
         Assert.AreEqual("reset every 5h", visible[1].ResetFrequencyText);
-        Assert.AreEqual("reset every 5h", visible[2].ResetFrequencyText);
-        Assert.AreEqual(90, visible[1].AvailablePercent, 0.001);
-        Assert.AreEqual(80, visible[2].AvailablePercent, 0.001);
-        Assert.AreEqual(53 * 0.75, visible[0].Weight, 0.001);
-        Assert.AreEqual(350 * 0.90, visible[1].Weight, 0.001);
-        Assert.AreEqual(11 * 0.80, visible[2].Weight, 0.001);
+        Assert.AreEqual(90, visible[0].AvailablePercent, 0.001);
+        Assert.AreEqual(80, visible[1].AvailablePercent, 0.001);
+        Assert.AreEqual(100, visible[0].Weight, 0.001);
+        Assert.AreEqual(70, visible[1].Weight, 0.001);
+        Assert.AreEqual(16, visible[2].Weight, 0.001);
         // Spent capacity is not rendered — the bar is runway only.
         Assert.IsFalse(segments.Any(segment => segment.IsRemainder));
     }
@@ -205,7 +205,7 @@ public sealed class HeroViewModelTests
             ("codex", Snapshot("Codex · Plus", usedPercent: 0, resetHours: 100, windowMinutes: 7 * 24 * 60)),
         };
 
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
 
         var claude = segments.Single(segment => segment.InstanceId == "claude");
         var codex = segments.Single(segment => segment.InstanceId == "codex");
@@ -225,7 +225,7 @@ public sealed class HeroViewModelTests
             ("claude", Snapshot("Claude Code · Max 20x", usedPercent: 25, resetHours: 100, windowMinutes: 7 * 24 * 60)),
         };
 
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
 
         Assert.AreEqual(1, segments.Count);
         Assert.AreEqual(600 * 0.75, segments[0].Weight, 0.001);
@@ -246,7 +246,7 @@ public sealed class HeroViewModelTests
         };
         var snapshots = new[] { ("codex-lb", snapshot) };
 
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
 
         var segment = segments.Single();
         // Width uses the comparable plan-sum estimate (600+32+32 at 18% left)…
@@ -286,11 +286,344 @@ public sealed class HeroViewModelTests
             ("cursor", Snapshot("Cursor · Hypernova", usedPercent: 0, resetHours: 100, windowMinutes: 30 * 24 * 60)),
         };
 
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
+        var tokenSegments = HeroViewModel.BuildUsageTimelineSegments(
+            config, snapshots, sortMode: ProviderSortMode.Monthly);
+        var cursorTokens = tokenSegments.Single(segment => segment.InstanceId == "cursor");
+        Assert.AreEqual(120, cursorTokens.Weight, 0.001); // Cursor's smallest PAID token tier (Pro)
+        StringAssert.Contains(cursorTokens.ResetToolTip, "plan not recognized");
 
-        var cursor = segments.Single(segment => segment.InstanceId == "cursor");
-        Assert.AreEqual(120, cursor.Weight, 0.001); // Cursor's smallest PAID tier (Pro)
-        StringAssert.Contains(cursor.ResetToolTip, "plan not recognized");
+        var valueSegments = HeroViewModel.BuildUsageTimelineSegments(
+            config, snapshots, sortMode: ProviderSortMode.PlanValue);
+        var cursorValue = valueSegments.Single(segment => segment.InstanceId == "cursor");
+        Assert.AreEqual("$20", cursorValue.AvailableText);
+        Assert.AreEqual(20, cursorValue.Weight, 0.001);
+        StringAssert.Contains(cursorValue.ResetToolTip, "plan not recognized");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithFiveHourMode_OnlyIncludesFiveHourWindows()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("codex", "codex", "Codex"),
+        });
+        var snapshots = new[]
+        {
+            ("claude", new ProviderSnapshot
+            {
+                ProviderId = "claude",
+                Name = "Claude Code · Max",
+                Primary = new RateWindow
+                {
+                    Label = "5h Pool",
+                    UsedPercent = 10,
+                    ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToString("O"),
+                    WindowMinutes = 5 * 60,
+                },
+            }),
+            ("codex", new ProviderSnapshot
+            {
+                ProviderId = "codex",
+                Name = "Codex · Pro",
+                Primary = new RateWindow
+                {
+                    Label = "Weekly Pool",
+                    UsedPercent = 20,
+                    ResetsAt = DateTimeOffset.UtcNow.AddHours(96).ToString("O"),
+                    WindowMinutes = 7 * 24 * 60,
+                },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.FiveHour);
+
+        Assert.AreEqual(1, segments.Count);
+        Assert.AreEqual("claude", segments[0].InstanceId);
+        Assert.AreEqual("effective 5h", segments[0].ResetFrequencyText);
+        StringAssert.StartsWith(segments[0].AvailableText, "90%");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithPlanValueMode_IncludesGrayedOutBalanceSegments()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("deepseek", "deepseek", "DeepSeek"),
+        });
+        var snapshots = new[]
+        {
+            ("claude", new ProviderSnapshot
+            {
+                ProviderId = "claude",
+                Name = "Claude Code · Max",
+                Primary = new RateWindow
+                {
+                    Label = "5h Pool",
+                    UsedPercent = 10,
+                    ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToString("O"),
+                    WindowMinutes = 5 * 60,
+                },
+            }),
+            ("deepseek", new ProviderSnapshot
+            {
+                ProviderId = "deepseek",
+                Name = "DeepSeek",
+                Balance = new BalanceInfo { Total = 23.9, Currency = "CNY" },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
+
+        Assert.IsTrue(segments.Count >= 1);
+        var claude = segments.Single(s => s.InstanceId == "claude");
+        Assert.IsFalse(claude.IsGrayedOut);
+        Assert.AreEqual("$100", claude.AvailableText);
+        Assert.AreEqual(100, claude.Weight, 0.001);
+        Assert.IsTrue(segments.Any(s => s.InstanceId == "deepseek" && s.IsGrayedOut));
+        Assert.AreEqual("$3.32", segments.First(s => s.InstanceId == "deepseek").AvailableText);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithMonthlyMode_OnlyIncludesMonthlyCadence()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("mimo", "mimo", "MiMo"),
+        });
+        var snapshots = new[]
+        {
+            ("claude", new ProviderSnapshot
+            {
+                ProviderId = "claude",
+                Name = "Claude Code · Max",
+                Primary = new RateWindow
+                {
+                    Label = "5h Pool",
+                    UsedPercent = 10,
+                    ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToString("O"),
+                    WindowMinutes = 5 * 60,
+                },
+            }),
+            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
+        };
+        snapshots[1].Item2.Primary.Label = "Monthly credits";
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
+
+        Assert.AreEqual(1, segments.Count);
+        Assert.AreEqual("mimo", segments[0].InstanceId);
+        Assert.AreEqual("effective monthly", segments[0].ResetFrequencyText);
+        StringAssert.StartsWith(segments[0].AvailableText, "75%");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithKimiTotalQuota_ShowsOnMonthlyWithReset()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("kimi", "kimi", "Kimi") });
+        var resetAt = DateTimeOffset.UtcNow.AddDays(12).AddHours(3).ToString("O");
+        var snapshots = new[]
+        {
+            ("kimi", new ProviderSnapshot
+            {
+                Name = "Kimi · Allegro",
+                PlanName = "Allegro",
+                Primary = new RateWindow
+                {
+                    Label = "Total quota",
+                    UsedPercent = 68,
+                    ResetsAt = resetAt,
+                    WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
+                    CountsForAvailability = true,
+                    DetailText = "68% used",
+                },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
+
+        Assert.AreEqual(1, segments.Count);
+        Assert.AreEqual("kimi", segments[0].InstanceId);
+        Assert.AreEqual("effective monthly", segments[0].ResetFrequencyText);
+        StringAssert.StartsWith(segments[0].AvailableText, "32%");
+        StringAssert.Contains(segments[0].AvailableText, "12d");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithThreePlusAccounts_ShowsSummedPlanValue()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("codex-lb", "codex-lb", "codex-lb") });
+        var snapshot = Snapshot("codex-lb", usedPercent: 75, resetHours: 40, windowMinutes: 7 * 24 * 60);
+        snapshot.Accounts =
+        [
+            new AccountInfo { Email = "a@example.com", Plan = "plus" },
+            new AccountInfo { Email = "b@example.com", Plan = "plus" },
+            new AccountInfo { Email = "c@example.com", Plan = "plus" },
+        ];
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(
+            config,
+            [("codex-lb", snapshot)],
+            sortMode: ProviderSortMode.PlanValue);
+
+        var segment = segments.Single();
+        Assert.AreEqual("$60", segment.AvailableText);
+        Assert.AreEqual(60, segment.Weight, 0.001);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithMonthlyMode_DoesNotInventMonthlyFromFiveHourPlans()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("codex", "codex", "Codex"),
+        });
+        var snapshots = new[]
+        {
+            ("claude", new ProviderSnapshot
+            {
+                ProviderId = "claude",
+                Name = "Claude Code · Max",
+                Primary = new RateWindow
+                {
+                    Label = "5h Pool",
+                    UsedPercent = 10,
+                    WindowMinutes = 5 * 60,
+                },
+            }),
+            ("codex", new ProviderSnapshot
+            {
+                ProviderId = "codex",
+                Name = "Codex · Plus",
+                Primary = new RateWindow
+                {
+                    Label = "Weekly Pool",
+                    UsedPercent = 20,
+                    WindowMinutes = 7 * 24 * 60,
+                },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
+
+        Assert.AreEqual(0, segments.Count);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithGeminiAndGrokPlans_ShowsOfficialMonthlyPrices()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("gemini", "gemini", "Gemini"),
+            new ProviderInstance("grok", "grok", "Grok"),
+        });
+        var snapshots = new[]
+        {
+            ("gemini", new ProviderSnapshot
+            {
+                Name = "Gemini",
+                PlanName = "Google AI Pro",
+                Primary = new RateWindow { Label = "Gemini weekly", UsedPercent = 0, WindowMinutes = 7 * 24 * 60 },
+            }),
+            ("grok", new ProviderSnapshot
+            {
+                Name = "Grok",
+                PlanId = "x_premium_plus",
+                PlanName = "X Premium+",
+                Primary = new RateWindow { Label = "Weekly included", UsedPercent = 5, WindowMinutes = 7 * 24 * 60 },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
+
+        Assert.AreEqual("$40", segments.Single(s => s.InstanceId == "grok").AvailableText);
+        Assert.AreEqual("$20", segments.Single(s => s.InstanceId == "gemini").AvailableText);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithValueMode_AlwaysShowsDollarsNeverPercent()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("kimi", "kimi", "Kimi"),
+            new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("deepseek", "deepseek", "DeepSeek"),
+        });
+        var snapshots = new[]
+        {
+            ("kimi", new ProviderSnapshot
+            {
+                Name = "Kimi",
+                PlanName = "Allegro",
+                Primary = new RateWindow { Label = "Weekly", UsedPercent = 68, WindowMinutes = 7 * 24 * 60 },
+            }),
+            ("claude", new ProviderSnapshot
+            {
+                Name = "Claude Code · Max",
+                Primary = new RateWindow { Label = "5h Pool", UsedPercent = 49, WindowMinutes = 5 * 60 },
+            }),
+            ("deepseek", new ProviderSnapshot
+            {
+                Name = "DeepSeek",
+                Balance = new BalanceInfo { Total = 23.9, Currency = "CNY" },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
+
+        Assert.AreEqual(3, segments.Count);
+        Assert.IsTrue(segments.All(segment => segment.AvailableText.StartsWith('$')
+            && !segment.AvailableText.Contains('%', StringComparison.Ordinal)));
+        Assert.AreEqual("$99", segments.Single(s => s.InstanceId == "kimi").AvailableText);
+        Assert.AreEqual("$100", segments.Single(s => s.InstanceId == "claude").AvailableText);
+        Assert.AreEqual("$3.32", segments.Single(s => s.InstanceId == "deepseek").AvailableText);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithCodexLbEffectiveWindows_UsesConstrainedFiveHour()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("codex-lb", "codex-lb", "codex-lb") });
+        var snapshot = new ProviderSnapshot
+        {
+            ProviderId = "codex-lb",
+            Name = "codex-lb",
+            Primary = new RateWindow
+            {
+                Label = "Effective Usage",
+                UsedPercent = 80,
+                ResetsAt = DateTimeOffset.UtcNow.AddHours(3).ToString("O"),
+            },
+            AdditionalWindows =
+            {
+                new RateWindow
+                {
+                    Label = "Effective 5h",
+                    UsedPercent = 60,
+                    ResetsAt = DateTimeOffset.UtcNow.AddHours(3).ToString("O"),
+                    WindowMinutes = 5 * 60,
+                },
+                new RateWindow
+                {
+                    Label = "Effective Weekly",
+                    UsedPercent = 80,
+                    ResetsAt = DateTimeOffset.UtcNow.AddDays(4).ToString("O"),
+                    WindowMinutes = 7 * 24 * 60,
+                },
+            },
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(
+            config,
+            new[] { ("codex-lb", snapshot) },
+            sortMode: ProviderSortMode.FiveHour);
+
+        Assert.AreEqual(1, segments.Count);
+        Assert.AreEqual("effective 5h", segments[0].ResetFrequencyText);
+        // Effective 5h cannot exceed the weekly pool (20% remaining).
+        Assert.AreEqual(20, segments[0].AvailablePercent, 0.001);
     }
 
     private static ProviderSnapshot Snapshot(string name, double usedPercent, double resetHours, long windowMinutes) => new()

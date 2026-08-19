@@ -482,9 +482,10 @@ public sealed partial class MainWindow : Window
     {
         var nextMode = sender.SelectedItem switch
         {
-            _ when sender.SelectedItem == SortByResetFrequencyItem => ProviderSortMode.ResetFrequency,
-            _ when sender.SelectedItem == SortByNextResetItem => ProviderSortMode.NextReset,
-            _ => ProviderSortMode.PlanValue,
+            _ when sender.SelectedItem == SortByWeeklyItem => ProviderSortMode.Weekly,
+            _ when sender.SelectedItem == SortByMonthlyItem => ProviderSortMode.Monthly,
+            _ when sender.SelectedItem == SortByValueItem => ProviderSortMode.PlanValue,
+            _ => ProviderSortMode.FiveHour,
         };
 
         var shouldAnimate = !_isUpdatingSortSelection && _sortSelectionCanAnimate && Vm.SortMode != nextMode;
@@ -505,7 +506,7 @@ public sealed partial class MainWindow : Window
 
     private void UpdateSortSelection()
     {
-        if (SortSelector == null || SortByPlanValueItem == null || SortByResetFrequencyItem == null || SortByNextResetItem == null)
+        if (SortSelector == null || SortBy5hItem == null || SortByWeeklyItem == null || SortByMonthlyItem == null || SortByValueItem == null)
             return;
 
         _isUpdatingSortSelection = true;
@@ -513,9 +514,10 @@ public sealed partial class MainWindow : Window
         {
             SortSelector.SelectedItem = Vm.SortMode switch
             {
-                ProviderSortMode.ResetFrequency => SortByResetFrequencyItem,
-                ProviderSortMode.NextReset => SortByNextResetItem,
-                _ => SortByPlanValueItem,
+                ProviderSortMode.Weekly => SortByWeeklyItem,
+                ProviderSortMode.Monthly => SortByMonthlyItem,
+                ProviderSortMode.PlanValue => SortByValueItem,
+                _ => SortBy5hItem,
             };
         }
         finally

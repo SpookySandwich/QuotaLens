@@ -412,7 +412,7 @@ public sealed class ConfigServiceTests
     }
 
     [TestMethod]
-    public void LoadInstances_WithLegacyAlibabaAliases_CollapsesToSingleAlibaba()
+    public void LoadInstances_WithLegacyAlibabaAliases_CollapsesCloudIntoAlibabaAndKeepsTokenPlan()
     {
         var dir = NewTempDir();
 
@@ -433,8 +433,9 @@ public sealed class ConfigServiceTests
 
             var config = new ConfigService(dir, () => null);
 
-            Assert.AreEqual(2, config.Instances.Count);
+            Assert.AreEqual(3, config.Instances.Count);
             Assert.IsTrue(config.Instances.Any(instance => instance.Id == "alibaba-main" && instance.Type == "alibaba"));
+            Assert.IsTrue(config.Instances.Any(instance => instance.Id == "alibabatokenplan-old" && instance.Type == "alibabatokenplan"));
             Assert.IsTrue(config.Instances.Any(instance => instance.Id == "deepseek-main" && instance.Type == "deepseek"));
             Assert.IsFalse(config.Instances.Any(instance => Catalog.IsInternalProviderType(instance.Type)));
             Assert.AreEqual("true", config.Get("provider_internal_aliases_v1"));
@@ -447,7 +448,7 @@ public sealed class ConfigServiceTests
     }
 
     [TestMethod]
-    public void LoadInstances_WithOnlyLegacyAlibabaAlias_KeepsOneAlibabaCard()
+    public void LoadInstances_WithOnlyLegacyAlibabaTokenPlan_KeepsTokenPlanCard()
     {
         var dir = NewTempDir();
 
@@ -466,10 +467,9 @@ public sealed class ConfigServiceTests
             var config = new ConfigService(dir, () => null);
 
             Assert.AreEqual(1, config.Instances.Count);
-            Assert.AreEqual("alibaba", config.Instances[0].Id);
-            Assert.AreEqual("alibaba", config.Instances[0].Type);
-            Assert.AreEqual("Alibaba", config.Instances[0].Name);
-            Assert.AreEqual("true", config.Get("provider_internal_aliases_v1"));
+            Assert.AreEqual("alibabatokenplan-old", config.Instances[0].Id);
+            Assert.AreEqual("alibabatokenplan", config.Instances[0].Type);
+            Assert.AreEqual("Alibaba Token Plan", config.Instances[0].Name);
         }
         finally
         {

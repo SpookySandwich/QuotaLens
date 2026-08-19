@@ -59,6 +59,61 @@ public static class PlanValueRules
         IConfig? config = null) =>
         MatchRule(ForProvider(providerType, config), identity);
 
+    /// <summary>
+    /// Conservative monthly USD when a paid plan is not recognized. Mirrors
+    /// <see cref="PlanTokenRules"/>: never use a free tier as the unknown-plan
+    /// fallback, and scale by pooled account count.
+    /// </summary>
+    public const double GlobalDefaultMonthlyUsd = 20;
+
+    private static readonly string[] FreeTierKeywords =
+    {
+        "free", "hobby", "community", "trial", "adagio", "no plan", "base",
+        "individual", "payg", "pay as you go",
+    };
+
+    public static double EstimateMonthlyUsd(string providerType, ProviderSnapshot snapshot, IConfig? config = null)
+    {
+        if (snapshot.Accounts.Count > 0)
+        {
+            var total = 0.0;
+            var any = false;
+            foreach (var account in snapshot.Accounts)
+            {
+                if (string.IsNullOrWhiteSpace(account.Plan))
+                {
+                    total += SmallestPaidTierOrDefault(providerType, config);
+                    any = true;
+                    continue;
+                }
+
+                var matched = MatchIncludingDefaults(providerType, account.Plan, config);
+                total += matched ?? SmallestPaidTierOrDefault(providerType, config);
+                any = true;
+            }
+
+            if (any)
+                return total;
+        }
+
+        var identity = ProviderSnapshotIdentity.PlanIdentity(providerType, snapshot);
+        var identityMatch = identity.IsEmpty ? null : Match(providerType, identity, config);
+        if (identityMatch.HasValue)
+            return identityMatch.Value;
+
+        return SmallestPaidTierOrDefault(providerType, config) * Math.Max(1, snapshot.Accounts.Count);
+    }
+
+    public static double SmallestPaidTierOrDefault(string providerType, IConfig? config = null)
+    {
+        var smallest = ForProvider(providerType, config)
+            .Where(rule => rule.Value > 0)
+            .Where(rule => !FreeTierKeywords.Contains(rule.Keyword.Trim().ToLowerInvariant()))
+            .Select(rule => (double?)rule.Value)
+            .Min();
+        return smallest ?? GlobalDefaultMonthlyUsd;
+    }
+
     public static double? MatchIncludingDefaults(string providerType, string planName, IConfig? config = null)
         => MatchIncludingDefaultsRule(providerType, planName, config)?.Value;
 

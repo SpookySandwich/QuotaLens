@@ -84,13 +84,14 @@
   ],
   "quotaLensRelationship": {
     "catalogPath": "winui/Core/Catalog.cs",
-    "catalogCount": 52,
+    "catalogCount": 53,
     "sharedCount": 48,
     "quotaLensOnlyIds": [
       "alibabacloud",
       "bayesdl",
       "codex-lb",
-      "kimik2"
+      "kimik2",
+      "zcode"
     ],
     "upstreamOnlyIds": [
       "aiand",

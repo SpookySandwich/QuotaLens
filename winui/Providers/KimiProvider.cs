@@ -341,8 +341,8 @@ public sealed class KimiProvider : IProvider
                 ProviderErrorKind.AuthenticationRequired);
 
         var json = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
-        var planIdentity = await FetchAppPlanIdentityAsync(token, timeout.Token).ConfigureAwait(false);
-        return ParseAppUsage(json, planIdentity);
+        var (planIdentity, periodEnd) = await FetchAppPlanIdentityAsync(token, timeout.Token).ConfigureAwait(false);
+        return ParseAppUsage(json, planIdentity, periodEnd);
     }
 
     /// <summary>
@@ -351,7 +351,7 @@ public sealed class KimiProvider : IProvider
     /// so App snapshots enrich quota data with that structured plan identity. Failure
     /// remains non-fatal because a plan label must never hide otherwise valid quota.
     /// </summary>
-    private static async Task<ProviderPlanIdentity> FetchAppPlanIdentityAsync(
+    private static async Task<(ProviderPlanIdentity Identity, string? PeriodEnd)> FetchAppPlanIdentityAsync(
         string token,
         CancellationToken ct)
     {
@@ -371,7 +371,7 @@ public sealed class KimiProvider : IProvider
             }
 
             var json = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
-            return ParseAppSubscription(json);
+            return (ParseAppSubscription(json), ParseAppSubscriptionPeriodEnd(json));
         }
         catch (Exception error)
         {
@@ -512,6 +512,7 @@ public sealed class KimiProvider : IProvider
             Limit = Get(totalQuota, "limit"),
             Used = Get(totalQuota, "used"),
             Remaining = Get(totalQuota, "remaining"),
+            ResetTime = ReadResetTime(totalQuota),
         };
         return detail.Limit is null && detail.Used is null && detail.Remaining is null
             ? null
@@ -520,7 +521,8 @@ public sealed class KimiProvider : IProvider
 
     internal static ProviderSnapshot ParseAppUsage(
         string json,
-        ProviderPlanIdentity planIdentity = default)
+        ProviderPlanIdentity planIdentity = default,
+        string? periodEnd = null)
     {
         KimiAppUsageResponse? data;
         try
@@ -545,7 +547,7 @@ public sealed class KimiProvider : IProvider
 
         var total = data.TotalQuota is { } tq
             && (ParseLong(tq.Limit) is not null || ParseLong(tq.Remaining) is not null || ParseLong(tq.Used) is not null)
-            ? BuildWindow("Total quota", tq, windowMinutes: null, descriptionPrefix: null)
+            ? BuildTotalQuotaWindow(tq, periodEnd)
             : null;
         var weeklyWindow = BuildWindow("Weekly", weekly, windowMinutes: 10080, descriptionPrefix: null);
         RateWindow? rateWindow = null;
@@ -710,7 +712,7 @@ public sealed class KimiProvider : IProvider
         var weekly = data?.Usage
             ?? throw new ProviderException("Parse error: Kimi usage detail missing");
 
-        var primary = BuildWindow("Weekly", weekly, windowMinutes: 10080, descriptionPrefix: null);
+        var weeklyWindow = BuildWindow("Weekly", weekly, windowMinutes: 10080, descriptionPrefix: null);
 
         // Every rate-limit window the API reports, shortest first (observed: a single
         // 300-minute rolling limit, but other accounts can report several).
@@ -718,27 +720,27 @@ public sealed class KimiProvider : IProvider
             .Where(l => l.Detail is not null)
             .OrderBy(l => WindowMinutesFor(l.Window) ?? long.MaxValue)
             .ToList();
-        RateWindow? secondary = null;
-        var additional = new List<RateWindow>();
-        foreach (var (rateLimit, index) in rateLimits.Select((limit, index) => (limit, index)))
-        {
-            var minutes = WindowMinutesFor(rateLimit.Window);
-            var window = BuildWindow(
-                minutes == 300 ? "5h Rate Limit" : "Rate Limit",
-                rateLimit.Detail!,
-                windowMinutes: minutes,
-                descriptionPrefix: "Rate: ");
-            if (index == 0) secondary = window;
-            else additional.Add(window);
-        }
+        var rateWindows = rateLimits
+            .Select(rateLimit =>
+            {
+                var minutes = WindowMinutesFor(rateLimit.Window);
+                return BuildWindow(
+                    minutes == 300 ? "5h Rate Limit" : "Rate Limit",
+                    rateLimit.Detail!,
+                    windowMinutes: minutes,
+                    descriptionPrefix: "Rate: ");
+            })
+            .ToList();
 
-        // Total quota ("总额度") is present for some accounts and empty for others.
-        var tertiary = data.TotalQuota is { } totalQuota
+        // Total quota ("总额度") is the monthly remaining pool when the account has one.
+        var total = data.TotalQuota is { } totalQuota
             && (ParseLong(totalQuota.Limit) is not null
                 || ParseLong(totalQuota.Remaining) is not null
                 || ParseLong(totalQuota.Used) is not null)
-            ? BuildWindow("Total quota", totalQuota, windowMinutes: null, descriptionPrefix: null)
+            ? BuildTotalQuotaWindow(totalQuota)
             : null;
+
+        var additional = rateWindows.Skip(1).ToList();
 
         // Concurrency is informational, not a quota denominator.
         var parallel = ParseLong(data.Parallel?.Limit);
@@ -758,9 +760,9 @@ public sealed class KimiProvider : IProvider
             ProviderId = Type,
             Name = "Kimi",
             PlanName = tier,
-            Primary = primary,
-            Secondary = secondary,
-            Tertiary = tertiary,
+            Primary = total ?? weeklyWindow,
+            Secondary = total is not null ? weeklyWindow : rateWindows.FirstOrDefault(),
+            Tertiary = total is not null ? rateWindows.FirstOrDefault() : null,
             AdditionalWindows = additional,
             SourceLabel = SourceLabel,
             Confidence = Confidence,
@@ -815,6 +817,96 @@ public sealed class KimiProvider : IProvider
             DetailText = description,
             WindowMinutes = windowMinutes,
         };
+    }
+
+    private static RateWindow BuildTotalQuotaWindow(CliUsageDetail detail, string? fallbackResetsAt = null)
+    {
+        var window = BuildWindow(
+            "Total quota",
+            detail,
+            windowMinutes: QuotaCadencePolicy.MonthlyMinutes,
+            descriptionPrefix: null);
+        window.CountsForAvailability = true;
+        if (string.IsNullOrWhiteSpace(window.ResetsAt))
+            window.ResetsAt = fallbackResetsAt;
+        return window;
+    }
+
+    internal static string? ParseAppSubscriptionPeriodEnd(string json)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            return FirstPeriodEnd(doc.RootElement);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static string? FirstPeriodEnd(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            foreach (var name in new[]
+            {
+                "resetTime", "resetAt", "nextResetTime", "nextResetAt",
+                "expireTime", "expire_time", "expiresAt", "expires_at",
+                "expirationTime", "endTime", "validEndTime",
+                "currentPeriodEnd", "periodEnd", "nextRenewTime",
+                "renewAt", "validUntil",
+            })
+            {
+                if (ReadResetTime(element, name) is { } value)
+                    return value;
+            }
+
+            foreach (var property in element.EnumerateObject())
+            {
+                if (FirstPeriodEnd(property.Value) is { } nested)
+                    return nested;
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                if (FirstPeriodEnd(item) is { } nested)
+                    return nested;
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ReadResetTime(JsonElement obj, string name = "resetTime")
+    {
+        if (!obj.TryGetProperty(name, out var value))
+            return null;
+
+        if (value.ValueKind == JsonValueKind.String)
+        {
+            var text = value.GetString();
+            return string.IsNullOrWhiteSpace(text) ? null : text.Trim();
+        }
+
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var numeric))
+        {
+            try
+            {
+                var when = numeric > 10_000_000_000
+                    ? DateTimeOffset.FromUnixTimeMilliseconds(numeric)
+                    : DateTimeOffset.FromUnixTimeSeconds(numeric);
+                return when.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return null;
+            }
+        }
+
+        return null;
     }
 
     private static long? ParseLong(string? value) =>

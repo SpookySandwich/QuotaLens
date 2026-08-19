@@ -29,11 +29,8 @@ public static class ProviderRegistry
             ["grok"] = () => new GrokProvider(),
             ["kilo"] = () => new KiloProvider(),
             ["jetbrains"] = () => new JetBrainsProvider(),
-            // CLI-first with WebView fallback: overrides the WebLoginService factory below.
             ["kimi"] = () => new KimiProvider(),
-            // CLI-first (local ZCode session) with the SimpleApi API-key flow as fallback:
-            // overrides the SimpleApiProvider factory below.
-            ["zai"] = () => new ZaiProvider(),
+            ["zcode"] = () => new ZcodeProvider(),
             ["kimik2"] = () => new RetiredProvider(
                 "kimik2",
                 "Provider retired: Kimi K2 used an unverified credential relay. Remove this card, use Kimi or Moonshot, and rotate any credential previously sent to that relay."),
@@ -120,8 +117,6 @@ public static class ProviderRegistry
 
         foreach (var type in SimpleApiProvider.SupportedTypes)
         {
-            // A custom factory may deliberately wrap the SimpleApi flow (e.g. ZaiProvider
-            // prefers the local ZCode session and falls back to the API-key flow).
             if (CustomFactories.ContainsKey(type))
                 continue;
 

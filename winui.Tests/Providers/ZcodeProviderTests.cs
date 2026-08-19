@@ -4,11 +4,12 @@ using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using QuotaLens.Core;
 using QuotaLens.Providers;
+using QuotaLens.Services;
 
 namespace QuotaLens.Tests.Providers;
 
 [TestClass]
-public sealed class ZaiProviderTests
+public sealed class ZcodeProviderTests
 {
     private const string SampleBalanceJson = """
         {
@@ -36,15 +37,15 @@ public sealed class ZaiProviderTests
     [TestMethod]
     public void ParseBalance_OrdersByPriorityAndMapsWindows()
     {
-        var snapshot = ZaiProvider.ParseBalance(SampleBalanceJson);
+        var snapshot = ZcodeProvider.ParseBalance(SampleBalanceJson);
 
-        Assert.AreEqual("z.ai", snapshot.Name);
+        Assert.AreEqual("ZCode", snapshot.Name);
         Assert.AreEqual("ZCode Start Plan", snapshot.PlanName);
         Assert.AreEqual("ZCode CLI", snapshot.SourceLabel);
 
         Assert.AreEqual("GLM-5.3", snapshot.Primary.Label);
         Assert.AreEqual(Quota.UtilizationToUsedPercent(72473764.0 / 100000000), snapshot.Primary.UsedPercent);
-        Assert.IsNull(snapshot.Primary.WindowMinutes); // one_time grant
+        Assert.IsNull(snapshot.Primary.WindowMinutes);
         Assert.AreEqual("72.5M / 100M tokens", snapshot.Primary.DetailText);
         Assert.AreEqual(
             DateTimeOffset.FromUnixTimeSeconds(1786928400).ToString("o"),
@@ -53,14 +54,14 @@ public sealed class ZaiProviderTests
         Assert.IsNotNull(snapshot.Secondary);
         Assert.AreEqual("GLM-5-Turbo", snapshot.Secondary!.Label);
         Assert.AreEqual(0.0, snapshot.Secondary.UsedPercent);
-        Assert.AreEqual(1439, snapshot.Secondary.WindowMinutes); // daily window
+        Assert.AreEqual(1439, snapshot.Secondary.WindowMinutes);
     }
 
     [TestMethod]
     public void ParseBalance_WithApiErrorCode_ThrowsNotAvailable()
     {
         var ex = Assert.ThrowsExactly<ProviderException>(
-            () => ZaiProvider.ParseBalance("""{ "code": 401, "msg": "session expired" }"""));
+            () => ZcodeProvider.ParseBalance("""{ "code": 401, "msg": "session expired" }"""));
 
         StringAssert.Contains(ex.Message, "session expired");
     }
@@ -68,75 +69,54 @@ public sealed class ZaiProviderTests
     [TestMethod]
     public async Task FetchAsync_WithLocalSession_ReturnsPlanSnapshot()
     {
-        var provider = new ZaiProvider(
+        var provider = new ZcodeProvider(
             cliIsAvailable: () => true,
             sendBalanceAsync: (_, _) => Task.FromResult(BalanceResponse()),
-            readSessionToken: () => "session-jwt",
-            apiIsAvailable: () => true,
-            apiFetchAsync: (_, _, _) => throw new AssertFailedException("API key must not be used with a local session"));
+            readSessionToken: () => "session-jwt");
 
-        var snapshot = await provider.FetchAsync("zai", new EmptyConfig(), CancellationToken.None);
+        var snapshot = await provider.FetchAsync("zcode", new EmptyConfig(), CancellationToken.None);
 
         Assert.AreEqual("ZCode Start Plan", snapshot.PlanName);
         Assert.AreEqual("ZCode CLI", snapshot.SourceLabel);
+        Assert.AreEqual("zcode", snapshot.ProviderId);
     }
 
     [TestMethod]
     public async Task FetchAsync_WithRejectedSession_ThrowsLoginRequired()
     {
-        var provider = new ZaiProvider(
+        var provider = new ZcodeProvider(
             cliIsAvailable: () => true,
             sendBalanceAsync: (_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.Unauthorized)),
             readSessionToken: () => "session-jwt");
 
         var ex = await Assert.ThrowsExactlyAsync<ProviderException>(
-            () => provider.FetchAsync("zai", new EmptyConfig(), CancellationToken.None));
+            () => provider.FetchAsync("zcode", new EmptyConfig(), CancellationToken.None));
 
         StringAssert.Contains(ex.Message, "Login required");
     }
 
     [TestMethod]
-    public async Task FetchAsync_WithoutLocalSession_FallsBackToApiKey()
+    public void Sources_CliOnlyWithDeclarativeRecovery()
     {
-        var apiCalls = 0;
-        var provider = new ZaiProvider(
-            cliIsAvailable: () => false,
-            sendBalanceAsync: (_, _) => throw new AssertFailedException("CLI must not be used without a session"),
-            readSessionToken: () => null,
-            apiIsAvailable: () => true,
-            apiFetchAsync: (_, _, _) =>
-            {
-                apiCalls++;
-                return Task.FromResult(new ProviderSnapshot
-                {
-                    ProviderId = "zai",
-                    Name = "z.ai",
-                    SourceLabel = "z.ai API",
-                    Primary = new RateWindow { Label = "Tokens", UsedPercent = 40 },
-                });
-            });
-
-        var snapshot = await provider.FetchAsync("zai", new EmptyConfig(), CancellationToken.None);
-
-        Assert.AreEqual(1, apiCalls);
-        Assert.AreEqual("z.ai API", snapshot.SourceLabel);
-    }
-
-    [TestMethod]
-    public void Sources_CliFirstWithDeclarativeRecovery()
-    {
-        var provider = new ZaiProvider(
+        var provider = new ZcodeProvider(
             cliIsAvailable: () => false,
             sendBalanceAsync: (_, _) => throw new AssertFailedException("unused"),
             readSessionToken: () => null);
 
         CollectionAssert.AreEqual(
-            new[] { "cli", "web" },
+            new[] { "cli" },
             provider.Sources.Select(source => source.Mode.ConfigValue()).ToArray());
-        var cli = provider.Sources.Single(source => source.Mode == ProviderSourceMode.Cli);
+        var cli = provider.Sources.Single();
         Assert.AreEqual("zcode.cliSourceNote", cli.AttentionNote);
         Assert.AreEqual("zcode.cliSourceNote", cli.UnavailableRecovery?.DescriptionKey);
-        Assert.IsNull(provider.Sources.Single(source => source.Mode == ProviderSourceMode.Web).UnavailableRecovery);
+    }
+
+    [TestMethod]
+    public void Registry_TreatsZaiAsApiOnlyAndZcodeAsTokenPlan()
+    {
+        Assert.IsInstanceOfType(ProviderRegistry.Create("zai"), typeof(SimpleApiProvider));
+        Assert.IsInstanceOfType(ProviderRegistry.Create("zcode"), typeof(ZcodeProvider));
+        Assert.AreEqual(0, ProviderRegistry.Create("zai").Sources.Count);
     }
 
     private static HttpResponseMessage BalanceResponse() => new(HttpStatusCode.OK)

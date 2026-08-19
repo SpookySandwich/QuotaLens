@@ -51,6 +51,7 @@ public static class Brand
         ["codebuff"]    = ("Cb", 0x9EFC62), // Codebuff green
         ["synthetic"]   = ("Sy", 0x6366F1), // Synthetic indigo
         ["zai"]         = ("z", 0x3762FF), // z.ai blue
+        ["zcode"]       = ("Z", 0x3762FF), // ZCode blue
         ["llmproxy"]    = ("LP", 0x24B47E), // proxy green
         ["doubao"]      = ("Db", 0x0066FF), // Doubao blue
         ["groq"]        = ("Gq", 0xF43E01), // Groq orange-red

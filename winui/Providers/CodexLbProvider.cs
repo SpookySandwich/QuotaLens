@@ -130,7 +130,8 @@ public sealed class CodexLbProvider : IProvider
     private sealed record EffectiveQuota(
         double RemainingPercent,
         string? NextIncrementAt,
-        List<AccountInfo> Accounts);
+        List<AccountInfo> Accounts,
+        IReadOnlyList<RateWindow> CadenceWindows);
 
     private sealed record AccountExtras(
         BalanceInfo? Balance,
@@ -198,7 +199,7 @@ public sealed class CodexLbProvider : IProvider
                 WindowMinutes = null,
             },
             Secondary = null,
-            AdditionalWindows = extras.Windows,
+            AdditionalWindows = aggregate.CadenceWindows.Concat(extras.Windows).ToList(),
             Balance = extras.Balance,
             SourceLabel = SourceLabel,
             Confidence = Confidence,
@@ -270,6 +271,7 @@ public sealed class CodexLbProvider : IProvider
         var effectiveCapacityCredits = 0.0;
         var effectiveAccounts = new List<AccountInfo>();
         var incrementCandidates = new List<IncrementCandidate>();
+        var cadences = new CadenceAccumulatorSet();
 
         foreach (var account in accounts)
         {
@@ -291,6 +293,7 @@ public sealed class CodexLbProvider : IProvider
             effectiveCapacityCredits += aggregationWeight;
 
             AddNextIncrementCandidate(incrementCandidates, windows);
+            cadences.AddAccount(windows, aggregationWeight);
 
             var primary = windows[0];
             var secondary = windows.Count > 1 ? windows[1] : null;
@@ -321,7 +324,8 @@ public sealed class CodexLbProvider : IProvider
         return new EffectiveQuota(
             Quota.ClampPercent(remainingPercent),
             EarliestFutureIso(incrementCandidates),
-            effectiveAccounts);
+            effectiveAccounts,
+            cadences.ToWindows());
     }
 
     private static EffectiveQuota BuildSummaryEffectiveQuota(UsageSummaryResponse summary)
@@ -329,13 +333,16 @@ public sealed class CodexLbProvider : IProvider
         var windows = ApplicableSummaryWindows(summary);
         var effectiveRemaining = windows.Min(window => window.RemainingPercent);
         var incrementCandidates = new List<IncrementCandidate>();
+        var cadences = new CadenceAccumulatorSet();
 
         AddNextIncrementCandidate(incrementCandidates, windows);
+        cadences.AddAccount(windows, weight: 1.0);
 
         return new EffectiveQuota(
             effectiveRemaining,
             EarliestFutureIso(incrementCandidates),
-            new List<AccountInfo>());
+            new List<AccountInfo>(),
+            cadences.ToWindows());
     }
 
     private static AccountExtras BuildAccountExtras(IReadOnlyList<AccountUsage> accounts)
@@ -764,6 +771,100 @@ public sealed class CodexLbProvider : IProvider
 
     private sealed record IncrementCandidate(string Iso, DateTimeOffset When);
     private sealed record WindowResetCandidate(int WindowIndex, IncrementCandidate Candidate);
+
+    private sealed class CadenceAccumulatorSet
+    {
+        private readonly Dictionary<QuotaCadence, CadenceAccumulator> _byCadence = new();
+
+        public void AddAccount(IReadOnlyList<ApplicableWindow> windows, double weight)
+        {
+            if (windows.Count == 0 || weight <= 0)
+                return;
+
+            ApplicableWindow? raw5h = null;
+            ApplicableWindow? rawWeekly = null;
+            ApplicableWindow? rawMonthly = null;
+            foreach (var window in windows)
+            {
+                switch (QuotaCadencePolicy.FromLabel(window.Label))
+                {
+                    case QuotaCadence.FiveHour:
+                        raw5h = window;
+                        break;
+                    case QuotaCadence.Weekly:
+                        rawWeekly = window;
+                        break;
+                    case QuotaCadence.Monthly:
+                        rawMonthly = window;
+                        break;
+                }
+            }
+
+            var monthlyRemaining = rawMonthly?.RemainingPercent;
+            var weeklyRemaining = rawWeekly is null
+                ? null
+                : (double?)Math.Min(rawWeekly.RemainingPercent, monthlyRemaining ?? 100.0);
+            var fiveHourRemaining = raw5h is null
+                ? null
+                : (double?)Math.Min(raw5h.RemainingPercent, weeklyRemaining ?? monthlyRemaining ?? 100.0);
+
+            Add(QuotaCadence.FiveHour, fiveHourRemaining, raw5h, weight);
+            Add(QuotaCadence.Weekly, weeklyRemaining, rawWeekly, weight);
+            Add(QuotaCadence.Monthly, monthlyRemaining, rawMonthly, weight);
+        }
+
+        public IReadOnlyList<RateWindow> ToWindows()
+        {
+            var windows = new List<RateWindow>(3);
+            AddIfPresent(windows, QuotaCadence.FiveHour);
+            AddIfPresent(windows, QuotaCadence.Weekly);
+            AddIfPresent(windows, QuotaCadence.Monthly);
+            return windows;
+        }
+
+        private void Add(QuotaCadence cadence, double? remaining, ApplicableWindow? source, double weight)
+        {
+            if (remaining is not double value || source is null)
+                return;
+
+            if (!_byCadence.TryGetValue(cadence, out var accumulator))
+            {
+                accumulator = new CadenceAccumulator();
+                _byCadence[cadence] = accumulator;
+            }
+
+            accumulator.RemainingWeighted += weight * value / 100.0;
+            accumulator.Capacity += weight;
+            var reset = ResolveFutureReset(source.ResetAt, source.WindowMinutes);
+            if (reset is not null)
+                accumulator.Resets.Add(reset);
+            if (accumulator.WindowMinutes is null && source.WindowMinutes is > 0)
+                accumulator.WindowMinutes = source.WindowMinutes;
+        }
+
+        private void AddIfPresent(List<RateWindow> windows, QuotaCadence cadence)
+        {
+            if (!_byCadence.TryGetValue(cadence, out var accumulator) || accumulator.Capacity <= 0)
+                return;
+
+            var remaining = accumulator.RemainingWeighted / accumulator.Capacity * 100.0;
+            windows.Add(new RateWindow
+            {
+                Label = QuotaCadencePolicy.EffectiveLabel(cadence),
+                UsedPercent = Quota.UsedPercentFromRemaining(Quota.ClampPercent(remaining)),
+                ResetsAt = EarliestFutureIso(accumulator.Resets),
+                WindowMinutes = accumulator.WindowMinutes ?? QuotaCadencePolicy.DefaultWindowMinutes(cadence),
+            });
+        }
+    }
+
+    private sealed class CadenceAccumulator
+    {
+        public double RemainingWeighted;
+        public double Capacity;
+        public long? WindowMinutes;
+        public List<IncrementCandidate> Resets { get; } = new();
+    }
 
     private static string? AccountLabel(AccountUsage account) =>
         FirstNonEmpty(account.DisplayName) ?? FirstNonEmpty(account.Email) ?? FirstNonEmpty(account.Alias);

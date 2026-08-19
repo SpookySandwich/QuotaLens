@@ -71,7 +71,7 @@ public sealed partial class DashboardViewModel : ObservableObject
     [ObservableProperty] public partial bool IsRefreshingAll { get; set; }
     [ObservableProperty] public partial bool IsSensitiveInfoHidden { get; set; }
     [ObservableProperty] public partial bool IsProviderGridMultiColumn { get; set; }
-    [ObservableProperty] public partial ProviderSortMode SortMode { get; set; } = ProviderSortMode.PlanValue;
+    [ObservableProperty] public partial ProviderSortMode SortMode { get; set; } = ProviderSortMode.FiveHour;
 
     private Color _ambientTintColor = TransparentColor();
     private string _ambientProviderType = "";
@@ -106,18 +106,21 @@ public sealed partial class DashboardViewModel : ObservableObject
     public string SensitiveInfoGlyph => IsSensitiveInfoHidden ? "\uED1A" : "\uE890";
     public string AddProviderTitle => I18n.T("addProvider.title");
     public string SortTitle => I18n.T("sort.title");
-    public string SortByPlanValueTitle => I18n.T("sort.planValue");
-    public string SortByResetFrequencyTitle => I18n.T("sort.resetFrequency");
-    public string SortByNextResetTitle => I18n.T("sort.nextReset");
+    public string SortBy5hTitle => I18n.T("sort.5h");
+    public string SortByWeeklyTitle => I18n.T("sort.weekly");
+    public string SortByMonthlyTitle => I18n.T("sort.monthly");
+    public string SortByValueTitle => I18n.T("sort.value");
     public string CurrentSortTitle => SortMode switch
     {
-        ProviderSortMode.ResetFrequency => SortByResetFrequencyTitle,
-        ProviderSortMode.NextReset => SortByNextResetTitle,
-        _ => SortByPlanValueTitle,
+        ProviderSortMode.Weekly => SortByWeeklyTitle,
+        ProviderSortMode.Monthly => SortByMonthlyTitle,
+        ProviderSortMode.PlanValue => SortByValueTitle,
+        _ => SortBy5hTitle,
     };
-    public bool IsPlanValueSort => SortMode == ProviderSortMode.PlanValue;
-    public bool IsResetFrequencySort => SortMode == ProviderSortMode.ResetFrequency;
-    public bool IsNextResetSort => SortMode == ProviderSortMode.NextReset;
+    public bool IsFiveHourSort => SortMode == ProviderSortMode.FiveHour;
+    public bool IsWeeklySort => SortMode == ProviderSortMode.Weekly;
+    public bool IsMonthlySort => SortMode == ProviderSortMode.Monthly;
+    public bool IsValueSort => SortMode == ProviderSortMode.PlanValue;
     public bool IsUsageTimelineVisible => UsageTimelineVisibleFor(Hero.HasUsageTimeline, IsProviderGridMultiColumn);
 
     public static bool UsageTimelineVisibleFor(bool hasUsageTimeline, bool isProviderGridMultiColumn) =>
@@ -257,9 +260,10 @@ public sealed partial class DashboardViewModel : ObservableObject
         OnPropertyChanged(nameof(SensitiveInfoGlyph));
         OnPropertyChanged(nameof(AddProviderTitle));
         OnPropertyChanged(nameof(SortTitle));
-        OnPropertyChanged(nameof(SortByPlanValueTitle));
-        OnPropertyChanged(nameof(SortByResetFrequencyTitle));
-        OnPropertyChanged(nameof(SortByNextResetTitle));
+        OnPropertyChanged(nameof(SortBy5hTitle));
+        OnPropertyChanged(nameof(SortByWeeklyTitle));
+        OnPropertyChanged(nameof(SortByMonthlyTitle));
+        OnPropertyChanged(nameof(SortByValueTitle));
         OnPropertyChanged(nameof(CurrentSortTitle));
         BuildItems();
         UpdateHero();
@@ -303,7 +307,7 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     private void UpdateHero()
     {
-        Hero.Update(_svc, _sortPriorityOrder, IsSensitiveInfoHidden);
+        Hero.Update(_svc, _sortPriorityOrder, IsSensitiveInfoHidden, SortMode);
         OnPropertyChanged(nameof(IsUsageTimelineVisible));
         UpdateAmbientTint();
     }
@@ -318,11 +322,13 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     partial void OnSortModeChanged(ProviderSortMode value)
     {
-        OnPropertyChanged(nameof(IsPlanValueSort));
-        OnPropertyChanged(nameof(IsResetFrequencySort));
-        OnPropertyChanged(nameof(IsNextResetSort));
+        OnPropertyChanged(nameof(IsFiveHourSort));
+        OnPropertyChanged(nameof(IsWeeklySort));
+        OnPropertyChanged(nameof(IsMonthlySort));
+        OnPropertyChanged(nameof(IsValueSort));
         OnPropertyChanged(nameof(CurrentSortTitle));
         ApplyCachedSortOrder();
+        UpdateHero();
     }
 
     partial void OnIsSensitiveInfoHiddenChanged(bool value)

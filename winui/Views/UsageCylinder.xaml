@@ -7,7 +7,7 @@
     mc:Ignorable="d">
 
     <StackPanel x:Name="RootPanel"
-                Spacing="8"
+                Spacing="0"
                 HorizontalAlignment="Stretch"
-                MinHeight="74" />
+                MinHeight="36" />
 </UserControl>

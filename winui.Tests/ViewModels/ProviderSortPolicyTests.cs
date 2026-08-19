@@ -23,35 +23,88 @@ public sealed class ProviderSortPolicyTests
     }
 
     [TestMethod]
-    public void Order_ByResetFrequency_UsesConfiguredSecondaryPrioritiesAfterFrequency()
+    public void Order_ByFiveHour_PrioritizesFiveHourPlansAndSortsByResetTime()
     {
         var items = new[]
         {
-            Item("short-low-value", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 80, resetTier: ProviderPriority.ShortResetTier, resetMinutesUntil: 240),
-            Item("weekly-high-value", ProviderPriority.UsableSubscriptionBucket, planValue: 100, availability: 10, resetTier: ProviderPriority.MediumResetTier, resetMinutesUntil: 5),
+            Item("weekly-plan", ProviderPriority.UsableSubscriptionBucket, planValue: 100, availability: 80, hasWeekly: true, weeklyMinutesUntil: 10),
+            Item("5h-later", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 50, hasFiveHour: true, fiveHourMinutesUntil: 120),
+            Item("5h-sooner", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 50, hasFiveHour: true, fiveHourMinutesUntil: 30),
         };
 
-        var ordered = ProviderSortPolicy.Order(
-            items,
-            ProviderSortMode.ResetFrequency,
-            x => x.Score,
-            new[] { ProviderSortTerm.PlanValue, ProviderSortTerm.ResetFrequency, ProviderSortTerm.NextReset });
+        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.FiveHour, x => x.Score);
 
-        Assert.AreEqual("short-low-value", ordered[0].Id);
+        Assert.AreEqual("5h-sooner", ordered[0].Id);
+        Assert.AreEqual("5h-later", ordered[1].Id);
+        Assert.AreEqual("weekly-plan", ordered[2].Id);
     }
 
     [TestMethod]
-    public void Order_ByNextReset_UsesNextResetAsPrimaryProperty()
+    public void Order_ByWeekly_PrioritizesWeeklyPlansAndSortsByResetTime()
     {
         var items = new[]
         {
-            Item("short-later", ProviderPriority.UsableSubscriptionBucket, planValue: 100, availability: 80, resetTier: ProviderPriority.ShortResetTier, resetMinutesUntil: 240),
-            Item("weekly-sooner", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 10, resetTier: ProviderPriority.MediumResetTier, resetMinutesUntil: 5),
+            Item("5h-plan", ProviderPriority.UsableSubscriptionBucket, planValue: 100, availability: 80, hasFiveHour: true, fiveHourMinutesUntil: 10),
+            Item("weekly-later", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 50, hasWeekly: true, weeklyMinutesUntil: 500),
+            Item("weekly-sooner", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 50, hasWeekly: true, weeklyMinutesUntil: 100),
         };
 
-        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.NextReset, x => x.Score);
+        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.Weekly, x => x.Score);
 
         Assert.AreEqual("weekly-sooner", ordered[0].Id);
+        Assert.AreEqual("weekly-later", ordered[1].Id);
+        Assert.AreEqual("5h-plan", ordered[2].Id);
+    }
+
+    [TestMethod]
+    public void Order_ByMonthly_PrioritizesMonthlyPlansAndSortsByResetTime()
+    {
+        var items = new[]
+        {
+            Item("weekly-plan", ProviderPriority.UsableSubscriptionBucket, planValue: 100, availability: 80, hasWeekly: true, weeklyMinutesUntil: 10),
+            Item("monthly-later", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 50, hasMonthly: true, monthlyMinutesUntil: 5000),
+            Item("monthly-sooner", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 50, hasMonthly: true, monthlyMinutesUntil: 1000),
+        };
+
+        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.Monthly, x => x.Score);
+
+        Assert.AreEqual("monthly-sooner", ordered[0].Id);
+        Assert.AreEqual("monthly-later", ordered[1].Id);
+        Assert.AreEqual("weekly-plan", ordered[2].Id);
+    }
+
+    [TestMethod]
+    public void Order_ByPlanValue_PrioritizesHighValueSubscriptionsBeforeBalances()
+    {
+        var items = new[]
+        {
+            Item("deepseek", ProviderPriority.PayAsYouGoBucket, planValue: -1, availability: 100, payAsYouGo: true, hasBalance: true, balanceAmount: 3.32),
+            Item("grok", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 90),
+            Item("claude-max", ProviderPriority.UsableSubscriptionBucket, planValue: 200, availability: 80),
+        };
+
+        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.PlanValue, x => x.Score);
+
+        Assert.AreEqual("claude-max", ordered[0].Id);
+        Assert.AreEqual("grok", ordered[1].Id);
+        Assert.AreEqual("deepseek", ordered[2].Id);
+    }
+
+    [TestMethod]
+    public void Order_ByFiveHour_FallsBackToWeeklyThenMonthly()
+    {
+        var items = new[]
+        {
+            Item("monthly", ProviderPriority.UsableSubscriptionBucket, planValue: 50, availability: 50, hasMonthly: true, monthlyMinutesUntil: 1000),
+            Item("weekly", ProviderPriority.UsableSubscriptionBucket, planValue: 50, availability: 50, hasWeekly: true, weeklyMinutesUntil: 100),
+            Item("5h", ProviderPriority.UsableSubscriptionBucket, planValue: 50, availability: 50, hasFiveHour: true, fiveHourMinutesUntil: 10),
+        };
+
+        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.FiveHour, x => x.Score);
+
+        Assert.AreEqual("5h", ordered[0].Id);
+        Assert.AreEqual("weekly", ordered[1].Id);
+        Assert.AreEqual("monthly", ordered[2].Id);
     }
 
     [TestMethod]
@@ -83,20 +136,20 @@ public sealed class ProviderSortPolicyTests
                 ProviderPriority.ExhaustedSubscriptionBucket,
                 planValue: 100,
                 availability: 0,
-                resetTier: ProviderPriority.ShortResetTier,
-                resetMinutesUntil: 1),
+                hasFiveHour: true,
+                fiveHourMinutesUntil: 1),
             Item(
                 "usable-later",
                 ProviderPriority.UsableSubscriptionBucket,
                 planValue: 20,
                 availability: 90,
-                resetTier: ProviderPriority.LongResetTier,
-                resetMinutesUntil: 240),
+                hasFiveHour: true,
+                fiveHourMinutesUntil: 240),
         };
 
         var ordered = ProviderSortPolicy.Order(
             items,
-            ProviderSortMode.NextReset,
+            ProviderSortMode.FiveHour,
             x => x.Score,
             deprioritizeEmptyProviders: true);
 
@@ -114,20 +167,20 @@ public sealed class ProviderSortPolicyTests
                 ProviderPriority.ExhaustedSubscriptionBucket,
                 planValue: 100,
                 availability: 0,
-                resetTier: ProviderPriority.ShortResetTier,
-                resetMinutesUntil: 1),
+                hasFiveHour: true,
+                fiveHourMinutesUntil: 1),
             Item(
                 "usable-later",
                 ProviderPriority.UsableSubscriptionBucket,
                 planValue: 20,
                 availability: 90,
-                resetTier: ProviderPriority.LongResetTier,
-                resetMinutesUntil: 240),
+                hasFiveHour: true,
+                fiveHourMinutesUntil: 240),
         };
 
         var ordered = ProviderSortPolicy.Order(
             items,
-            ProviderSortMode.NextReset,
+            ProviderSortMode.FiveHour,
             x => x.Score,
             deprioritizeEmptyProviders: false);
 
@@ -168,8 +221,8 @@ public sealed class ProviderSortPolicyTests
     {
         var items = new[]
         {
-            Item("subscription-full", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 100, resetTier: ProviderPriority.ShortResetTier, resetMinutesUntil: 30),
-            Item("subscription-used", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 7, resetTier: ProviderPriority.ShortResetTier, resetMinutesUntil: 30),
+            Item("subscription-full", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 100),
+            Item("subscription-used", ProviderPriority.UsableSubscriptionBucket, planValue: 20, availability: 7),
         };
 
         var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.PlanValue, x => x.Score);
@@ -193,96 +246,6 @@ public sealed class ProviderSortPolicyTests
         Assert.AreEqual("error", ordered[1].Id);
     }
 
-    [TestMethod]
-    public void Order_ByResetFrequency_UsesConfiguredSecondaryPrioritiesAfterFrequencyTies()
-    {
-        var items = new[]
-        {
-            Item(
-                "short-window-just-reset",
-                ProviderPriority.ExhaustedSubscriptionBucket,
-                planValue: 100,
-                availability: 0,
-                resetTier: ProviderPriority.ShortResetTier,
-                resetMinutesUntil: 240),
-            Item(
-                "short-window-soon",
-                ProviderPriority.ExhaustedSubscriptionBucket,
-                planValue: 20,
-                availability: 0,
-                resetTier: ProviderPriority.ShortResetTier,
-                resetMinutesUntil: 5),
-        };
-
-        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.ResetFrequency, x => x.Score);
-
-        Assert.AreEqual("short-window-just-reset", ordered[0].Id);
-        Assert.AreEqual("short-window-soon", ordered[1].Id);
-    }
-
-    [TestMethod]
-    public void Order_ByResetFrequency_PrioritizesShortWindowOverMonthlyEvenWhenMonthlyIsSooner()
-    {
-        var items = new[]
-        {
-            Item(
-                "monthly-soon",
-                ProviderPriority.ExhaustedSubscriptionBucket,
-                planValue: 100,
-                availability: 0,
-                resetTier: ProviderPriority.LongResetTier,
-                resetMinutesUntil: 1),
-            Item(
-                "short-window-hours",
-                ProviderPriority.ExhaustedSubscriptionBucket,
-                planValue: 20,
-                availability: 0,
-                resetTier: ProviderPriority.ShortResetTier,
-                resetMinutesUntil: 240),
-        };
-
-        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.ResetFrequency, x => x.Score);
-
-        Assert.AreEqual("short-window-hours", ordered[0].Id);
-        Assert.AreEqual("monthly-soon", ordered[1].Id);
-    }
-
-    [TestMethod]
-    public void Order_ByResetFrequency_StillUsesPlanValueBeforeFallbackStatus()
-    {
-        var items = new[]
-        {
-            Item(
-                "error",
-                ProviderPriority.ErrorOrPendingBucket,
-                planValue: 0,
-                availability: 0,
-                resetTier: ProviderPriority.ShortResetTier,
-                resetMinutesUntil: 1),
-            Item(
-                "paygo",
-                ProviderPriority.PayAsYouGoBucket,
-                planValue: -1,
-                availability: 0,
-                payAsYouGo: true,
-                resetTier: ProviderPriority.ShortResetTier,
-                resetMinutesUntil: 1),
-            Item(
-                "subscription",
-                ProviderPriority.ExhaustedSubscriptionBucket,
-                planValue: 20,
-                availability: 0,
-                resetTier: ProviderPriority.ShortResetTier,
-                resetMinutesUntil: 30),
-        };
-
-        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.ResetFrequency, x => x.Score);
-
-        Assert.AreEqual("subscription", ordered[0].Id);
-        Assert.AreEqual("error", ordered[1].Id);
-        Assert.AreEqual("paygo", ordered[2].Id);
-    }
-
     private static SortItem Item(
         string id,
         int bucket,
@@ -290,8 +253,36 @@ public sealed class ProviderSortPolicyTests
         double availability,
         bool payAsYouGo = false,
         int resetTier = ProviderPriority.NoResetTier,
-        double resetMinutesUntil = double.PositiveInfinity) =>
-        new(id, new ProviderPriorityScore(bucket, planValue, availability, payAsYouGo, resetTier, resetMinutesUntil));
+        double resetMinutesUntil = double.PositiveInfinity,
+        bool hasFiveHour = false,
+        double fiveHourMinutesUntil = double.PositiveInfinity,
+        double fiveHourAvailability = 0.0,
+        bool hasWeekly = false,
+        double weeklyMinutesUntil = double.PositiveInfinity,
+        double weeklyAvailability = 0.0,
+        bool hasMonthly = false,
+        double monthlyMinutesUntil = double.PositiveInfinity,
+        double monthlyAvailability = 0.0,
+        bool hasBalance = false,
+        double balanceAmount = 0.0) =>
+        new(id, new ProviderPriorityScore(
+            bucket,
+            planValue,
+            availability,
+            payAsYouGo,
+            resetTier,
+            resetMinutesUntil,
+            hasFiveHour,
+            fiveHourMinutesUntil,
+            fiveHourAvailability,
+            hasWeekly,
+            weeklyMinutesUntil,
+            weeklyAvailability,
+            hasMonthly,
+            monthlyMinutesUntil,
+            monthlyAvailability,
+            hasBalance,
+            balanceAmount));
 
     private sealed record SortItem(string Id, ProviderPriorityScore Score);
 }

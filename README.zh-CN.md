@@ -4,7 +4,7 @@
 
 **一眼就知道现在该用哪个 AI 编程工具。**
 
-一款原生 Windows 面板，统一查看 **48 家 AI 编程服务商**的额度、用量与余额。<br>
+一款原生 Windows 面板，统一查看 **50 家 AI 编程服务商**的额度、用量与余额。<br>
 QuotaLens 无后端、无需注册账号，也没有遥测。
 
 [![Build](https://img.shields.io/github/actions/workflow/status/SpookySandwich/QuotaLens/windows-installer.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=build)](https://github.com/SpookySandwich/QuotaLens/actions/workflows/windows-installer.yml)
@@ -12,7 +12,7 @@ QuotaLens 无后端、无需注册账号，也没有遥测。
 ![Platform](https://img.shields.io/badge/平台-Windows%2011%20x64-0078D4?style=flat-square&logo=windows11&logoColor=white)
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white)
 ![WinUI 3](https://img.shields.io/badge/UI-WinUI%203-0078D4?style=flat-square&logo=windows&logoColor=white)
-![Providers](https://img.shields.io/badge/服务商-支持%2048%20家-10B981?style=flat-square)
+![Providers](https://img.shields.io/badge/服务商-支持%2050%20家-10B981?style=flat-square)
 ![Privacy](https://img.shields.io/badge/隐私-100%25%20本地%20%7C%20零遥测-success?style=flat-square)
 [![License](https://img.shields.io/github/license/SpookySandwich/QuotaLens?style=flat-square&label=license)](LICENSE)
 
@@ -27,7 +27,7 @@ QuotaLens 无后端、无需注册账号，也没有遥测。
 |  |  |  |
 | :-- | :-- | :-- |
 | **现在用这个**<br>一眼看出哪个付费套餐仍有可用余量。 | **看清全部余量**<br>不用逐个打开工具，也能比较剩余容量。 | **知道何时恢复**<br>重置倒计时让你更容易安排工作。 |
-| **一个清爽面板**<br>额度周期、余额和账号集中在一处。 | **48 家服务商**<br>把混用的 AI 编程工具放进同一个视图。 | **快速开始**<br>添加常用工具，剩下的交给 QuotaLens。 |
+| **一个清爽面板**<br>额度周期、余额和账号集中在一处。 | **50 家服务商**<br>把混用的 AI 编程工具放进同一个视图。 | **快速开始**<br>添加常用工具，剩下的交给 QuotaLens。 |
 | **隐私开关**<br>一键遮蔽邮箱和余额，方便共享屏幕。 | **随你排序**<br>优先显示你最关心的套餐与重置时间。 | **原生 Win11 体验**<br>快速、专注，支持英文和简体中文。 |
 
 ## 安装
@@ -50,7 +50,7 @@ AI 编程额度散落在不同的应用、CLI、网站、账号和重置周期�
 推荐卡片告诉你现在适合使用哪个套餐，时间线展示整体续航，服务商卡片则呈现这项选择背后的额度与重置时间。
 
 <details>
-<summary><b>全部 48 家服务商</b></summary>
+<summary><b>全部 50 家服务商</b></summary>
 
 <br>
 

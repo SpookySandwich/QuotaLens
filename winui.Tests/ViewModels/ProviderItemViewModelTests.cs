@@ -423,8 +423,8 @@ public sealed class ProviderItemViewModelTests
         viewModel.Update(snapshot, refreshing: false);
 
         Assert.AreEqual(5, viewModel.Rows.Count);
-        Assert.AreEqual("5h Pool", viewModel.Rows[0].Label);
-        Assert.AreEqual("Weekly Pool", viewModel.Rows[1].Label);
+        Assert.AreEqual("5h", viewModel.Rows[0].Label);
+        Assert.AreEqual("Weekly", viewModel.Rows[1].Label);
         Assert.AreEqual("Credits", viewModel.Rows[2].Label);
         Assert.AreEqual("Codex Spark 5-hour", viewModel.Rows[3].Label);
         Assert.AreEqual("Codex Spark Weekly", viewModel.Rows[4].Label);
@@ -485,7 +485,7 @@ public sealed class ProviderItemViewModelTests
             DetailText = "You have used some of your weekly limit, it will fully refresh later.",
         });
 
-        StringAssert.StartsWith(row.ResetText, "resets in 3h 12m");
+        StringAssert.StartsWith(row.ResetText, "You have used some of your weekly limit, it will fully refresh later. · resets in 3h");
     }
 
     [TestMethod]
@@ -523,7 +523,7 @@ public sealed class ProviderItemViewModelTests
 
         Assert.AreEqual(CardKind.Rate, viewModel.Kind);
         Assert.AreEqual(2, viewModel.Rows.Count);
-        Assert.AreEqual("5h Pool", viewModel.Rows[0].Label);
+        Assert.AreEqual("5h", viewModel.Rows[0].Label);
         Assert.AreEqual("Weekly", viewModel.Rows[1].Label);
         Assert.AreEqual("¥88.50 balance", viewModel.InlineBalance);
     }

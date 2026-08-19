@@ -202,16 +202,19 @@
                         <controls:SelectorBar x:Name="SortSelector"
                                               SelectionChanged="OnSortSelectorSelectionChanged"
                                               AutomationProperties.AutomationId="SortSelector">
-                            <controls:SelectorBarItem x:Name="SortByPlanValueItem"
-                                                      Text="{x:Bind Vm.SortByPlanValueTitle, Mode=OneWay}"
+                            <controls:SelectorBarItem x:Name="SortBy5hItem"
+                                                      Text="{x:Bind Vm.SortBy5hTitle, Mode=OneWay}"
                                                       IsSelected="True"
-                                                      AutomationProperties.AutomationId="SortByPlanValueItem" />
-                            <controls:SelectorBarItem x:Name="SortByResetFrequencyItem"
-                                                      Text="{x:Bind Vm.SortByResetFrequencyTitle, Mode=OneWay}"
-                                                      AutomationProperties.AutomationId="SortByResetFrequencyItem" />
-                            <controls:SelectorBarItem x:Name="SortByNextResetItem"
-                                                      Text="{x:Bind Vm.SortByNextResetTitle, Mode=OneWay}"
-                                                      AutomationProperties.AutomationId="SortByNextResetItem" />
+                                                      AutomationProperties.AutomationId="SortBy5hItem" />
+                            <controls:SelectorBarItem x:Name="SortByWeeklyItem"
+                                                      Text="{x:Bind Vm.SortByWeeklyTitle, Mode=OneWay}"
+                                                      AutomationProperties.AutomationId="SortByWeeklyItem" />
+                            <controls:SelectorBarItem x:Name="SortByMonthlyItem"
+                                                      Text="{x:Bind Vm.SortByMonthlyTitle, Mode=OneWay}"
+                                                      AutomationProperties.AutomationId="SortByMonthlyItem" />
+                            <controls:SelectorBarItem x:Name="SortByValueItem"
+                                                      Text="{x:Bind Vm.SortByValueTitle, Mode=OneWay}"
+                                                      AutomationProperties.AutomationId="SortByValueItem" />
                         </controls:SelectorBar>
                     </StackPanel>
                 </Grid>

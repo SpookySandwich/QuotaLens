@@ -24,10 +24,9 @@ public sealed class ProviderLaunchActionTests
         Assert.IsInstanceOfType<WebProviderLaunchAction>(
             kimi.Single(source => source.Mode == ProviderSourceMode.Web).LaunchAction);
 
-        var zai = ProviderRegistry.Create("zai").Sources;
+        var zcode = ProviderRegistry.Create("zcode").Sources;
         Assert.IsInstanceOfType<AppProviderLaunchAction>(
-            zai.Single(source => source.Mode == ProviderSourceMode.Cli).LaunchAction);
-        Assert.IsNull(zai.Single(source => source.Mode == ProviderSourceMode.Web).LaunchAction);
+            zcode.Single(source => source.Mode == ProviderSourceMode.Cli).LaunchAction);
 
         Assert.IsInstanceOfType<WebProviderLaunchAction>(
             ProviderRegistry.Create("cursor").Sources.Single().LaunchAction);
@@ -102,16 +101,18 @@ public sealed class ProviderLaunchActionTests
     [TestMethod]
     public void Resolver_SelectedNativeSourceWithoutActionDoesNotBorrowAnotherSourceAction()
     {
-        const string instanceId = "zai-work";
-        var provider = ProviderRegistry.Create("zai");
+        const string instanceId = "kimi-work";
+        var provider = ProviderRegistry.Create("kimi");
         var config = new MapConfig
         {
             [$"{instanceId}.{ProviderSourceRunner.SourceConfigKey}"] = "web",
         };
 
+        // Kimi Web has its own launch action; this asserts the resolver still
+        // returns that source's action rather than borrowing App/CLI.
         var action = ProviderRegistry.LaunchActionFor(provider, instanceId, config);
 
-        Assert.IsNull(action);
+        Assert.IsInstanceOfType<WebProviderLaunchAction>(action);
     }
 
     [TestMethod]
@@ -212,13 +213,13 @@ public sealed class ProviderLaunchActionTests
         try
         {
             File.WriteAllBytes(executable, []);
-            const string instanceId = "zai-work";
+            const string instanceId = "zcode-work";
             var config = new MapConfig
             {
                 [$"{instanceId}.{ProviderSourceRunner.SourceConfigKey}"] = "cli",
-                [$"{instanceId}.zai_app_path"] = executable,
+                [$"{instanceId}.zcode_app_path"] = executable,
             };
-            var provider = ProviderRegistry.Create("zai");
+            var provider = ProviderRegistry.Create("zcode");
             var action = ProviderRegistry.LaunchActionFor(provider, instanceId, config);
 
             var info = action?.GetInfo(instanceId, config);

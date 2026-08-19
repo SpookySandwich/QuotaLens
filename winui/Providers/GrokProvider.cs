@@ -734,11 +734,11 @@ public sealed class GrokProvider : IProvider
                 billing.SubscriptionTier ?? billing.SubscriptionTierCamel),
             Primary = new RateWindow
             {
-                Label = "Monthly included",
+                Label = monthlyLimitCents > 0 ? "Monthly included" : "Usage",
                 UsedPercent = usedPercent,
                 ResetsAt = resetsAt?.ToString("O", CultureInfo.InvariantCulture),
                 DetailText = primaryDescription,
-                WindowMinutes = windowMinutes,
+                WindowMinutes = monthlyLimitCents > 0 ? windowMinutes : null,
             },
             Secondary = secondary,
             Balance = new BalanceInfo

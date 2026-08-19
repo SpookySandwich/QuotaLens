@@ -51,6 +51,9 @@ public sealed class KiroProviderTests
         Assert.AreEqual("kiro-main", snapshot.ProviderId);
         Assert.AreEqual("Kiro", snapshot.Name);
         Assert.AreEqual(25d, snapshot.Primary.UsedPercent);
+        Assert.AreEqual("Monthly credits", snapshot.Primary.Label);
+        Assert.AreEqual(QuotaCadencePolicy.MonthlyMinutes, snapshot.Primary.WindowMinutes);
+        Assert.IsTrue(snapshot.Primary.CountsForAvailability);
         StringAssert.Contains(snapshot.Primary.DetailText, "Overage: 3 credits · $0.12 USD");
         Assert.IsNotNull(snapshot.Secondary);
         Assert.AreEqual("Bonus credits", snapshot.Secondary!.Label);

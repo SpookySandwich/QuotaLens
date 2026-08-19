@@ -380,7 +380,7 @@ public sealed class ProviderConnectionTests
     [TestMethod]
     public void Providers_AppSourcesOwnOpenAppActions()
     {
-        foreach (var providerType in new[] { "gemini", "kimi", "zai" })
+        foreach (var providerType in new[] { "gemini", "kimi", "zcode" })
         {
             var action = ProviderRegistry.Create(providerType).Sources
                 .Single(source => source.ConnectionAction?.Kind == ProviderConnectionActionKind.OpenApp)

@@ -12,7 +12,11 @@ public static class ResetFormatter
     public static string? FormatCaption(RateWindow window, DateTimeOffset? now = null)
     {
         ArgumentNullException.ThrowIfNull(window);
-        return FormatReset(window.ResetsAt, now) ?? window.DetailText;
+        var reset = FormatReset(window.ResetsAt, now);
+        var detail = string.IsNullOrWhiteSpace(window.DetailText) ? null : window.DetailText.Trim();
+        if (reset is not null && detail is not null)
+            return $"{detail} · {reset}";
+        return reset ?? detail;
     }
 
     public static string? FormatReset(string? iso, DateTimeOffset? now = null)

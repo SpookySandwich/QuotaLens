@@ -19,18 +19,19 @@ public sealed class ProviderAddOptionTests
     }
 
     [TestMethod]
-    public void AddableTypes_ShowSingleAlibabaEntry()
+    public void AddableTypes_ShowCodingPlanAndTokenPlanAsSeparateAlibabaProducts()
     {
         var options = ProviderAddOptions.Build(Catalog.AddableTypes);
         var alibabaIds = options
             .Where(option => option.Name.Contains("Alibaba", StringComparison.OrdinalIgnoreCase))
             .Select(option => option.Id)
+            .OrderBy(id => id, StringComparer.Ordinal)
             .ToArray();
 
-        CollectionAssert.AreEqual(new[] { "alibaba" }, alibabaIds);
+        CollectionAssert.AreEqual(new[] { "alibaba", "alibabatokenplan" }, alibabaIds);
         Assert.IsTrue(Catalog.IsAddableProviderType("alibaba"));
+        Assert.IsTrue(Catalog.IsAddableProviderType("alibabatokenplan"));
         Assert.IsFalse(Catalog.IsAddableProviderType("alibabacloud"));
-        Assert.IsFalse(Catalog.IsAddableProviderType("alibabatokenplan"));
     }
 
     [TestMethod]

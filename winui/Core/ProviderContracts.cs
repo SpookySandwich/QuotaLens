@@ -288,6 +288,10 @@ public static class ProviderContracts
             ProviderContractStability.UpstreamCompatibility,
             ProviderCapability.QuotaWindows | ProviderCapability.DynamicWindows,
             new[] { "api.z.ai", "open.bigmodel.cn" });
+        Add(contracts, "zcode", ProviderAuthKind.LocalCli, ProviderSourceKind.OfficialApi,
+            ProviderContractStability.UpstreamCompatibility,
+            ProviderCapability.QuotaWindows | ProviderCapability.DynamicWindows,
+            new[] { "zcode.z.ai" });
     }
 
     private static void AddPrivateDashboardContracts(IDictionary<string, ProviderContract> contracts)

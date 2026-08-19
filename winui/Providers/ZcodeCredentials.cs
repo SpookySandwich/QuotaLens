@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -16,8 +17,7 @@ namespace QuotaLens.Providers;
 ///
 /// READ-ONLY BY POLICY: the store belongs to ZCode; QuotaLens never writes to it
 /// and never refreshes its tokens. An unreadable store (future enc:v2, changed
-/// scheme, signed out) simply means no local session — the provider falls back to
-/// the API-key source and the user renews by opening ZCode.
+/// scheme, signed out) simply means no local session — the user renews by opening ZCode.
 /// Enforced by ReadOnlyProviderSafetyTests.
 /// </summary>
 internal static class ZcodeCredentials
@@ -34,7 +34,9 @@ internal static class ZcodeCredentials
     /// </summary>
     internal static string StorePath(IConfig? config, string instanceId)
     {
-        var configured = config?.GetScoped(instanceId, "zai_home") ?? "";
+        var configured = FirstNonEmpty(
+            config?.GetScoped(instanceId, "zcode_home"),
+            config?.GetScoped(instanceId, "zai_home")) ?? "";
         var home = string.IsNullOrWhiteSpace(configured)
             ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".zcode")
             : Environment.ExpandEnvironmentVariables(configured.Trim().Trim('"'));
@@ -130,4 +132,7 @@ internal static class ZcodeCredentials
 
     private static string ToB64Url(byte[] bytes) =>
         Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+    private static string? FirstNonEmpty(params string?[] values) =>
+        values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 }

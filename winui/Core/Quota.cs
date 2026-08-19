@@ -33,6 +33,18 @@ public static class Quota
         return $"{Math.Round(pct)}%";
     }
 
+    public static string FormatUsd(double amount)
+    {
+        if (!double.IsFinite(amount))
+            return "$0";
+
+        var abs = Math.Abs(amount);
+        var formatted = abs >= 100
+            ? abs.ToString("0", System.Globalization.CultureInfo.InvariantCulture)
+            : abs.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
+        return amount < 0 ? $"-${formatted}" : $"${formatted}";
+    }
+
     // Severity cutoffs by AVAILABLE percent: <=5 critical, <=25 warning, <=50 busy, else good.
     public static Severity SeverityForAvailable(double availablePct) =>
         availablePct <= 5 ? Severity.Critical

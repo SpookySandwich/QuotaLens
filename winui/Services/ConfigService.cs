@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using QuotaLens.Core;
 using QuotaLens.Providers;
@@ -24,6 +25,7 @@ public sealed class ConfigService : IConfigService
     private const string ScopedProviderConfigMigrationKey = "provider_scoped_config_v2";
     private const string InternalProviderAliasesMigrationKey = "provider_internal_aliases_v1";
     private const string ConfigKeyAliasesMigrationKey = "config_key_aliases_v1";
+    private const string ZcodeSplitMigrationKey = "provider_zcode_split_v1";
 
     /// Default refresh interval when min_refresh_interval_secs is unset (seconds).
     private const int DefaultRefreshSecs = 1800;
@@ -224,6 +226,9 @@ public sealed class ConfigService : IConfigService
         var shouldMigrateInternalProviderAliases = !IsTrue(_config.GetValueOrDefault(InternalProviderAliasesMigrationKey));
         var migratedInternalProviderAliases = shouldMigrateInternalProviderAliases && MigrateInternalProviderAliases();
 
+        var shouldMigrateZcodeSplit = !IsTrue(_config.GetValueOrDefault(ZcodeSplitMigrationKey));
+        var migratedZcodeSplit = shouldMigrateZcodeSplit && MigrateZcodeSplit();
+
         var loadedConfig = (IReadOnlyDictionary<string, string>?)stored ?? migrated?.Config;
         var shouldMigrateConfigKeyAliases = !IsTrue(_config.GetValueOrDefault(ConfigKeyAliasesMigrationKey));
         var migratedConfigKeyAliases = shouldMigrateConfigKeyAliases && MigrateConfigKeyAliases(loadedConfig);
@@ -241,14 +246,18 @@ public sealed class ConfigService : IConfigService
             _config[InternalProviderAliasesMigrationKey] = "true";
         if (shouldMigrateConfigKeyAliases)
             _config[ConfigKeyAliasesMigrationKey] = "true";
+        if (shouldMigrateZcodeSplit)
+            _config[ZcodeSplitMigrationKey] = "true";
 
         if (!configExisted
             || shouldMigrateImplicitDefaults
             || migratedInternalProviderAliases
             || migratedConfigKeyAliases
+            || migratedZcodeSplit
             || shouldMigrateScopedProviderConfig
             || shouldMigrateInternalProviderAliases
-            || shouldMigrateConfigKeyAliases)
+            || shouldMigrateConfigKeyAliases
+            || shouldMigrateZcodeSplit)
         {
             _config[InstancesExplicitConfigKey] = "true";
             _config[ScopedProviderConfigMigrationKey] = "true";
@@ -338,6 +347,21 @@ public sealed class ConfigService : IConfigService
                 _instances.Insert(Math.Clamp(firstInternalIndex, 0, _instances.Count), new ProviderInstance(alibaba.Id, alibaba.Id, alibaba.Name));
         }
 
+        return true;
+    }
+
+    private bool MigrateZcodeSplit()
+    {
+        if (_instances.Any(instance => string.Equals(instance.Type, "zcode", StringComparison.OrdinalIgnoreCase)))
+            return false;
+        if (!_instances.Any(instance => string.Equals(instance.Type, "zai", StringComparison.OrdinalIgnoreCase)))
+            return false;
+
+        var zcode = Catalog.FindType("zcode");
+        if (zcode is null)
+            return false;
+
+        AddInstanceIfMissing(new ProviderInstance(zcode.Id, zcode.Id, zcode.Name));
         return true;
     }
 

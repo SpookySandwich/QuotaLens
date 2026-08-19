@@ -6,7 +6,6 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
-using Microsoft.UI.Xaml.Shapes;
 using QuotaLens.Helpers;
 using QuotaLens.ViewModels;
 using Windows.Foundation;
@@ -18,12 +17,35 @@ public sealed partial class UsageCylinder : UserControl
 {
     private const double BarHeight = 44;
     private const double BarRadius = 4;
-    private const double BracketHeight = 5;
     private const double FullLabelMinWidth = 108;
     private const double PercentOnlyMinWidth = 44;
+    private const double MorphDurationMs = 300.0;
+
     private INotifyCollectionChanged? _collectionChanged;
     private bool _hasRenderedWhileLoaded;
+    private bool _renderQueued;
     private string _lastRenderedSignature = "";
+
+    private sealed class SegmentTrack
+    {
+        public string InstanceId { get; set; } = "";
+        public ColumnDefinition Column { get; set; } = null!;
+        public FrameworkElement Element { get; set; } = null!;
+        public SegmentLabelParts? LabelParts { get; set; }
+        public double CurrentWeight { get; set; }
+        public double StartWeight { get; set; }
+        public double TargetWeight { get; set; }
+        public double StartOpacity { get; set; } = 1.0;
+        public UsageTimelineSegmentViewModel Segment { get; set; } = null!;
+        public bool IsEntering { get; set; }
+        public bool IsLeaving { get; set; }
+    }
+
+    private readonly List<SegmentTrack> _tracks = new();
+    private Grid? _barGrid;
+    private Border? _barBorder;
+    private DispatcherTimer? _morphTimer;
+    private DateTimeOffset _morphStartTime;
 
     public UsageCylinder()
     {
@@ -58,47 +80,83 @@ public sealed partial class UsageCylinder : UserControl
         if (control._collectionChanged is not null)
             control._collectionChanged.CollectionChanged += control.OnSegmentsCollectionChanged;
 
-        control.Render();
+        control.RequestRender();
     }
 
     private void OnSegmentsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        Render();
+        RequestRender();
+    }
+
+    private void RequestRender()
+    {
+        if (_renderQueued)
+            return;
+
+        var queue = DispatcherQueue;
+        if (queue is null)
+        {
+            Render();
+            return;
+        }
+
+        _renderQueued = true;
+        queue.TryEnqueue(() =>
+        {
+            _renderQueued = false;
+            Render();
+        });
     }
 
     private void Render()
     {
-        var previousSignature = _lastRenderedSignature;
-        RootPanel.Children.Clear();
-
         var segments = Segments?
             .OfType<UsageTimelineSegmentViewModel>()
             .Where(segment => segment.Weight > 0)
             .ToList() ?? new List<UsageTimelineSegmentViewModel>();
+
         if (segments.Count == 0)
         {
+            _morphTimer?.Stop();
+            _morphTimer = null;
+            _tracks.Clear();
+            _barGrid = null;
+            _barBorder = null;
+            RootPanel.Children.Clear();
             _lastRenderedSignature = "";
             return;
         }
 
         var nextSignature = RenderSignature(segments);
-        var animate = IsLoaded
-            && _hasRenderedWhileLoaded
-            && !string.Equals(previousSignature, nextSignature, StringComparison.Ordinal);
-
-        RootPanel.Children.Add(CreateBar(segments));
-        RootPanel.Children.Add(CreateBrackets(segments));
+        if (_hasRenderedWhileLoaded && string.Equals(_lastRenderedSignature, nextSignature, StringComparison.Ordinal))
+            return;
 
         _lastRenderedSignature = nextSignature;
-        if (IsLoaded)
+
+        if (_barGrid == null || RootPanel.Children.Count == 0 || _tracks.Count == 0)
+        {
+            BuildInitialBar(segments);
             _hasRenderedWhileLoaded = true;
-        if (animate)
-            AnimateRender();
+        }
+        else if (IsLoaded && _hasRenderedWhileLoaded)
+        {
+            UpdateTracksAndMorph(segments);
+        }
+        else
+        {
+            BuildInitialBar(segments);
+            _hasRenderedWhileLoaded = true;
+        }
     }
 
-    private UIElement CreateBar(IReadOnlyList<UsageTimelineSegmentViewModel> segments)
+    private void BuildInitialBar(IReadOnlyList<UsageTimelineSegmentViewModel> segments)
     {
-        var outer = new Border
+        _morphTimer?.Stop();
+        _morphTimer = null;
+        _tracks.Clear();
+        RootPanel.Children.Clear();
+
+        _barBorder = new Border
         {
             Height = BarHeight,
             CornerRadius = new CornerRadius(BarRadius),
@@ -107,33 +165,266 @@ public sealed partial class UsageCylinder : UserControl
             Background = RemainderBrush(),
         };
 
-        var grid = new Grid { ColumnSpacing = 0 };
+        _barGrid = new Grid { ColumnSpacing = 0 };
+
         for (var index = 0; index < segments.Count; index++)
         {
             var segment = segments[index];
-            // Weights are token-proportional and span orders of magnitude; a small
-            // floor keeps tiny plans visible and hover/clickable next to huge ones.
-            grid.ColumnDefinitions.Add(new ColumnDefinition
+            var col = new ColumnDefinition
             {
                 Width = new GridLength(segment.Weight, GridUnitType.Star),
                 MinWidth = segment.IsRemainder ? 0 : 4,
-            });
+            };
+            _barGrid.ColumnDefinitions.Add(col);
 
-            FrameworkElement child = segment.IsInteractive
-                ? CreateSegmentButton(segment, index, segments.Count)
-                : CreateSegmentSurface(segment, index, segments.Count);
+            FrameworkElement child;
+            SegmentLabelParts? labelParts = null;
+            if (segment.IsInteractive)
+            {
+                child = CreateSegmentButton(segment, index, segments.Count, out labelParts);
+            }
+            else
+            {
+                child = CreateSegmentSurface(segment, index, segments.Count, out labelParts);
+            }
 
             Grid.SetColumn(child, index);
-            grid.Children.Add(child);
+            _barGrid.Children.Add(child);
+
+            _tracks.Add(new SegmentTrack
+            {
+                InstanceId = segment.InstanceId,
+                Column = col,
+                Element = child,
+                LabelParts = labelParts,
+                CurrentWeight = segment.Weight,
+                StartWeight = segment.Weight,
+                TargetWeight = segment.Weight,
+                Segment = segment,
+            });
         }
 
-        outer.Child = grid;
-        return outer;
+        _barBorder.Child = _barGrid;
+        RootPanel.Children.Add(_barBorder);
+        UpdateCornerRadii();
     }
 
-    private FrameworkElement CreateSegmentButton(UsageTimelineSegmentViewModel segment, int index, int count)
+    private void UpdateTracksAndMorph(IReadOnlyList<UsageTimelineSegmentViewModel> segments)
     {
-        var background = SegmentBrush(Brand.LegibleColor(segment.ProviderType));
+        if (_barGrid == null)
+            return;
+
+        var activeIds = new HashSet<string>(StringComparer.Ordinal);
+        var ordered = new List<SegmentTrack>(segments.Count + _tracks.Count);
+
+        foreach (var seg in segments)
+        {
+            activeIds.Add(seg.InstanceId);
+            var existingTrack = _tracks.FirstOrDefault(t => string.Equals(t.InstanceId, seg.InstanceId, StringComparison.Ordinal));
+            if (existingTrack != null)
+            {
+                existingTrack.StartWeight = existingTrack.CurrentWeight;
+                existingTrack.TargetWeight = seg.Weight;
+                existingTrack.StartOpacity = existingTrack.Element.Opacity;
+                existingTrack.Segment = seg;
+                existingTrack.IsEntering = false;
+                existingTrack.IsLeaving = false;
+                existingTrack.Element.Visibility = Visibility.Visible;
+                UpdateTrackVisual(existingTrack, seg);
+                ordered.Add(existingTrack);
+            }
+            else
+            {
+                var col = new ColumnDefinition
+                {
+                    Width = new GridLength(0.0001, GridUnitType.Star),
+                    MinWidth = 0,
+                };
+
+                FrameworkElement child;
+                SegmentLabelParts? labelParts;
+                if (seg.IsInteractive)
+                    child = CreateSegmentButton(seg, ordered.Count, ordered.Count + 1, out labelParts);
+                else
+                    child = CreateSegmentSurface(seg, ordered.Count, ordered.Count + 1, out labelParts);
+
+                child.Opacity = 0.0;
+                _barGrid.Children.Add(child);
+
+                ordered.Add(new SegmentTrack
+                {
+                    InstanceId = seg.InstanceId,
+                    Column = col,
+                    Element = child,
+                    LabelParts = labelParts,
+                    CurrentWeight = 0.0001,
+                    StartWeight = 0.0001,
+                    TargetWeight = seg.Weight,
+                    StartOpacity = 0.0,
+                    Segment = seg,
+                    IsEntering = true,
+                });
+            }
+        }
+
+        foreach (var track in _tracks)
+        {
+            if (activeIds.Contains(track.InstanceId))
+                continue;
+
+            track.StartWeight = track.CurrentWeight;
+            track.TargetWeight = 0.0001;
+            track.StartOpacity = track.Element.Opacity;
+            track.IsEntering = false;
+            track.IsLeaving = true;
+            ordered.Add(track);
+        }
+
+        _tracks.Clear();
+        _tracks.AddRange(ordered);
+        ApplyColumnOrder();
+        StartMorphAnimation();
+    }
+
+    private void ApplyColumnOrder()
+    {
+        if (_barGrid == null)
+            return;
+
+        while (_barGrid.ColumnDefinitions.Count < _tracks.Count)
+            _barGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0.0001, GridUnitType.Star) });
+        while (_barGrid.ColumnDefinitions.Count > _tracks.Count)
+            _barGrid.ColumnDefinitions.RemoveAt(_barGrid.ColumnDefinitions.Count - 1);
+
+        for (var index = 0; index < _tracks.Count; index++)
+        {
+            var track = _tracks[index];
+            track.Column = _barGrid.ColumnDefinitions[index];
+            track.Column.Width = new GridLength(Math.Max(0.0001, track.CurrentWeight), GridUnitType.Star);
+            Grid.SetColumn(track.Element, index);
+        }
+    }
+
+    private void StartMorphAnimation()
+    {
+        _morphTimer?.Stop();
+        _morphStartTime = DateTimeOffset.UtcNow;
+        _morphTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _morphTimer.Tick += OnMorphTimerTick;
+        _morphTimer.Start();
+    }
+
+    private void OnMorphTimerTick(object? sender, object e)
+    {
+        var elapsed = (DateTimeOffset.UtcNow - _morphStartTime).TotalMilliseconds;
+        var progress = Math.Clamp(elapsed / MorphDurationMs, 0.0, 1.0);
+        var ease = 1.0 - Math.Pow(1.0 - progress, 3.0); // Cubic ease out
+
+        foreach (var track in _tracks)
+        {
+            var w = track.StartWeight + (track.TargetWeight - track.StartWeight) * ease;
+            track.CurrentWeight = Math.Max(0.0001, w);
+            track.Column.Width = new GridLength(track.CurrentWeight, GridUnitType.Star);
+
+            if (track.IsLeaving || track.TargetWeight <= 0.001)
+            {
+                track.Element.Opacity = Math.Clamp(track.StartOpacity * (1.0 - ease), 0.0, 1.0);
+                track.Column.MinWidth = 0;
+                if (progress >= 1.0)
+                    track.Element.Visibility = Visibility.Collapsed;
+            }
+            else if (track.IsEntering)
+            {
+                track.Element.Visibility = Visibility.Visible;
+                track.Element.Opacity = Math.Clamp(ease, 0.0, 1.0);
+                track.Column.MinWidth = w > 0.1 ? 4 : 0;
+            }
+            else
+            {
+                track.Element.Visibility = Visibility.Visible;
+                track.Element.Opacity = 1.0;
+                track.Column.MinWidth = w > 0.1 ? 4 : 0;
+            }
+        }
+
+        UpdateCornerRadii();
+
+        if (progress >= 1.0)
+        {
+            _morphTimer?.Stop();
+            _morphTimer = null;
+            foreach (var track in _tracks.ToList())
+            {
+                track.CurrentWeight = track.TargetWeight;
+                track.Column.Width = new GridLength(Math.Max(0.0001, track.TargetWeight), GridUnitType.Star);
+                if (track.IsLeaving || track.TargetWeight <= 0.001)
+                {
+                    _barGrid?.Children.Remove(track.Element);
+                    _tracks.Remove(track);
+                }
+                else
+                {
+                    track.IsEntering = false;
+                    track.Element.Opacity = 1.0;
+                    track.Element.Visibility = Visibility.Visible;
+                }
+            }
+            ApplyColumnOrder();
+            UpdateCornerRadii();
+        }
+    }
+
+    private void UpdateCornerRadii()
+    {
+        var visibleTracks = _tracks.Where(t => t.CurrentWeight > 0.005 && t.Element.Visibility == Visibility.Visible).ToList();
+        for (var i = 0; i < visibleTracks.Count; i++)
+        {
+            var track = visibleTracks[i];
+            var radius = SegmentCornerRadius(i, visibleTracks.Count);
+            if (track.Element is Button btn)
+                btn.CornerRadius = radius;
+            else if (track.Element is Border bdr)
+                bdr.CornerRadius = radius;
+        }
+    }
+
+    private static void UpdateTrackVisual(SegmentTrack track, UsageTimelineSegmentViewModel seg)
+    {
+        if (track.LabelParts != null)
+        {
+            track.LabelParts.Label.Text = seg.Label;
+            track.LabelParts.Percent.Text = seg.AvailableText;
+        }
+
+        var background = seg.IsGrayedOut
+            ? GrayedOutBrush()
+            : SegmentBrush(Brand.LegibleColor(seg.ProviderType));
+
+        if (track.Element is Button btn)
+        {
+            btn.Background = background;
+            ApplySegmentButtonResources(btn, background);
+            AutomationProperties.SetName(btn, seg.AutomationName);
+        }
+        else if (track.Element is Border bdr)
+        {
+            bdr.Background = seg.IsRemainder
+                ? RemainderBrush()
+                : background;
+            AutomationProperties.SetName(bdr, seg.AutomationName);
+        }
+    }
+
+    private FrameworkElement CreateSegmentButton(
+        UsageTimelineSegmentViewModel segment,
+        int index,
+        int count,
+        out SegmentLabelParts labelParts)
+    {
+        var background = segment.IsGrayedOut
+            ? GrayedOutBrush()
+            : SegmentBrush(Brand.LegibleColor(segment.ProviderType));
+
         var button = new Button
         {
             Background = background,
@@ -148,14 +439,15 @@ public sealed partial class UsageCylinder : UserControl
             VerticalContentAlignment = VerticalAlignment.Stretch,
             UseSystemFocusVisuals = true,
             CornerRadius = SegmentCornerRadius(index, count),
-            Content = CreateSegmentLabel(segment, out var labelParts),
+            Content = CreateSegmentLabel(segment, out labelParts),
         };
         ApplySegmentButtonResources(button, background);
 
         AutomationProperties.SetAutomationId(button, $"UsageTimelineSegment_{segment.InstanceId}");
         AutomationProperties.SetName(button, segment.AutomationName);
 
-        button.SizeChanged += (_, _) => ApplySegmentLabelMode(button.ActualWidth, labelParts);
+        var partsCapture = labelParts;
+        button.SizeChanged += (_, _) => ApplySegmentLabelMode(button.ActualWidth, partsCapture);
         button.PointerEntered += (_, _) => SegmentPreviewed?.Invoke(this, new UsageTimelineSegmentEventArgs(segment.InstanceId));
         button.PointerExited += (_, _) => SegmentPreviewEnded?.Invoke(this, new UsageTimelineSegmentEventArgs(segment.InstanceId));
         button.GotFocus += (_, _) => SegmentPreviewed?.Invoke(this, new UsageTimelineSegmentEventArgs(segment.InstanceId));
@@ -165,18 +457,25 @@ public sealed partial class UsageCylinder : UserControl
         return button;
     }
 
-    private static FrameworkElement CreateSegmentSurface(UsageTimelineSegmentViewModel segment, int index, int count)
+    private static FrameworkElement CreateSegmentSurface(
+        UsageTimelineSegmentViewModel segment,
+        int index,
+        int count,
+        out SegmentLabelParts? labelParts)
     {
+        labelParts = null;
         var border = new Border
         {
             Background = segment.IsRemainder
                 ? RemainderBrush()
-                : SegmentBrush(Brand.LegibleColor(segment.ProviderType)),
+                : segment.IsGrayedOut
+                    ? GrayedOutBrush()
+                    : SegmentBrush(Brand.LegibleColor(segment.ProviderType)),
             CornerRadius = SegmentCornerRadius(index, count),
         };
         AutomationProperties.SetName(border, segment.AutomationName);
         if (!segment.IsRemainder)
-            border.Child = CreateSegmentLabel(segment, out _);
+            border.Child = CreateSegmentLabel(segment, out labelParts);
         return border;
     }
 
@@ -253,8 +552,11 @@ public sealed partial class UsageCylinder : UserControl
         return SegmentLabelMode.None;
     }
 
-    private static void ApplySegmentLabelMode(double width, SegmentLabelParts parts)
+    private static void ApplySegmentLabelMode(double width, SegmentLabelParts? parts)
     {
+        if (parts is null)
+            return;
+
         switch (SegmentLabelModeForWidth(width))
         {
             case SegmentLabelMode.Full:
@@ -280,7 +582,7 @@ public sealed partial class UsageCylinder : UserControl
         string.Join("|", segments.Select(segment =>
             string.Join(":", segment.InstanceId, segment.ProviderType, segment.Label, segment.AvailableText,
                 segment.Weight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
-                segment.ResetFrequencyText, segment.IsRemainder)));
+                segment.ResetFrequencyText, segment.IsRemainder, segment.IsGrayedOut)));
 
     internal enum SegmentLabelMode
     {
@@ -311,92 +613,20 @@ public sealed partial class UsageCylinder : UserControl
         };
     }
 
-    private static Grid CreateBrackets(IReadOnlyList<UsageTimelineSegmentViewModel> segments)
+    private static Brush GrayedOutBrush()
     {
-        var grid = new Grid { ColumnSpacing = 0, MinHeight = 22 };
-        for (var index = 0; index < segments.Count; index++)
+        var baseColor = Color.FromArgb(0xF2, 0x48, 0x4E, 0x58);
+        return new LinearGradientBrush
         {
-            var segment = segments[index];
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(segment.Weight, GridUnitType.Star) });
-        }
-
-        for (var index = 0; index < segments.Count;)
-        {
-            var segment = segments[index];
-
-            if (segment.IsRemainder || !segment.HasResetFrequencyText)
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(0, 1),
+            GradientStops =
             {
-                index++;
-                continue;
-            }
-
-            var label = segment.ResetFrequencyText!;
-            var span = 1;
-            while (index + span < segments.Count
-                   && !segments[index + span].IsRemainder
-                   && string.Equals(segments[index + span].ResetFrequencyText, label, StringComparison.Ordinal))
-            {
-                span++;
-            }
-
-            var panel = new StackPanel { Spacing = 3, Margin = new Thickness(3, 0, 3, 0) };
-            var bracket = new Border
-            {
-                Height = BracketHeight,
-                Opacity = 0.58,
-                BorderBrush = ResolveBrush("TextFillColorTertiaryBrush", Color.FromArgb(0xA0, 0xFF, 0xFF, 0xFF)),
-                BorderThickness = new Thickness(1, 0, 1, 1),
-            };
-            panel.Children.Add(bracket);
-            panel.Children.Add(new TextBlock
-            {
-                Text = label,
-                FontSize = 9,
-                TextAlignment = TextAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                Foreground = ResolveBrush("TextFillColorSecondaryBrush", Colors.White),
-            });
-            AutomationProperties.SetName(panel, label);
-            Grid.SetColumn(panel, index);
-            Grid.SetColumnSpan(panel, span);
-            grid.Children.Add(panel);
-
-            index += span;
-        }
-
-        return grid;
-    }
-
-    private void AnimateRender()
-    {
-        var transform = new TranslateTransform { Y = 2 };
-        RootPanel.RenderTransform = transform;
-        RootPanel.Opacity = 0.82;
-
-        var easing = new CubicEase { EasingMode = EasingMode.EaseOut };
-        var storyboard = new Storyboard();
-        var opacity = new DoubleAnimation
-        {
-            From = 0.82,
-            To = 1,
-            Duration = new Duration(TimeSpan.FromMilliseconds(170)),
-            EasingFunction = easing,
+                new GradientStop { Color = ScaleColor(baseColor, 1.25, 0xF8), Offset = 0 },
+                new GradientStop { Color = ScaleColor(baseColor, 1.00, 0xF2), Offset = 0.48 },
+                new GradientStop { Color = ScaleColor(baseColor, 0.75, 0xF2), Offset = 1 },
+            },
         };
-        Storyboard.SetTarget(opacity, RootPanel);
-        Storyboard.SetTargetProperty(opacity, "Opacity");
-        storyboard.Children.Add(opacity);
-
-        var settle = new DoubleAnimation
-        {
-            From = 2,
-            To = 0,
-            Duration = new Duration(TimeSpan.FromMilliseconds(190)),
-            EasingFunction = easing,
-        };
-        Storyboard.SetTarget(settle, transform);
-        Storyboard.SetTargetProperty(settle, "Y");
-        storyboard.Children.Add(settle);
-        storyboard.Begin();
     }
 
     private static Brush RemainderBrush()
@@ -425,14 +655,6 @@ public sealed partial class UsageCylinder : UserControl
             Channel(color.G, scale),
             Channel(color.B, scale));
     }
-
-    private static Brush ResolveBrush(string key, Color fallback)
-    {
-        if (Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Brush brush)
-            return brush;
-        return new SolidColorBrush(fallback);
-    }
-
 }
 
 public sealed class UsageTimelineSegmentEventArgs : EventArgs
