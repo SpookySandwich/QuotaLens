@@ -710,6 +710,38 @@ public sealed class HeroViewModelTests
     }
 
     [TestMethod]
+    public void BuildUsageTimelineSegments_WhenSlotsAreScarce_KeepsTheProviderThatStillHasCapacity()
+    {
+        // Six expensive plans, all spent, plus one cheap plan with room left. The
+        // chart answers "what can I still use?", so the cheap one must survive the
+        // cap — ordering by price alone would fill every slot with 0% bars and drop
+        // the only provider the user could actually reach for.
+        var spentIds = new[] { "claude", "codex", "codex-lb", "gemini", "cursor", "kimi" };
+        var instances = spentIds
+            .Select(id => new ProviderInstance(id, id, id))
+            .Append(new ProviderInstance("zai", "zai", "z.ai"))
+            .ToArray();
+        var config = new FakeConfig(instances);
+        var snapshots = new[]
+        {
+            ("claude", Snapshot("Claude Code · Max", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("codex", Snapshot("Codex · Plus", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("codex-lb", Snapshot("codex-lb · plus", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("gemini", Snapshot("Gemini · Google AI Pro", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("cursor", Snapshot("Cursor · Pro", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("kimi", Snapshot("Kimi · Allegro", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("zai", Snapshot("z.ai · Lite", usedPercent: 10, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
+
+        Assert.AreEqual(6, segments.Count);
+        Assert.IsTrue(
+            segments.Any(segment => segment.InstanceId == "zai"),
+            "the only provider with weekly capacity left was evicted by spent pools");
+    }
+
+    [TestMethod]
     public void BuildUsageTimelineSegments_WithExhaustedFiveHourPool_StillShowsHealthyMonthlyPool()
     {
         var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });

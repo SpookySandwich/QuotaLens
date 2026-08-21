@@ -597,6 +597,10 @@ public sealed class AntigravityProvider : IProvider
                 Label = $"{quota.Family} {quota.WindowType}",
                 UsedPercent = quota.UsedPercent,
                 ResetsAt = quota.ResetsAt,
+                // Two families each with a 5h and a weekly row: without this the
+                // card sorts purely by cadence and interleaves them, leaving two
+                // adjacent "· 5h" rows with unrelated percentages.
+                DisplayGroup = quota.Family,
                 WindowMinutes = quota.WindowType switch
                 {
                     "5h" => 5 * 60,

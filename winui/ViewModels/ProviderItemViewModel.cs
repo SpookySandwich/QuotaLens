@@ -435,7 +435,10 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         for (var index = 0; index < windows.Count; index++)
         {
             var window = windows[index];
-            var groupKey = string.IsNullOrWhiteSpace(window.AvailabilityGroup) ? "" : window.AvailabilityGroup!;
+            // A display group keeps rows together without claiming they gate each
+            // other; providers that only declare the availability group keep theirs.
+            var rawKey = window.DisplayGroup ?? window.AvailabilityGroup;
+            var groupKey = string.IsNullOrWhiteSpace(rawKey) ? "" : rawKey!;
             if (!groupRanks.TryGetValue(groupKey, out var group))
             {
                 group = groupRanks.Count;
@@ -464,10 +467,12 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         if (window.Kind != RateWindowKind.Quota)
             return double.PositiveInfinity;
 
-        var cadence = QuotaCadencePolicy.For(
-            window.Label,
-            window.WindowMinutes,
-            MinutesUntil(window.ResetsAt));
+        // Declared signals only. Deriving cadence from the time left until reset
+        // makes a row's position depend on when the card is drawn: a grant that
+        // "expires in 30 days" reads monthly today and weekly next week, so the
+        // row would climb the card — and drag FooterReset with it — as its expiry
+        // approaches. A window that declares neither length nor cadence sorts last.
+        var cadence = QuotaCadencePolicy.For(window.Label, window.WindowMinutes);
         if (cadence == QuotaCadence.None)
             return double.PositiveInfinity;
 
@@ -476,18 +481,6 @@ public sealed partial class ProviderItemViewModel : ObservableObject
         return window.WindowMinutes is > 0
             ? window.WindowMinutes.Value
             : QuotaCadencePolicy.DefaultWindowMinutes(cadence);
-    }
-
-    private static double MinutesUntil(string? iso)
-    {
-        return !string.IsNullOrWhiteSpace(iso)
-            && DateTimeOffset.TryParse(
-                iso,
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                out var when)
-            ? Math.Max(0, (when - DateTimeOffset.UtcNow).TotalMinutes)
-            : double.PositiveInfinity;
     }
 
     private static bool HasRateContent(ProviderSnapshot snap) =>

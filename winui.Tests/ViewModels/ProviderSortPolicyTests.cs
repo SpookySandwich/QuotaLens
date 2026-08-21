@@ -91,6 +91,35 @@ public sealed class ProviderSortPolicyTests
     }
 
     [TestMethod]
+    public void Order_WithNonMonetaryBalance_TreatsAFundedAccountAsUsable()
+    {
+        // A DIEM/credits/points balance has no dollar figure, so BalanceAmount is 0.
+        // That is a statement about price, not about whether there is anything left:
+        // reading it as "empty" would rank a fully funded account below a spent plan.
+        var items = new[]
+        {
+            Item("spent-plan", ProviderPriority.ExhaustedSubscriptionBucket, planValue: 20, availability: 0),
+            Item(
+                "venice",
+                ProviderPriority.PayAsYouGoBucket,
+                planValue: -1,
+                availability: 100,
+                payAsYouGo: true,
+                hasBalance: true,
+                balanceAmount: 0,
+                hasSpendableBalance: true),
+        };
+
+        var ordered = ProviderSortPolicy.Order(
+            items,
+            ProviderSortMode.PlanValue,
+            x => x.Score,
+            deprioritizeEmptyProviders: true);
+
+        Assert.AreEqual("venice", ordered[0].Id);
+    }
+
+    [TestMethod]
     public void Order_ByPlanValue_DoesNotLetCreditBalancesOutrankSubscriptions()
     {
         // A 12,000-credit balance used to rank as 12,000 "dollars" whenever the plan
@@ -292,7 +321,8 @@ public sealed class ProviderSortPolicyTests
         double monthlyMinutesUntil = double.PositiveInfinity,
         double monthlyAvailability = 0.0,
         bool hasBalance = false,
-        double balanceAmount = 0.0) =>
+        double balanceAmount = 0.0,
+        bool hasSpendableBalance = false) =>
         new(id, new ProviderPriorityScore(
             bucket,
             planValue,
@@ -310,7 +340,8 @@ public sealed class ProviderSortPolicyTests
             monthlyMinutesUntil,
             monthlyAvailability,
             hasBalance,
-            balanceAmount));
+            balanceAmount,
+            hasSpendableBalance));
 
     private sealed record SortItem(string Id, ProviderPriorityScore Score);
 }

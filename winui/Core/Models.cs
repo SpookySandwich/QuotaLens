@@ -39,6 +39,12 @@ public sealed class RateWindow
     public bool CountsForAvailability { get; set; }
     /// Alternative-capacity group. Windows in a group are jointly gating; separate groups are alternatives.
     public string? AvailabilityGroup { get; set; }
+    /// <summary>
+    /// Presentation-only grouping key. Keeps a provider's family or product rows
+    /// together on the card without making them jointly gating for availability,
+    /// which <see cref="AvailabilityGroup"/> would.
+    /// </summary>
+    public string? DisplayGroup { get; set; }
 }
 
 /// <summary>Account balance (DeepSeek, Alibaba CNY, credits, etc.).</summary>

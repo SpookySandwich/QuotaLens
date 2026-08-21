@@ -196,7 +196,9 @@ public static class ProviderSortPolicy
     {
         if (score.Bucket == ProviderPriority.UsableSubscriptionBucket)
             return 0;
-        if (score.IsPayAsYouGo && score.BalanceAmount > 0)
+        // Usability, not price: a funded account in a unit no rate can convert
+        // (credits, points, DIEM) has a BalanceAmount of 0 but is not empty.
+        if (score.IsPayAsYouGo && score.HasSpendableBalance)
             return 0;
         if (score.Bucket == ProviderPriority.ExhaustedSubscriptionBucket)
             return 1;

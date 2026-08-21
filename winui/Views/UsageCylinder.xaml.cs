@@ -19,6 +19,7 @@ public sealed partial class UsageCylinder : UserControl
     private const double BarRadius = 4;
     private const double FullLabelMinWidth = 108;
     private const double PercentOnlyMinWidth = 44;
+    private const double SegmentMinWidth = 4;
     private const double MorphDurationMs = 300.0;
 
     private INotifyCollectionChanged? _collectionChanged;
@@ -173,7 +174,7 @@ public sealed partial class UsageCylinder : UserControl
             var col = new ColumnDefinition
             {
                 Width = new GridLength(segment.Weight, GridUnitType.Star),
-                MinWidth = segment.IsRemainder ? 0 : 4,
+                MinWidth = segment.IsRemainder ? 0 : SegmentMinWidth,
             };
             _barGrid.ColumnDefinitions.Add(col);
 
@@ -301,9 +302,24 @@ public sealed partial class UsageCylinder : UserControl
             var track = _tracks[index];
             track.Column = _barGrid.ColumnDefinitions[index];
             track.Column.Width = new GridLength(Math.Max(0.0001, track.CurrentWeight), GridUnitType.Star);
+            // Columns are recycled positionally, so a track can land on one left
+            // behind by a removed segment; without this it inherits that floor.
+            track.Column.MinWidth = MinWidthFor(track);
             Grid.SetColumn(track.Element, index);
         }
     }
+
+    /// <summary>
+    /// A segment's width floor follows what the segment IS, not the star weight it
+    /// happens to be interpolating through. HeroViewModel deliberately floors a spent
+    /// plan to 0.01 so it stays on screen, and 0.01 can never clear a threshold
+    /// expressed in star units — testing the weight collapsed those bars to a
+    /// sub-pixel line on the first update after the initial render.
+    /// </summary>
+    private static double MinWidthFor(SegmentTrack track) =>
+        track.IsLeaving || track.TargetWeight <= 0.001 || track.Segment.IsRemainder
+            ? 0
+            : SegmentMinWidth;
 
     private void StartMorphAnimation()
     {
@@ -337,13 +353,14 @@ public sealed partial class UsageCylinder : UserControl
             {
                 track.Element.Visibility = Visibility.Visible;
                 track.Element.Opacity = Math.Clamp(ease, 0.0, 1.0);
-                track.Column.MinWidth = w > 0.1 ? 4 : 0;
+                // Ramp in from nothing, but land on the floor rather than below it.
+                track.Column.MinWidth = progress >= 1.0 || w > 0.1 ? MinWidthFor(track) : 0;
             }
             else
             {
                 track.Element.Visibility = Visibility.Visible;
                 track.Element.Opacity = 1.0;
-                track.Column.MinWidth = w > 0.1 ? 4 : 0;
+                track.Column.MinWidth = MinWidthFor(track);
             }
         }
 

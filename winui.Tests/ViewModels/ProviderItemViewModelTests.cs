@@ -554,6 +554,82 @@ public sealed class ProviderItemViewModelTests
     }
 
     [TestMethod]
+    public void Update_WithDisplayGroups_KeepsFamiliesContiguousWithoutGatingAvailability()
+    {
+        var service = new FakeProviderService(new ProviderInstance("antigravity", "gemini", "Antigravity"));
+        var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+        var snapshot = new ProviderSnapshot
+        {
+            ProviderId = "gemini",
+            Name = "Antigravity",
+            Primary = new RateWindow { Label = "Ultra Prompt Pool", UsedPercent = 15 },
+            AdditionalWindows =
+            {
+                new RateWindow { Label = "Gemini 5h", UsedPercent = 20, WindowMinutes = 300, DisplayGroup = "Gemini" },
+                new RateWindow { Label = "Gemini weekly", UsedPercent = 25, WindowMinutes = 10080, DisplayGroup = "Gemini" },
+                new RateWindow { Label = "Claude / GPT 5h", UsedPercent = 80, WindowMinutes = 300, DisplayGroup = "Claude / GPT" },
+                new RateWindow { Label = "Claude / GPT weekly", UsedPercent = 85, WindowMinutes = 10080, DisplayGroup = "Claude / GPT" },
+            },
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+        var availabilityBefore = ProviderPriority.Score("antigravity", snapshot, service.Config).Availability;
+
+        viewModel.Update(snapshot, refreshing: false);
+
+        // Without a grouping key the pure cadence sort would interleave the two
+        // families, leaving two adjacent "· 5h" rows with unrelated percentages.
+        CollectionAssert.AreEqual(
+            new[] { "Ultra Prompt Pool", "Gemini · 5h", "Gemini · Weekly", "Claude/GPT · 5h", "Claude/GPT · Weekly" },
+            viewModel.Rows.Select(row => row.Label).ToArray());
+        // DisplayGroup is presentation only: unlike AvailabilityGroup it must not
+        // make the families jointly gating.
+        Assert.AreEqual(
+            availabilityBefore,
+            ProviderPriority.Score("antigravity", snapshot, service.Config).Availability,
+            0.001);
+    }
+
+    [TestMethod]
+    public void Update_WithExpiringGrant_KeepsRowOrderStableAsTheDeadlineApproaches()
+    {
+        // A grant that declares no window length must not borrow a cadence from how
+        // long is left on it: at 30 days out it would read monthly, at 7 days weekly,
+        // and the row would climb the card — taking the footer reset with it.
+        static ProviderSnapshot Build(int bonusExpiresInDays) => new()
+        {
+            ProviderId = "kiro",
+            Name = "Kiro",
+            Primary = new RateWindow
+            {
+                Label = "Monthly credits",
+                UsedPercent = 40,
+                WindowMinutes = 30 * 24 * 60,
+                ResetsAt = DateTimeOffset.UtcNow.AddDays(20).ToString("O"),
+            },
+            Secondary = new RateWindow
+            {
+                Label = "Bonus credits",
+                UsedPercent = 10,
+                ResetsAt = DateTimeOffset.UtcNow.AddDays(bonusExpiresInDays).ToString("O"),
+            },
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        var service = new FakeProviderService(new ProviderInstance("kiro", "kiro", "Kiro"));
+
+        var far = new ProviderItemViewModel(service, service.Instances[0]);
+        far.Update(Build(bonusExpiresInDays: 30), refreshing: false);
+        var near = new ProviderItemViewModel(service, service.Instances[0]);
+        near.Update(Build(bonusExpiresInDays: 7), refreshing: false);
+
+        CollectionAssert.AreEqual(
+            far.Rows.Select(row => row.Label).ToArray(),
+            near.Rows.Select(row => row.Label).ToArray());
+        Assert.AreEqual("Monthly credits", near.Rows[0].Label);
+        Assert.AreEqual(far.FooterReset is null, near.FooterReset is null);
+    }
+
+    [TestMethod]
     public void Update_WithMonthlyLeadingSnapshot_PointsTheFooterAtTheTopRowReset()
     {
         var service = new FakeProviderService(new ProviderInstance("kimi", "kimi", "Kimi"));

@@ -283,15 +283,33 @@ public sealed partial class HeroViewModel : ObservableObject
     /// bar, and those bars share the full width between them. A provider with no
     /// monthly plan has no monthly number to draw, and inventing a placeholder for it
     /// would shrink the plans the user does have in order to display nothing.
-    private static IEnumerable<TimelineCandidate> OrderCadenceCandidates(IEnumerable<TimelineCandidate> candidates) =>
-        candidates
+    private static IEnumerable<TimelineCandidate> OrderCadenceCandidates(IEnumerable<TimelineCandidate> candidates)
+    {
+        var eligible = candidates
             .Where(candidate => candidate.HasMatchingCadence)
             // A subscription with no token allowance has nothing to size a bar
             // with; a balance is sized by money, so pay-as-you-go is exempt.
-            .Where(candidate => candidate.Priority.Score.IsPayAsYouGo || candidate.WeeklyTokensMillions > 0)
+            .Where(candidate => candidate.Priority.Score.IsPayAsYouGo || candidate.WeeklyTokensMillions > 0);
+
+        // Slots are scarce and the chart answers "what can I still use?". A spent
+        // pool is worth drawing, but never at the price of one that still has room:
+        // capacity picks the survivors first. Without this the cap fills up with
+        // 0% bars ordered by price and drops the plan the user could actually use.
+        var survivors = eligible
+            .OrderByDescending(candidate =>
+                candidate.AvailablePercent > 0.1 || candidate.Priority.Score.IsPayAsYouGo)
+            .ThenByDescending(candidate => candidate.ResetFrequencySortMinutes)
+            .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
+            .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal)
+            .Take(MaxUsageTimelineSegments);
+
+        // Layout is then applied to the survivors unchanged: least-frequent reset
+        // on the left, regardless of which of them had capacity.
+        return survivors
             .OrderByDescending(candidate => candidate.ResetFrequencySortMinutes)
             .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
             .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal);
+    }
 
     private static UsageTimelineSegmentViewModel BuildSegment(TimelineCandidate candidate, ProviderSortMode sortMode)
     {

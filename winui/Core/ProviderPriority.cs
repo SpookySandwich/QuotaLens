@@ -19,7 +19,13 @@ public readonly record struct ProviderPriorityScore(
     double MonthlyMinutesUntil = double.PositiveInfinity,
     double MonthlyAvailability = 0.0,
     bool HasBalance = false,
-    double BalanceAmount = 0.0);
+    double BalanceAmount = 0.0,
+    /// <summary>
+    /// There is credit left to spend, whatever the unit. <see cref="BalanceAmount"/>
+    /// answers a different question — what it is worth in dollars — and is zero for
+    /// units no rate can convert, so it must not be used to decide usability.
+    /// </summary>
+    bool HasSpendableBalance = false);
 
 public readonly record struct ProviderPriorityCandidate(
     string Id,
@@ -241,6 +247,10 @@ public static class ProviderPriority
         // Monetary only. A credits/points/DIEM count has no dollar figure, and
         // passing it through unconverted let it outrank real subscriptions.
         double balanceAmount = CurrencyRates.ToUsd(balanceRaw, snapshot.Balance?.Currency) ?? 0.0;
+        // Usability is not price: a funded DIEM or credits account is perfectly
+        // spendable even though no rate turns it into dollars, so ranking must ask
+        // this instead of reading a zero USD value as "nothing left".
+        bool hasSpendableBalance = balanceRaw > 0;
 
         if (planValue < 0)
             return new ProviderPriorityScore(
@@ -260,7 +270,8 @@ public static class ProviderPriority
                 monthlyMinutesUntil,
                 monthlyAvailability,
                 hasBalance,
-                balanceAmount);
+                balanceAmount,
+                hasSpendableBalance);
 
         double threshold = 5.0;
         if (config is not null)
@@ -292,7 +303,8 @@ public static class ProviderPriority
             monthlyMinutesUntil,
             monthlyAvailability,
             hasBalance,
-            balanceAmount);
+            balanceAmount,
+            hasSpendableBalance);
     }
 
     public static IReadOnlyList<ProviderPriorityCandidate> RankUsableSubscriptions(
