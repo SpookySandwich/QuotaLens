@@ -130,7 +130,7 @@ public sealed class CodexLbProviderTests
                   "resetAtSecondary": "{{weeklyReset}}",
                   "windowMinutesPrimary": null,
                   "windowMinutesSecondary": 10080,
-                  "capacityCreditsPrimary": 1500.0,
+                  "capacityCreditsPrimary": 0.0,
                   "capacityCreditsSecondary": 50400.0
                 },
                 {
@@ -141,7 +141,7 @@ public sealed class CodexLbProviderTests
                   "resetAtSecondary": "{{weeklyReset}}",
                   "windowMinutesPrimary": null,
                   "windowMinutesSecondary": 10080,
-                  "capacityCreditsPrimary": 225.0,
+                  "capacityCreditsPrimary": 0.0,
                   "capacityCreditsSecondary": 7560.0
                 },
                 {
@@ -152,7 +152,7 @@ public sealed class CodexLbProviderTests
                   "resetAtSecondary": "{{weeklyReset}}",
                   "windowMinutesPrimary": null,
                   "windowMinutesSecondary": 10080,
-                  "capacityCreditsPrimary": 225.0,
+                  "capacityCreditsPrimary": 0.0,
                   "capacityCreditsSecondary": 7560.0
                 }
               ]
@@ -168,6 +168,107 @@ public sealed class CodexLbProviderTests
         Assert.IsTrue(snapshot.Accounts.All(account => account.PrimaryUsedPercent.HasValue));
         Assert.IsTrue(snapshot.Accounts.All(account => account.SecondaryLabel is null));
         Assert.IsTrue(snapshot.Accounts.All(account => account.SecondaryUsedPercent is null));
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_IdlePrimaryWindowCountsAsFreshFiveHourQuota()
+    {
+        // codex-lb nulls an elapsed 5h sample while keeping the plan's static
+        // capacityCreditsPrimary — the window reset, so the 5h budget is full.
+        // The effective 5h pool is then capped by each account's weekly budget.
+        var weeklyReset = DateTimeOffset.UtcNow.AddDays(2).ToString("O", CultureInfo.InvariantCulture);
+        var provider = ProviderReturning(
+            WeeklyOnlySummary(45.33333333333333, weeklyReset),
+            $$"""
+            {
+              "accounts": [
+                {
+                  "displayName": "plus-a",
+                  "planType": "plus",
+                  "usage": { "primaryRemainingPercent": null, "secondaryRemainingPercent": 98.0 },
+                  "resetAtPrimary": null,
+                  "resetAtSecondary": "{{weeklyReset}}",
+                  "windowMinutesPrimary": null,
+                  "windowMinutesSecondary": 10080,
+                  "capacityCreditsPrimary": 225.0,
+                  "capacityCreditsSecondary": 7560.0
+                },
+                {
+                  "displayName": "team-b",
+                  "planType": "team",
+                  "usage": { "primaryRemainingPercent": null, "secondaryRemainingPercent": 24.0 },
+                  "resetAtPrimary": null,
+                  "resetAtSecondary": "{{weeklyReset}}",
+                  "windowMinutesPrimary": null,
+                  "windowMinutesSecondary": 10080,
+                  "capacityCreditsPrimary": 225.0,
+                  "capacityCreditsSecondary": 7560.0
+                },
+                {
+                  "displayName": "team-c",
+                  "planType": "team",
+                  "usage": { "primaryRemainingPercent": null, "secondaryRemainingPercent": 14.0 },
+                  "resetAtPrimary": null,
+                  "resetAtSecondary": "{{weeklyReset}}",
+                  "windowMinutesPrimary": null,
+                  "windowMinutesSecondary": 10080,
+                  "capacityCreditsPrimary": 225.0,
+                  "capacityCreditsSecondary": 7560.0
+                }
+              ]
+            }
+            """);
+
+        var snapshot = await provider.FetchAsync("codex-lb", new UrlConfig(), CancellationToken.None);
+
+        // Every account reports an idle 5h window (0% used) plus its weekly cap.
+        Assert.IsTrue(snapshot.Accounts.All(account => account.PrimaryLabel == "5h"));
+        Assert.IsTrue(snapshot.Accounts.All(account => account.PrimaryUsedPercent!.Value == 0.0));
+        Assert.IsTrue(snapshot.Accounts.All(account => account.SecondaryLabel == "Weekly"));
+
+        var effective5h = snapshot.AdditionalWindows.Single(window => window.Label == "Effective 5h");
+        // Nested cap: min(100, weekly) per account → (98 + 24 + 14) / 3 = 45.33% remaining.
+        Assert.AreEqual(54.66666666666667, effective5h.UsedPercent, 0.001);
+        Assert.IsNull(effective5h.ResetsAt);
+        Assert.AreEqual(300L, effective5h.WindowMinutes);
+
+        var effectiveWeekly = snapshot.AdditionalWindows.Single(window => window.Label == "Effective Weekly");
+        Assert.AreEqual(54.66666666666667, effectiveWeekly.UsedPercent, 0.001);
+    }
+
+    [TestMethod]
+    public async Task FetchAsync_IdlePrimaryWindowKeepsFiveHourCadenceForTimeline()
+    {
+        // The 5h timeline view only draws providers whose priority score has a
+        // 5h pool; an all-idle pool must stay eligible instead of vanishing.
+        var weeklyReset = DateTimeOffset.UtcNow.AddDays(2).ToString("O", CultureInfo.InvariantCulture);
+        var provider = ProviderReturning(
+            WeeklyOnlySummary(45.33333333333333, weeklyReset),
+            $$"""
+            {
+              "accounts": [
+                {
+                  "displayName": "plus-a",
+                  "planType": "plus",
+                  "usage": { "primaryRemainingPercent": null, "secondaryRemainingPercent": 98.0 },
+                  "resetAtPrimary": null,
+                  "resetAtSecondary": "{{weeklyReset}}",
+                  "windowMinutesPrimary": null,
+                  "windowMinutesSecondary": 10080,
+                  "capacityCreditsPrimary": 225.0,
+                  "capacityCreditsSecondary": 7560.0
+                }
+              ]
+            }
+            """);
+
+        var snapshot = await provider.FetchAsync("codex-lb", new UrlConfig(), CancellationToken.None);
+        var score = ProviderPriority.Score("codex-lb", snapshot);
+
+        Assert.IsTrue(score.HasFiveHour);
+        Assert.AreEqual(98.0, score.FiveHourAvailability, 0.001);
+        Assert.IsTrue(score.HasWeekly);
+        Assert.AreEqual(98.0, score.WeeklyAvailability, 0.001);
     }
 
     [TestMethod]
@@ -239,7 +340,7 @@ public sealed class CodexLbProviderTests
                 {
                   "displayName": "weekly-b",
                   "usage": { "primaryRemainingPercent": null, "secondaryRemainingPercent": 100.0 },
-                  "capacityCreditsPrimary": 100.0,
+                  "capacityCreditsPrimary": 0.0,
                   "capacityCreditsSecondary": 3360.0
                 }
               ]

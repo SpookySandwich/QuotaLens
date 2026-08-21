@@ -580,10 +580,18 @@ public sealed class CodexLbProvider : IProvider
         if (usage is null)
             return windows;
 
+        // codex-lb nulls an elapsed 5h sample ("not an active window") while
+        // keeping the plan's static capacityCreditsPrimary. An elapsed window
+        // means the quota reset — the 5h budget is fresh, not absent — so an
+        // account with 5h capacity and no sample is treated as full. Weekly and
+        // monthly samples stay raw upstream, so a null there stays unknown.
+        var primaryRemaining = usage.PrimaryRemainingPercent is null && account.CapacityCreditsPrimary is > 0
+            ? 100.0
+            : usage.PrimaryRemainingPercent;
         AddAccountWindow(
             windows,
             "5h",
-            usage.PrimaryRemainingPercent,
+            primaryRemaining,
             account.ResetAtPrimary,
             account.WindowMinutesPrimary ?? summary.PrimaryWindow?.WindowMinutes,
             account.CapacityCreditsPrimary);

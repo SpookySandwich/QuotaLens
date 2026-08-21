@@ -871,6 +871,91 @@ public static class Catalog
             new("pro", 30),
             new("plus", 8), new("individual", 8), new("no plan", 8), new("base", 8), new("free", 8),
         },
+        // xAI publishes no subscription token caps; figures are community-reported
+        // daily text caps × 7 (SuperGrok ≈2M/day, Heavy ≈10M/day), and paid plans
+        // share one weekly pool across Chat/Imagine/Voice/Build. X Premium+ is
+        // documented by xAI support as roughly SuperGrok-level. Plus is unmeasured:
+        // interpolated between SuperGrok and Heavy along the $30/$100/$300 ladder.
+        ["grok"] = new ProviderPlanTokenRule[]
+        {
+            new("supergrok heavy", 70),
+            new("supergrok plus", 40),
+            new("supergrok lite", 5),
+            new("supergrok", 14),
+            new("x premium+", 14),
+            new("x premium", 7),
+            new("x basic", 2),
+            new("free", 1),
+        },
+        // z.ai / BigModel GLM Coding Plan ladders from Zhipu's published point
+        // formula at a 90.9% cache-hit workload (community tabulation: Lite
+        // 43–87M, Pro 263–526M, Max 613M–1.2B tokens per week; midpoints).
+        // Team tiers are published directly in tokens per seat per week.
+        ["zcode"] = new ProviderPlanTokenRule[]
+        {
+            new("team advanced", 800),
+            new("team standard", 300),
+            new("max", 900),
+            new("pro", 400),
+            new("lite", 65),
+        },
+        ["zai"] = new ProviderPlanTokenRule[]
+        {
+            new("team advanced", 800),
+            new("team standard", 300),
+            new("max", 900),
+            new("pro", 400),
+            new("lite", 65),
+        },
+        // MiniMax Token Plan publishes monthly M3 token grants (Plus ~600M,
+        // Max ~1.8B, Ultra ~7.1B) — divided across 4.33 weeks per month.
+        ["minimax"] = new ProviderPlanTokenRule[]
+        {
+            new("ultra", 1600),
+            new("max", 420),
+            new("plus", 140),
+        },
+        // StepFun monthly token grants (Flash Mini ~400M, Plus ~1.6B,
+        // Pro ~8B, Max ~40B) — divided across 4.33 weeks per month.
+        ["stepfun"] = new ProviderPlanTokenRule[]
+        {
+            new("max", 9000),
+            new("pro", 1800),
+            new("plus", 370),
+            new("mini", 90),
+        },
+        // Qwen Bailian token plans meter credits per 7 days (Lite 2.5K,
+        // Standard 10K, Pro 40K credits/week); ~4K tokens per credit on a
+        // mixed cached-input/output workload.
+        ["alibabatokenplan"] = new ProviderPlanTokenRule[]
+        {
+            new("pro", 160),
+            new("standard", 40),
+            new("lite", 10),
+        },
+        // Volcano (Doubao) coding plans meter requests (~1.2K/5h and ~9K/week
+        // on Lite, ~6K/5h and ~45K/week on Pro); ~5K tokens per request
+        // assumed conservatively. arkcli does not expose the tier, so personal
+        // and team coding plans share the Pro-scale estimate and agent plans
+        // (AFP-metered, Small tier) use the personal-coding scale.
+        ["doubao"] = new ProviderPlanTokenRule[]
+        {
+            new("coding-plan-team", 225),
+            new("coding-plan", 225),
+            new("agent-plan", 45),
+        },
+        // Augment meters credits (1 credit ≈ 1K tokens): Indie 40K/mo,
+        // Standard 130K/mo, Max 450K/mo → weekly; legacy message plans
+        // (Developer/Pro) mapped by their $ price on the same curve.
+        ["augment"] = new ProviderPlanTokenRule[]
+        {
+            new("max", 100),
+            new("business", 30),
+            new("standard", 30),
+            new("pro", 30),
+            new("indie", 9),
+            new("developer", 9),
+        },
         // Anchored on community-measured Allegretto (~330M/wk); other tiers follow
         // Moonshot's published credit ladder (1x/4x/20x/60x CN = 1x/5x/15x/30x intl),
         // so Moderato uses the ladder-consistent 66 rather than the request-cap-derived 92.
@@ -1107,6 +1192,9 @@ public static class Catalog
         ["augment"] = new[]
         {
             OfficialMonthlyPlan("business", 100, "augment-business-flat", "https://www.augmentcode.com/pricing", "flat subscription (up to 50 seats)"),
+            OfficialMonthlyPlan("max", 200, "augment-max", "https://www.augmentcode.com/pricing", "seat"),
+            OfficialMonthlyPlan("standard", 60, "augment-standard", "https://www.augmentcode.com/pricing", "seat"),
+            OfficialMonthlyPlan("indie", 20, "augment-indie", "https://www.augmentcode.com/pricing", "user"),
         },
         ["factory"] = new[]
         {
@@ -1166,7 +1254,7 @@ public static class Catalog
         ["grok"] = new[]
         {
             OfficialMonthlyPlan("supergrok heavy", 300, "supergrok_heavy", "https://x.ai/grok"),
-            OfficialMonthlyPlan("supergrok plus", 30, "supergrok_plus", "https://x.ai/grok"),
+            OfficialMonthlyPlan("supergrok plus", 100, "supergrok_plus", "https://x.ai/grok"),
             OfficialMonthlyPlan("supergrok", 30, "supergrok", "https://x.ai/grok"),
             OfficialMonthlyPlan("premium+", 40, "x_premium_plus", "https://help.x.com/en/using-x/x-premium"),
             OfficialMonthlyPlan("x premium+", 40, "x_premium_plus", "https://help.x.com/en/using-x/x-premium"),

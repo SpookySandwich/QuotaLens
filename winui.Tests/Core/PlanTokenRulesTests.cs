@@ -18,6 +18,62 @@ public sealed class PlanTokenRulesTests
     }
 
     [TestMethod]
+    public void Match_GrokTiers_FollowCommunityMeasuredWeeklyPools()
+    {
+        // X Premium+ is documented as roughly SuperGrok-level; Heavy is the
+        // only tier with a materially larger pool (community: 10M tokens/day).
+        Assert.AreEqual(70, PlanTokenRules.Match("grok", "SuperGrok Heavy"));
+        Assert.AreEqual(40, PlanTokenRules.Match("grok", "SuperGrok Plus"));
+        Assert.AreEqual(14, PlanTokenRules.Match("grok", "SuperGrok"));
+        Assert.AreEqual(14, PlanTokenRules.Match("grok", "X Premium+"));
+        Assert.AreEqual(7, PlanTokenRules.Match("grok", "X Premium"));
+        Assert.AreEqual(1, PlanTokenRules.Match("grok", "Free"));
+    }
+
+    [TestMethod]
+    public void Match_GlmCodingPlanTiers_AreSharedByZcodeAndZai()
+    {
+        foreach (var providerType in new[] { "zcode", "zai" })
+        {
+            Assert.AreEqual(900, PlanTokenRules.Match(providerType, "GLM Coding Max"));
+            Assert.AreEqual(400, PlanTokenRules.Match(providerType, "GLM Coding Pro"));
+            Assert.AreEqual(65, PlanTokenRules.Match(providerType, "GLM Coding Lite"));
+            Assert.AreEqual(800, PlanTokenRules.Match(providerType, "Team Advanced"));
+            Assert.AreEqual(300, PlanTokenRules.Match(providerType, "Team Standard"));
+        }
+    }
+
+    [TestMethod]
+    public void Match_ChineseTokenPlans_ConvertMonthlyGrantsToWeekly()
+    {
+        Assert.AreEqual(1600, PlanTokenRules.Match("minimax", "MiniMax Ultra"));
+        Assert.AreEqual(420, PlanTokenRules.Match("minimax", "MiniMax Max"));
+        Assert.AreEqual(140, PlanTokenRules.Match("minimax", "MiniMax Plus"));
+
+        Assert.AreEqual(9000, PlanTokenRules.Match("stepfun", "StepFun Max"));
+        Assert.AreEqual(1800, PlanTokenRules.Match("stepfun", "StepFun Pro"));
+        Assert.AreEqual(370, PlanTokenRules.Match("stepfun", "StepFun Plus"));
+        Assert.AreEqual(90, PlanTokenRules.Match("stepfun", "Flash Mini"));
+
+        Assert.AreEqual(160, PlanTokenRules.Match("alibabatokenplan", "Qwen Token Plan Pro"));
+        Assert.AreEqual(40, PlanTokenRules.Match("alibabatokenplan", "Standard"));
+        Assert.AreEqual(10, PlanTokenRules.Match("alibabatokenplan", "Lite"));
+
+        Assert.AreEqual(225, PlanTokenRules.Match("doubao", "coding-plan"));
+        Assert.AreEqual(225, PlanTokenRules.Match("doubao", "coding-plan-team"));
+        Assert.AreEqual(45, PlanTokenRules.Match("doubao", "agent-plan"));
+    }
+
+    [TestMethod]
+    public void Match_AugmentTiers_ConvertCreditPoolsToWeeklyTokens()
+    {
+        Assert.AreEqual(100, PlanTokenRules.Match("augment", "Augment Max"));
+        Assert.AreEqual(30, PlanTokenRules.Match("augment", "Augment Standard"));
+        Assert.AreEqual(9, PlanTokenRules.Match("augment", "Augment Indie"));
+        Assert.AreEqual(9, PlanTokenRules.Match("augment", "Developer"));
+    }
+
+    [TestMethod]
     public void Match_WithUnknownPlanOrProvider_ReturnsNull()
     {
         Assert.IsNull(PlanTokenRules.Match("claude", "Claude Code · Hyperdrive"));
