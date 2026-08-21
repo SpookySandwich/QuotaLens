@@ -137,9 +137,41 @@ public sealed class SimpleApiProviderTests
         """));
 
         Assert.AreEqual("moonshot", snapshot.ProviderId);
-        Assert.AreEqual(12.5, snapshot.Balance!.Total, 0.001);
+        Assert.AreEqual("USD", snapshot.Balance!.Currency);
+        Assert.AreEqual(12.5, snapshot.Balance.Total, 0.001);
         Assert.AreEqual(10.0, snapshot.Balance.Paid, 0.001);
         Assert.AreEqual(2.5, snapshot.Balance.Granted, 0.001);
+    }
+
+    [TestMethod]
+    public void ParseMoonshot_OnTheMainlandHost_ReportsAYuanBalance()
+    {
+        // api.moonshot.cn settles in yuan; the payload itself says nothing about
+        // currency, so mislabelling it USD would inflate the value view 7x.
+        var snapshot = SimpleApiProvider.ParseMoonshot(
+            Json("""
+            {
+              "code": 0,
+              "status": true,
+              "data": {
+                "available_balance": 72.0,
+                "voucher_balance": 0,
+                "cash_balance": 72.0
+              }
+            }
+            """),
+            SimpleApiProvider.MoonshotCurrency("https://api.moonshot.cn/v1/users/me/balance"));
+
+        Assert.AreEqual("CNY", snapshot.Balance!.Currency);
+        Assert.AreEqual(72.0, snapshot.Balance.Total, 0.001);
+        StringAssert.Contains(snapshot.Primary.DetailText!, "¥72.00 available");
+    }
+
+    [TestMethod]
+    public void MoonshotCurrency_FollowsTheStorefrontHost()
+    {
+        Assert.AreEqual("USD", SimpleApiProvider.MoonshotCurrency("https://api.moonshot.ai/v1/users/me/balance"));
+        Assert.AreEqual("CNY", SimpleApiProvider.MoonshotCurrency("https://api.moonshot.cn/v1/users/me/balance"));
     }
 
     [TestMethod]

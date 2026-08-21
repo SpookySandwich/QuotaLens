@@ -60,6 +60,9 @@ public sealed class BedrockProvider : IProvider
                 DetailText = hasBudget ? spendText : null,
                 WindowMinutes = null,
             },
+            // Total is budget REMAINING, never spend: shared code reads it as money
+            // still available and sizes the value bar from it. Without a budget there
+            // is no remaining figure to report, so no balance is emitted at all.
             Balance = hasBudget
                 ? new BalanceInfo
                 {

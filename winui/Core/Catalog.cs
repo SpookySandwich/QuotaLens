@@ -1151,10 +1151,10 @@ public static class Catalog
         ["synthetic"] = Array.Empty<ProviderPlanValueRule>(),
         ["zai"] = Array.Empty<ProviderPlanValueRule>(),
         ["zcode"] = Array.Empty<ProviderPlanValueRule>(),
-        ["doubao"] = new[]
-        {
-            new ProviderPlanValueRule("doubao", -1),
-        },
+        // Doubao is a subscription (Coding/Agent Plan, with real 5h/weekly/monthly
+        // windows), not metered API spend; the plan price is not published, so it
+        // takes the shared unknown-plan estimate like the other unpriced products.
+        ["doubao"] = Array.Empty<ProviderPlanValueRule>(),
         ["groq"] = new[]
         {
             new ProviderPlanValueRule("groq", -1),

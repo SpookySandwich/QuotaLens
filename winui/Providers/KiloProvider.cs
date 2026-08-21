@@ -119,15 +119,10 @@ public sealed class KiloProvider : IProvider
             PlanName = usage.PlanName,
             Primary = CreditsWindow(usage),
             Secondary = PassWindow(usage),
+            // Plan and auto-top-up state are account metadata, not a quota pool: as a
+            // quota window they rendered as a permanently 100%-available bar.
             Tertiary = planParts.Count > 0
-                ? new RateWindow
-                {
-                    Label = string.IsNullOrWhiteSpace(organizationId) ? "Activity" : "Organization",
-                    UsedPercent = 0,
-                    DetailText = string.IsNullOrWhiteSpace(organizationId)
-                        ? string.Join(" · ", planParts)
-                        : $"{organizationId} · {string.Join(" · ", planParts)}",
-                }
+                ? ActivityWindow(organizationId, planParts)
                 : null,
             Balance = usage.CreditsRemaining is not null
                 ? new BalanceInfo
@@ -141,6 +136,22 @@ public sealed class KiloProvider : IProvider
             SourceLabel = "Kilo API",
             Confidence = Confidence.Official,
             UpdatedAt = DateTimeOffset.UtcNow,
+        };
+    }
+
+    private static RateWindow ActivityWindow(string? organizationId, IReadOnlyList<string> planParts)
+    {
+        var summary = string.IsNullOrWhiteSpace(organizationId)
+            ? string.Join(" · ", planParts)
+            : $"{organizationId} · {string.Join(" · ", planParts)}";
+        return new RateWindow
+        {
+            Label = string.IsNullOrWhiteSpace(organizationId) ? "Activity" : "Organization",
+            Kind = RateWindowKind.Informational,
+            // ValueText is the informational value; DetailText keeps the same prose so
+            // snapshots written by older builds and this one read identically.
+            ValueText = summary,
+            DetailText = summary,
         };
     }
 

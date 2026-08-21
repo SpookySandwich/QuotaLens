@@ -1,3 +1,4 @@
+using System.Linq;
 using QuotaLens.Helpers;
 
 namespace QuotaLens.ViewModels;
@@ -16,7 +17,8 @@ public sealed class UsageTimelineSegmentViewModel
         bool isRemainder = false,
         string instanceId = "",
         bool isGrayedOut = false,
-        string? customAvailableText = null)
+        string? customAvailableText = null,
+        string? automationStatusText = null)
     {
         InstanceId = instanceId;
         ProviderType = providerType;
@@ -30,6 +32,7 @@ public sealed class UsageTimelineSegmentViewModel
         ResetFrequencySortMinutes = resetFrequencySortMinutes;
         IsRemainder = isRemainder;
         IsGrayedOut = isGrayedOut;
+        AutomationStatusText = automationStatusText;
     }
 
     public string InstanceId { get; }
@@ -44,12 +47,30 @@ public sealed class UsageTimelineSegmentViewModel
     public double ResetFrequencySortMinutes { get; }
     public bool IsRemainder { get; }
     public bool IsGrayedOut { get; }
+
+    /// <summary>
+    /// Replaces the "&lt;amount&gt; available" clause of <see cref="AutomationName"/>.
+    /// The empty-state bar shows no text at all, so this is the only thing that can
+    /// tell a screen-reader user why the chart is blank.
+    /// </summary>
+    public string? AutomationStatusText { get; }
+
     public bool IsInteractive => !IsRemainder && !string.IsNullOrWhiteSpace(InstanceId);
     public bool HasResetText => !string.IsNullOrWhiteSpace(ResetText);
     public bool HasResetFrequencyText => !string.IsNullOrWhiteSpace(ResetFrequencyText);
-    public string AutomationName => IsRemainder
-        ? I18n.T("timeline.usedCapacity")
-        : string.IsNullOrWhiteSpace(ResetFrequencyText)
-            ? $"{Label}, {AvailableText} {I18n.T("common.available")}"
-            : $"{Label}, {AvailableText} {I18n.T("common.available")}, {ResetFrequencyText}";
+    public string AutomationName
+    {
+        get
+        {
+            if (IsRemainder)
+                return I18n.T("timeline.usedCapacity");
+
+            var status = AutomationStatusText ?? $"{AvailableText} {I18n.T("common.available")}";
+            // The empty-state bar names no provider, so it must not be announced
+            // with a leading comma where the name would have been.
+            var parts = new[] { Label, status, ResetFrequencyText }
+                .Where(part => !string.IsNullOrWhiteSpace(part));
+            return string.Join(", ", parts);
+        }
+    }
 }

@@ -338,14 +338,18 @@ public sealed class HeroViewModelTests
 
         var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.FiveHour);
 
-        Assert.AreEqual(1, segments.Count);
-        Assert.AreEqual("claude", segments[0].InstanceId);
-        Assert.AreEqual("effective 5h", segments[0].ResetFrequencyText);
-        StringAssert.StartsWith(segments[0].AvailableText, "90%");
+        // Only Claude has a 5h pool, so it gets the whole bar. Codex has no 5h
+        // number to draw; giving it a placeholder would shrink the one real
+        // measurement on screen in order to show nothing.
+        var segment = segments.Single();
+        Assert.AreEqual("claude", segment.InstanceId);
+        Assert.IsFalse(segment.IsGrayedOut);
+        Assert.AreEqual("effective 5h", segment.ResetFrequencyText);
+        StringAssert.StartsWith(segment.AvailableText, "90%");
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WithPlanValueMode_IncludesGrayedOutBalanceSegments()
+    public void BuildUsageTimelineSegments_WithPlanValueMode_ShowsBalancesAsFirstClassValue()
     {
         var config = new FakeConfig(new[]
         {
@@ -376,13 +380,17 @@ public sealed class HeroViewModelTests
 
         var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
 
-        Assert.IsTrue(segments.Count >= 1);
-        var claude = segments.Single(s => s.InstanceId == "claude");
-        Assert.IsFalse(claude.IsGrayedOut);
-        Assert.AreEqual("$100", claude.AvailableText);
-        Assert.AreEqual(100, claude.Weight, 0.001);
-        Assert.IsTrue(segments.Any(s => s.InstanceId == "deepseek" && s.IsGrayedOut));
-        Assert.AreEqual("$3.32", segments.First(s => s.InstanceId == "deepseek").AvailableText);
+        Assert.AreEqual(2, segments.Count);
+        Assert.AreEqual("claude", segments[0].InstanceId);
+        Assert.IsFalse(segments[0].IsGrayedOut);
+        Assert.AreEqual("$100", segments[0].AvailableText);
+        Assert.AreEqual(100, segments[0].Weight, 0.001);
+        // In the money view an API balance is money like any other: converted to
+        // USD and drawn in the provider's own color, not dimmed to a footnote.
+        Assert.AreEqual("deepseek", segments[1].InstanceId);
+        Assert.IsFalse(segments[1].IsGrayedOut);
+        Assert.AreEqual("$3.32", segments[1].AvailableText);
+        Assert.AreEqual(23.9 / 7.2, segments[1].Weight, 0.001);
     }
 
     [TestMethod]
@@ -413,14 +421,18 @@ public sealed class HeroViewModelTests
 
         var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
 
-        Assert.AreEqual(1, segments.Count);
-        Assert.AreEqual("mimo", segments[0].InstanceId);
-        Assert.AreEqual("effective monthly", segments[0].ResetFrequencyText);
-        StringAssert.StartsWith(segments[0].AvailableText, "75%");
+        // MiMo is the only monthly pool, so it fills the bar. Claude is left out
+        // entirely despite its far larger token allowance — it has no monthly
+        // number, and a bar with no number behind it is not worth width.
+        var segment = segments.Single();
+        Assert.AreEqual("mimo", segment.InstanceId);
+        Assert.IsFalse(segment.IsGrayedOut);
+        Assert.AreEqual("effective monthly", segment.ResetFrequencyText);
+        StringAssert.StartsWith(segment.AvailableText, "75%");
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WithKimiTotalQuota_ShowsOnMonthlyWithReset()
+    public void BuildUsageTimelineSegments_WithKimiMonthlyPool_ShowsOnMonthlyWithReset()
     {
         var config = new FakeConfig(new[] { new ProviderInstance("kimi", "kimi", "Kimi") });
         var resetAt = DateTimeOffset.UtcNow.AddDays(12).AddHours(3).ToString("O");
@@ -432,7 +444,7 @@ public sealed class HeroViewModelTests
                 PlanName = "Allegro",
                 Primary = new RateWindow
                 {
-                    Label = "Total quota",
+                    Label = "Monthly",
                     UsedPercent = 68,
                     ResetsAt = resetAt,
                     WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
@@ -474,7 +486,67 @@ public sealed class HeroViewModelTests
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WithMonthlyMode_DoesNotInventMonthlyFromFiveHourPlans()
+    public void BuildUsageTimelineSegments_WithNoProvidersAtAll_StillHoldsThePlaceWithOneGrayBar()
+    {
+        var config = new FakeConfig(Array.Empty<ProviderInstance>());
+
+        foreach (var mode in new[]
+                 {
+                     ProviderSortMode.FiveHour,
+                     ProviderSortMode.Weekly,
+                     ProviderSortMode.Monthly,
+                     ProviderSortMode.PlanValue,
+                 })
+        {
+            var segments = HeroViewModel.BuildUsageTimelineSegments(
+                config,
+                Array.Empty<(string, ProviderSnapshot)>(),
+                sortMode: mode);
+
+            // The card must never collapse: an empty chart that vanishes reflows the
+            // whole dashboard every time the user switches cadence.
+            var segment = segments.Single();
+            Assert.IsTrue(segment.IsGrayedOut, $"{mode} placeholder should be gray");
+            Assert.IsTrue(segment.Weight > 0, $"{mode} placeholder needs a drawable weight");
+            // The empty bar stands for nothing, so it says nothing: no provider
+            // name, no percentage, no dollar amount.
+            Assert.AreEqual("", segment.Label, $"{mode} placeholder must carry no label");
+            Assert.AreEqual("", segment.AvailableText, $"{mode} placeholder must carry no value");
+            // Inert: nothing to scroll to.
+            Assert.IsFalse(segment.IsInteractive, $"{mode} placeholder should not be clickable");
+        }
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WhenEveryProviderIsStillConnecting_HoldsThePlace()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", new ProviderSnapshot
+            {
+                ProviderId = "claude",
+                Name = "Claude Code",
+                Error = "Network error: timed out",
+                Primary = new RateWindow { Label = "5h Pool", UsedPercent = 0 },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(
+            config,
+            snapshots,
+            sortMode: ProviderSortMode.Monthly);
+
+        var segment = segments.Single();
+        Assert.IsTrue(segment.IsGrayedOut);
+        Assert.AreEqual("", segment.Label);
+        Assert.IsFalse(segment.IsInteractive);
+        // Sighted users see a blank gray track; screen-reader users still get told why.
+        StringAssert.Contains(segment.AutomationName, "no monthly plan");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithMonthlyMode_ShowsOneBlankGrayBarWhenNoPlanHasThatCadence()
     {
         var config = new FakeConfig(new[]
         {
@@ -509,7 +581,213 @@ public sealed class HeroViewModelTests
 
         var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
 
-        Assert.AreEqual(0, segments.Count);
+        // Neither plan has a monthly pool, so neither is drawn — a per-provider
+        // placeholder would be a bar representing a number that does not exist.
+        // The chart still holds its place as a single blank gray track.
+        var segment = segments.Single();
+        Assert.IsTrue(segment.IsGrayedOut);
+        Assert.IsTrue(segment.Weight > 0);
+        Assert.AreEqual("", segment.Label);
+        Assert.AreEqual("", segment.AvailableText);
+        Assert.IsFalse(segment.IsInteractive);
+        // "0% available" would be a lie: these plans have capacity, just not monthly.
+        StringAssert.Contains(segment.AutomationName, "no monthly plan");
+        Assert.IsFalse(segment.AutomationName.Contains("available", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithSingleMatchingPlan_GivesItTheWholeBar()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("kimi", "kimi", "Kimi"),
+            new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("codex", "codex", "Codex"),
+        });
+        var snapshots = new[]
+        {
+            ("kimi", Snapshot("Kimi · Allegro", usedPercent: 70, resetHours: 285, windowMinutes: 30 * 24 * 60)),
+            ("claude", Snapshot("Claude Code · Max", usedPercent: 10, resetHours: 4, windowMinutes: 5 * 60)),
+            ("codex", Snapshot("Codex · Plus", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
+
+        // The one provider with a monthly number owns the full width. Claude and
+        // Codex are not drawn at all: sharing the bar with them would shrink the
+        // only real measurement to make room for two that do not exist.
+        var segment = segments.Single();
+        Assert.AreEqual("kimi", segment.InstanceId);
+        Assert.IsFalse(segment.IsGrayedOut);
+        StringAssert.StartsWith(segment.AvailableText, "30%");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithMixedCadences_ExcludesPlansWithoutTheSelectedCadence()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("codex", "codex", "Codex"),
+            new ProviderInstance("mimo", "mimo", "MiMo"),
+        });
+        var snapshots = new[]
+        {
+            ("claude", Snapshot("Claude Code · Max", usedPercent: 10, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("codex", Snapshot("Codex · Plus", usedPercent: 40, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
+
+        // Only the two weekly plans are drawn, and they split the bar between
+        // them. The monthly-only plan is absent rather than gray.
+        CollectionAssert.AreEqual(
+            new[] { "claude", "codex" },
+            segments.Select(segment => segment.InstanceId).ToArray());
+        Assert.IsTrue(segments.All(segment => !segment.IsGrayedOut));
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithCadenceMode_ExcludesBalancesWithNoWindowAtThatCadence()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("mimo", "mimo", "MiMo"),
+            new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("deepseek", "deepseek", "DeepSeek"),
+        });
+        var snapshots = new[]
+        {
+            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
+            ("claude", Snapshot("Claude Code · Max", usedPercent: 10, resetHours: 4, windowMinutes: 5 * 60)),
+            ("deepseek", new ProviderSnapshot
+            {
+                ProviderId = "deepseek",
+                Name = "DeepSeek",
+                Balance = new BalanceInfo { Total = 23.9, Currency = "CNY" },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
+
+        // A balance has no refill window at all, so a cadence view has nothing to
+        // place it in — it belongs to the value view, where money is the unit.
+        // Claude's 5h-only plan is likewise absent from a monthly view.
+        var segment = segments.Single();
+        Assert.AreEqual("mimo", segment.InstanceId);
+        Assert.IsFalse(segment.IsGrayedOut);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WhenSlotsAreScarce_PrefersColoredBarsOverGrayOnes()
+    {
+        var weeklyIds = new[] { "claude", "codex", "codex-lb", "gemini", "cursor", "kimi" };
+        var instances = weeklyIds
+            .Select(id => new ProviderInstance(id, id, id))
+            .Append(new ProviderInstance("mimo", "mimo", "MiMo"))
+            .ToArray();
+        var config = new FakeConfig(instances);
+        var snapshots = new[]
+        {
+            ("claude", Snapshot("Claude Code · Max", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("codex", Snapshot("Codex · Plus", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("codex-lb", Snapshot("codex-lb · plus", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("gemini", Snapshot("Gemini · Google AI Pro", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("cursor", Snapshot("Cursor · Pro", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("kimi", Snapshot("Kimi · Allegro", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
+
+        // Six slots, seven providers: the gray "no weekly plan" bar is the one
+        // that loses, never a plan the view can actually measure.
+        Assert.AreEqual(6, segments.Count);
+        Assert.IsFalse(segments.Any(segment => segment.IsGrayedOut));
+        Assert.IsFalse(segments.Any(segment => segment.InstanceId == "mimo"));
+        CollectionAssert.AreEquivalent(weeklyIds, segments.Select(segment => segment.InstanceId).ToArray());
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithExhaustedFiveHourPool_StillShowsHealthyMonthlyPool()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", new ProviderSnapshot
+            {
+                ProviderId = "claude",
+                Name = "Claude Code · Max",
+                Primary = new RateWindow
+                {
+                    Label = "5h Pool",
+                    UsedPercent = 100,
+                    ResetsAt = DateTimeOffset.UtcNow.AddHours(2).ToString("O"),
+                    WindowMinutes = 5 * 60,
+                },
+                Secondary = new RateWindow
+                {
+                    Label = "Monthly Pool",
+                    UsedPercent = 30,
+                    ResetsAt = DateTimeOffset.UtcNow.AddDays(10).ToString("O"),
+                    WindowMinutes = 30 * 24 * 60,
+                },
+            }),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
+
+        // Overall availability is 0 because the 5h pool is burnt, but the monthly
+        // view asks about the monthly pool, and that one is 70% full.
+        var segment = segments.Single();
+        Assert.IsFalse(segment.IsGrayedOut);
+        Assert.AreEqual("effective monthly", segment.ResetFrequencyText);
+        StringAssert.StartsWith(segment.AvailableText, "70%");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithExpiredEntitlement_ExcludesTheDeadPlan()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("cursor", "cursor", "Cursor"),
+            new ProviderInstance("mimo", "mimo", "MiMo"),
+        });
+        var expired = Snapshot("Cursor · Pro", usedPercent: 0, resetHours: 100, windowMinutes: 30 * 24 * 60);
+        expired.EntitlementStatus = EntitlementStatus.Expired;
+        var snapshots = new[]
+        {
+            ("cursor", expired),
+            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
+        };
+
+        // A dead plan must not be priced or drawn in either view.
+        var value = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
+        var monthly = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
+
+        Assert.AreEqual("mimo", value.Single().InstanceId);
+        Assert.AreEqual("mimo", monthly.Single().InstanceId);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithFullySpentMatchingPool_KeepsAVisibleSliver()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", Snapshot("Claude Code · Max", usedPercent: 100, resetHours: 40, windowMinutes: 7 * 24 * 60)),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
+
+        // Zero tokens left is still a fact worth drawing: the cylinder drops any
+        // non-positive weight, so an empty pool floors to a minimum sliver.
+        var segment = segments.Single();
+        Assert.AreEqual(0.01, segment.Weight, 0.0001);
+        Assert.IsFalse(segment.IsGrayedOut);
+        Assert.AreEqual("effective weekly", segment.ResetFrequencyText);
+        StringAssert.StartsWith(segment.AvailableText, "0%");
     }
 
     [TestMethod]

@@ -214,6 +214,30 @@ public sealed class GrokProviderTests
     }
 
     [TestMethod]
+    public void Snapshot_CreditsConfig_WhenAllowanceIsSpent_ReportsZeroRemainingNotSpend()
+    {
+        // Balance.Total is money still available. A fully consumed allowance is worth
+        // nothing; reporting the $30 already burned would grow the value bar as the
+        // user spends.
+        var config = GrokProvider.ParseCreditsConfig("""
+        {
+          "config": {
+            "monthlyLimit": { "val": 3000 },
+            "used": { "val": 3000 },
+            "billingPeriodStart": "2026-08-01T00:00:00Z",
+            "billingPeriodEnd": "2026-09-01T00:00:00Z"
+          }
+        }
+        """);
+
+        var snapshot = GrokProvider.Snapshot(config);
+
+        Assert.AreEqual(0, snapshot.Balance!.Total, 0.001);
+        Assert.AreEqual(30, snapshot.Balance.Paid, 0.001);
+        Assert.AreEqual(30, snapshot.Balance.Granted, 0.001);
+    }
+
+    [TestMethod]
     public void LoadCredentials_PrefersSuperGrokAndSkipsExpiredSessions()
     {
         var directory = TempDirectory();

@@ -73,7 +73,8 @@ public sealed class SimpleApiProvider : IProvider
                 HttpMethod.Get,
                 ApplyBearerAuth,
                 null,
-                ParseMoonshot),
+                null,
+                CustomFetch: FetchMoonshotAsync),
             ["venice"] = new(
                 "venice",
                 "venice_key",
@@ -834,7 +835,40 @@ public sealed class SimpleApiProvider : IProvider
             _ => null,
         };
 
-    internal static ProviderSnapshot ParseMoonshot(JsonElement root)
+    private static async Task<ProviderSnapshot> FetchMoonshotAsync(
+        SimpleApiProvider provider,
+        string instanceId,
+        IConfig config,
+        string apiKey,
+        CancellationToken ct)
+    {
+        var endpoint = ResolveMoonshotUrl(instanceId, config);
+        using var response = await provider.SendAsync(
+            endpoint,
+            HttpMethod.Get,
+            ApplyBearerAuth,
+            apiKey,
+            null,
+            ct).ConfigureAwait(false);
+        provider.EnsureSuccess(response, "API key");
+        return ParseMoonshot(
+            await ReadJsonAsync(response, ct).ConfigureAwait(false),
+            MoonshotCurrency(endpoint));
+    }
+
+    /// <summary>
+    /// The balance payload carries no currency, so the host is the only signal:
+    /// the mainland platform settles in yuan and the international one in dollars.
+    /// Guessing wrong is not cosmetic — shared code converts CNY to USD and would
+    /// otherwise size a value bar 7x too large.
+    /// </summary>
+    internal static string MoonshotCurrency(string endpoint) =>
+        Uri.TryCreate(endpoint, UriKind.Absolute, out var uri)
+            && uri.Host.EndsWith(".cn", StringComparison.OrdinalIgnoreCase)
+                ? "CNY"
+                : "USD";
+
+    internal static ProviderSnapshot ParseMoonshot(JsonElement root, string currency = "USD")
     {
         if (root.TryGetProperty("code", out var code) && code.ValueKind == JsonValueKind.Number && code.GetInt32() != 0)
             throw new ProviderException($"Not available: Moonshot API code {code.GetInt32()}");
@@ -846,9 +880,10 @@ public sealed class SimpleApiProvider : IProvider
         var voucher = OptionalDouble(data, "voucher_balance") ?? 0.0;
         var cash = OptionalDouble(data, "cash_balance") ?? 0.0;
         var usedPercent = available > 0 ? 0.0 : 100.0;
+        var symbol = currency == "CNY" ? "¥" : "$";
         var balanceDescription = available < 0
-            ? $"${Fmt2(Math.Abs(available))} deficit (cash ${Fmt2(cash)}, voucher ${Fmt2(voucher)})"
-            : $"${Fmt2(available)} available (cash ${Fmt2(cash)}, voucher ${Fmt2(voucher)})";
+            ? $"{symbol}{Fmt2(Math.Abs(available))} deficit (cash {symbol}{Fmt2(cash)}, voucher {symbol}{Fmt2(voucher)})"
+            : $"{symbol}{Fmt2(available)} available (cash {symbol}{Fmt2(cash)}, voucher {symbol}{Fmt2(voucher)})";
 
         return BalanceSnapshot(
             "moonshot",
@@ -856,7 +891,7 @@ public sealed class SimpleApiProvider : IProvider
             "Balance",
             usedPercent,
             balanceDescription,
-            new BalanceInfo { Currency = "USD", Total = available, Paid = cash, Granted = voucher },
+            new BalanceInfo { Currency = currency, Total = available, Paid = cash, Granted = voucher },
             "Moonshot API");
     }
 

@@ -459,8 +459,11 @@ public sealed class CodexLbProvider : IProvider
             foreach (var quota in account.AdditionalQuotas ?? Enumerable.Empty<AccountAdditionalQuota>())
             {
                 var label = AdditionalQuotaLabel(quota);
-                AddAdditionalQuotaWindow(candidates, accountIndex + 1, label, "Primary", quota.PrimaryWindow);
-                AddAdditionalQuotaWindow(candidates, accountIndex + 1, label, "Secondary", quota.SecondaryWindow);
+                // Codex reports the short window as primary and the long one as
+                // secondary, so those are the cadences to name when the upstream
+                // payload omits the window length.
+                AddAdditionalQuotaWindow(candidates, accountIndex + 1, label, "5h", quota.PrimaryWindow);
+                AddAdditionalQuotaWindow(candidates, accountIndex + 1, label, "Weekly", quota.SecondaryWindow);
             }
         }
 
@@ -479,7 +482,7 @@ public sealed class CodexLbProvider : IProvider
         List<AccountQuotaWindow> windows,
         int accountNumber,
         string label,
-        string role,
+        string cadenceFallback,
         AccountAdditionalWindow? window)
     {
         if (window is null)
@@ -488,7 +491,7 @@ public sealed class CodexLbProvider : IProvider
         windows.Add(new AccountQuotaWindow(
             new RateWindow
             {
-                Label = $"{label} · {AdditionalWindowLabel(role, window.WindowMinutes)}",
+                Label = $"{label} · {AdditionalWindowLabel(cadenceFallback, window.WindowMinutes)}",
                 UsedPercent = Quota.ClampPercent(window.UsedPercent),
                 ResetsAt = IsoFromUnixSeconds(window.ResetAt),
                 WindowMinutes = window.WindowMinutes is > 0 ? window.WindowMinutes : null,
@@ -523,12 +526,12 @@ public sealed class CodexLbProvider : IProvider
             || value.Equals("codex_other", StringComparison.OrdinalIgnoreCase)
             || value.Equals("gpt-5.3-codex-spark", StringComparison.OrdinalIgnoreCase));
 
-    private static string AdditionalWindowLabel(string role, long? windowMinutes) => windowMinutes switch
+    private static string AdditionalWindowLabel(string cadenceFallback, long? windowMinutes) => windowMinutes switch
     {
         > 0 and <= 6 * 60 => "5h",
         >= 6 * 24 * 60 and < 28 * 24 * 60 => "Weekly",
         >= 28 * 24 * 60 => "Monthly",
-        _ => role,
+        _ => cadenceFallback,
     };
 
     private static RateWindow InformationalWindow(string label, string value, string? expiresAt = null) => new()

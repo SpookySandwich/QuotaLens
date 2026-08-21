@@ -659,6 +659,33 @@ public sealed class CatalogConsistencyTests
     }
 
     [TestMethod]
+    public void Doubao_IsClassifiedAsASubscriptionNotPayAsYouGo()
+    {
+        // Doubao sells Coding/Agent Plans with real 5h/weekly/monthly windows. Scoring
+        // it pay-as-you-go gave it a plan value of -1 and a zero balance, which hid it
+        // from every dashboard mode; the price is unpublished, so it takes the shared
+        // unknown-plan estimate like the other unpriced subscriptions.
+        Assert.IsTrue(Catalog.SubscriptionProviderTypes.Contains("doubao"));
+        Assert.IsFalse(Catalog.PayAsYouGoProviderTypes.Contains("doubao"));
+
+        var snapshot = new ProviderSnapshot
+        {
+            Name = "Doubao",
+            Primary = new RateWindow
+            {
+                Label = "Coding Plan · 5-hour",
+                UsedPercent = 20,
+                WindowMinutes = 300,
+            },
+        };
+        var score = ProviderPriority.Score("doubao", snapshot);
+
+        Assert.IsFalse(score.IsPayAsYouGo);
+        Assert.AreEqual(ProviderPriority.UsableSubscriptionBucket, score.Bucket);
+        Assert.AreEqual(PlanValueRules.GlobalDefaultMonthlyUsd, ProviderMoney.For("doubao", snapshot, score).AmountUsd, 0.001);
+    }
+
+    [TestMethod]
     public void PayAsYouGoProviders_HaveNegativeDefaultPlanValueRules()
     {
         foreach (var providerType in Catalog.PayAsYouGoProviderTypes)

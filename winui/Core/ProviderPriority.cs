@@ -232,15 +232,15 @@ public static class ProviderPriority
         }
 
         bool hasBalance = snapshot.Balance is not null || planValue < 0;
-        double balanceRaw = snapshot.Balance?.Total > 0
-            ? snapshot.Balance.Total
-            : (snapshot.Balance?.Paid ?? 0.0);
-        var currency = snapshot.Balance?.Currency?.ToUpperInvariant();
-        double balanceAmount = currency switch
-        {
-            "CNY" or "RMB" => balanceRaw / 7.2,
-            _ => balanceRaw,
-        };
+        // Total is the provider-agnostic "money still available". Paid is money
+        // already SPENT for budget-style providers (Bedrock, Grok), so it must never
+        // stand in for a balance: an exhausted budget would otherwise report a value
+        // equal to what it burned, and its bar would grow as the user spends.
+        // A deficit is not negative value either, so the floor is zero.
+        double balanceRaw = Math.Max(0, snapshot.Balance?.Total ?? 0.0);
+        // Monetary only. A credits/points/DIEM count has no dollar figure, and
+        // passing it through unconverted let it outrank real subscriptions.
+        double balanceAmount = CurrencyRates.ToUsd(balanceRaw, snapshot.Balance?.Currency) ?? 0.0;
 
         if (planValue < 0)
             return new ProviderPriorityScore(

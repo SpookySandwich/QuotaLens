@@ -2971,7 +2971,14 @@ public sealed class WebLoginService
             ProviderId = "windsurf",
             Name = "Windsurf",
             PlanName = plan,
-            Primary = primary ?? new RateWindow { Label = "Daily", UsedPercent = 0 },
+            // Windsurf reported no daily figure but the Primary slot is mandatory.
+            // Say so instead of fabricating a fully-available daily pool.
+            Primary = primary ?? new RateWindow
+            {
+                Label = "Daily",
+                Kind = RateWindowKind.Informational,
+                ValueText = "Not reported",
+            },
             Secondary = secondary,
             SourceLabel = "Windsurf WebView",
             Confidence = Confidence.Official,
@@ -3134,6 +3141,13 @@ public sealed class WebLoginService
             };
         }
 
+        var purchased = new RateWindow
+        {
+            Label = "Purchased credits",
+            UsedPercent = purchasedTotal > 0 ? Quota.ClampPercent(purchasedUsed / purchasedTotal * 100) : 100,
+            DetailText = $"{Fmt0(purchasedUsed)}/{Fmt0(purchasedTotal)} credits",
+        };
+
         var promoExpiration = promotional
             .Select(g => JDouble(g, "expires_at_ts"))
             .Where(v => v is > 0)
@@ -3147,12 +3161,7 @@ public sealed class WebLoginService
             // subscription identifiers. Keep the provider-only title until the
             // private response explicitly supplies a plan field backed by a fixture.
             Name = "Perplexity",
-            Primary = primary ?? new RateWindow
-            {
-                Label = "Purchased credits",
-                UsedPercent = purchasedTotal > 0 ? Quota.ClampPercent(purchasedUsed / purchasedTotal * 100) : 100,
-                DetailText = $"{Fmt0(purchasedUsed)}/{Fmt0(purchasedTotal)} credits",
-            },
+            Primary = primary ?? purchased,
             Secondary = new RateWindow
             {
                 Label = "Bonus credits",
@@ -3160,12 +3169,9 @@ public sealed class WebLoginService
                 ResetsAt = promoExpiration,
                 DetailText = $"{Fmt0(promoUsed)}/{Fmt0(promoTotal)} bonus",
             },
-            Tertiary = new RateWindow
-            {
-                Label = "Purchased credits",
-                UsedPercent = purchasedTotal > 0 ? Quota.ClampPercent(purchasedUsed / purchasedTotal * 100) : 100,
-                DetailText = $"{Fmt0(purchasedUsed)}/{Fmt0(purchasedTotal)} credits",
-            },
+            // Without a recurring pool the purchased window already leads the card;
+            // repeating it here rendered the same row twice.
+            Tertiary = primary is null ? null : purchased,
             Balance = new BalanceInfo
             {
                 Currency = "USD",
@@ -4337,12 +4343,18 @@ public sealed class WebLoginService
         WindowMinutes = windowMinutes,
     };
 
+    /// <summary>
+    /// The renewal date is billing metadata, not a pool: as a quota window it drew a
+    /// permanently 100%-available bar and competed in the card's next-reset ranking.
+    /// </summary>
     private static RateWindow RenewalWindow(string? renewsAt) => new()
     {
         Label = "Renews",
+        Kind = RateWindowKind.Informational,
         UsedPercent = 0,
         ResetsAt = renewsAt,
-        DetailText = "Subscription renewal",
+        // The renewal instant is the caption; the value says what the instant means.
+        ValueText = "Subscription renewal",
     };
 
     private static double ResetSortSeconds(UsageWindow window, bool shorterReset)

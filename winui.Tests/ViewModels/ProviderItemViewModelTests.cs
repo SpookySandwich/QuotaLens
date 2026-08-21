@@ -410,7 +410,7 @@ public sealed class ProviderItemViewModelTests
     }
 
     [TestMethod]
-    public void Update_WithAdditionalWindows_RendersRowsAfterStandardWindows()
+    public void Update_WithAdditionalWindows_InterleavesEveryWindowByCadence()
     {
         var service = new FakeProviderService(new ProviderInstance("codex", "codex", "Codex"));
         var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
@@ -422,12 +422,167 @@ public sealed class ProviderItemViewModelTests
 
         viewModel.Update(snapshot, refreshing: false);
 
-        Assert.AreEqual(5, viewModel.Rows.Count);
+        // Additional windows are no longer parked at the end: every cadence pool sorts
+        // shortest-window-first, and only the cadence-less "Credits" row stays behind.
+        CollectionAssert.AreEqual(
+            new[] { "5h", "Codex Spark 5-hour", "Weekly", "Codex Spark Weekly", "Credits" },
+            viewModel.Rows.Select(row => row.Label).ToArray());
+    }
+
+    [TestMethod]
+    public void Update_WithMonthlyLeadingSnapshot_RendersFiveHourThenWeeklyThenMonthly()
+    {
+        var service = new FakeProviderService(new ProviderInstance("kimi", "kimi", "Kimi"));
+        var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+        var snapshot = new ProviderSnapshot
+        {
+            ProviderId = "kimi",
+            Name = "Kimi",
+            Primary = new RateWindow
+            {
+                Label = "Monthly",
+                UsedPercent = 1,
+                WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
+                CountsForAvailability = true,
+            },
+            Secondary = new RateWindow { Label = "Weekly", UsedPercent = 16, WindowMinutes = 10080 },
+            Tertiary = new RateWindow { Label = "5h Rate Limit", UsedPercent = 66, WindowMinutes = 300 },
+            AdditionalWindows =
+            {
+                new RateWindow
+                {
+                    Label = "Concurrency",
+                    Kind = RateWindowKind.Informational,
+                    ValueText = "20 concurrent",
+                },
+            },
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        viewModel.Update(snapshot, refreshing: false);
+
+        CollectionAssert.AreEqual(
+            new[] { "5h", "Weekly", "Monthly", "Concurrency" },
+            viewModel.Rows.Select(row => row.Label).ToArray());
+    }
+
+    [TestMethod]
+    public void Update_WithCadencelessWindows_KeepsTheProviderEmissionOrder()
+    {
+        var service = new FakeProviderService(new ProviderInstance("deepseek", "deepseek", "DeepSeek"));
+        var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+        var snapshot = new ProviderSnapshot
+        {
+            ProviderId = "deepseek",
+            Name = "DeepSeek",
+            Primary = new RateWindow { Label = "Balance", UsedPercent = 0 },
+            // "Today usage" would classify as a 5h cadence from its label, but an
+            // informational metric is not a pool and must not be re-ordered.
+            Secondary = new RateWindow
+            {
+                Label = "Today usage",
+                Kind = RateWindowKind.Informational,
+                ValueText = "$1.20",
+                WindowMinutes = 24 * 60,
+            },
+            Tertiary = new RateWindow
+            {
+                Label = "Month usage",
+                Kind = RateWindowKind.Informational,
+                ValueText = "$18.40",
+            },
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        viewModel.Update(snapshot, refreshing: false);
+
+        CollectionAssert.AreEqual(
+            new[] { "Balance", "Today usage", "Month usage" },
+            viewModel.Rows.Select(row => row.Label).ToArray());
+    }
+
+    [TestMethod]
+    public void Update_WithAvailabilityGroups_KeepsEachFamilyContiguous()
+    {
+        var service = new FakeProviderService(new ProviderInstance("gemini", "gemini", "Gemini"));
+        var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+        var snapshot = new ProviderSnapshot
+        {
+            ProviderId = "gemini",
+            Name = "Gemini",
+            Primary = new RateWindow
+            {
+                Label = "Gemini weekly",
+                UsedPercent = 10,
+                WindowMinutes = 10080,
+                AvailabilityGroup = "Gemini",
+            },
+            Secondary = new RateWindow
+            {
+                Label = "Gemini 5-hour",
+                UsedPercent = 20,
+                WindowMinutes = 300,
+                AvailabilityGroup = "Gemini",
+            },
+            Tertiary = new RateWindow
+            {
+                Label = "Claude/GPT weekly",
+                UsedPercent = 30,
+                WindowMinutes = 10080,
+                AvailabilityGroup = "Claude/GPT",
+            },
+            AdditionalWindows =
+            {
+                new RateWindow
+                {
+                    Label = "Claude/GPT 5-hour",
+                    UsedPercent = 40,
+                    WindowMinutes = 300,
+                    AvailabilityGroup = "Claude/GPT",
+                },
+            },
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        viewModel.Update(snapshot, refreshing: false);
+
+        // Groups are alternative capacity: they sort as blocks in first-appearance
+        // order, and only the cadences inside a block are re-ordered.
+        CollectionAssert.AreEqual(
+            new[] { "Gemini · 5h", "Gemini · Weekly", "Claude/GPT · 5h", "Claude/GPT · Weekly" },
+            viewModel.Rows.Select(row => row.Label).ToArray());
+    }
+
+    [TestMethod]
+    public void Update_WithMonthlyLeadingSnapshot_PointsTheFooterAtTheTopRowReset()
+    {
+        var service = new FakeProviderService(new ProviderInstance("kimi", "kimi", "Kimi"));
+        var viewModel = new ProviderItemViewModel(service, service.Instances[0]);
+        var snapshot = new ProviderSnapshot
+        {
+            ProviderId = "kimi",
+            Name = "Kimi",
+            Primary = new RateWindow
+            {
+                Label = "Monthly",
+                UsedPercent = 1,
+                WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
+                ResetsAt = DateTimeOffset.UtcNow.AddDays(12).ToString("O"),
+            },
+            Tertiary = new RateWindow
+            {
+                Label = "5h Rate Limit",
+                UsedPercent = 66,
+                WindowMinutes = 300,
+                ResetsAt = DateTimeOffset.UtcNow.AddHours(3).AddMinutes(13).ToString("O"),
+            },
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        viewModel.Update(snapshot, refreshing: false);
+
         Assert.AreEqual("5h", viewModel.Rows[0].Label);
-        Assert.AreEqual("Weekly", viewModel.Rows[1].Label);
-        Assert.AreEqual("Credits", viewModel.Rows[2].Label);
-        Assert.AreEqual("Codex Spark 5-hour", viewModel.Rows[3].Label);
-        Assert.AreEqual("Codex Spark Weekly", viewModel.Rows[4].Label);
+        StringAssert.StartsWith(viewModel.FooterReset, "resets in 3h");
     }
 
     [TestMethod]

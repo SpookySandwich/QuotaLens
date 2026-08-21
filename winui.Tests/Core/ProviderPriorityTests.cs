@@ -597,6 +597,88 @@ public sealed class ProviderPriorityTests
     }
 
     [TestMethod]
+    [DataRow("USD", 50.0, 50.0)]
+    [DataRow("CNY", 72.0, 10.0)]
+    [DataRow("RMB", 72.0, 10.0)]
+    [DataRow("eur", 10.0, 11.0)]
+    public void Score_WithMonetaryBalance_ConvertsItToUsd(string currency, double total, double expectedUsd)
+    {
+        var snapshot = Snapshot("DeepSeek", usedPercent: 0);
+        snapshot.Balance = new BalanceInfo { Currency = currency, Total = total };
+
+        var score = ProviderPriority.Score("deepseek", snapshot);
+
+        Assert.AreEqual(expectedUsd, score.BalanceAmount, 0.001);
+    }
+
+    [TestMethod]
+    [DataRow("credits")]
+    [DataRow("points")]
+    [DataRow("DIEM")]
+    [DataRow("bananas")]
+    public void Score_WithNonMonetaryBalance_KeepsTheBalanceButValuesItAtZero(string currency)
+    {
+        // A credit count is not dollars. Passing it through let a free JetBrains
+        // plan with 12k credits outrank a $200 subscription in the value ordering.
+        var snapshot = Snapshot("JetBrains AI", usedPercent: 10);
+        snapshot.Balance = new BalanceInfo { Currency = currency, Total = 12_000 };
+
+        var score = ProviderPriority.Score("jetbrains", snapshot);
+
+        Assert.IsTrue(score.HasBalance);
+        Assert.AreEqual(0, score.BalanceAmount, 0.001);
+    }
+
+    [TestMethod]
+    public void Score_WithExhaustedBudget_ReportsNoBalanceRatherThanMoneySpent()
+    {
+        // Budget-style providers report Total = remaining and Paid = spend, so
+        // reading Paid turned a fully burned budget into a value bar that grew
+        // with spending.
+        var snapshot = Snapshot("AWS Bedrock", usedPercent: 100);
+        snapshot.Balance = new BalanceInfo { Currency = "USD", Total = 0, Paid = 100, Granted = 100 };
+
+        var score = ProviderPriority.Score("bedrock", snapshot);
+
+        Assert.IsTrue(score.HasBalance);
+        Assert.AreEqual(0, score.BalanceAmount, 0.001);
+    }
+
+    [TestMethod]
+    public void Score_WithPartlySpentBudget_ValuesTheRemainder()
+    {
+        var snapshot = Snapshot("Grok", usedPercent: 25);
+        snapshot.Balance = new BalanceInfo { Currency = "USD", Total = 22.5, Paid = 7.5, Granted = 30 };
+
+        var score = ProviderPriority.Score("grok", snapshot);
+
+        Assert.AreEqual(22.5, score.BalanceAmount, 0.001);
+    }
+
+    [TestMethod]
+    public void Score_WithKimiMonthlyPool_TreatsItAsMonthly()
+    {
+        var snapshot = Snapshot("Kimi · Allegro", usedPercent: 68);
+        snapshot.Primary.Label = "Monthly";
+        snapshot.Primary.WindowMinutes = QuotaCadencePolicy.MonthlyMinutes;
+        snapshot.Primary.CountsForAvailability = true;
+        snapshot.Secondary = new RateWindow
+        {
+            Label = "Weekly",
+            UsedPercent = 16,
+            WindowMinutes = 7 * 24 * 60,
+        };
+
+        var score = ProviderPriority.Score("kimi", snapshot);
+
+        Assert.IsTrue(score.HasMonthly);
+        Assert.AreEqual(32, score.MonthlyAvailability, 0.001);
+        Assert.IsTrue(score.HasWeekly);
+    }
+
+    // Guards the legacy label: snapshots persisted by older builds still carry
+    // Kimi's "Total quota" and must keep classifying as monthly after the rename.
+    [TestMethod]
     public void Score_WithKimiTotalQuota_TreatsItAsMonthly()
     {
         var snapshot = Snapshot("Kimi · Allegro", usedPercent: 68);

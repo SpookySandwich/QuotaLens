@@ -80,13 +80,76 @@ public sealed class WebLoginServiceTests
 
         var snapshot = WebLoginService.ParseKimi(json, periodEnd: "2026-09-12T16:00:00Z");
 
-        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        // The Web source delegates to KimiProvider.ParseAppUsage, so the "Monthly"
+        // rename has to arrive here without a second mapping.
+        Assert.AreEqual("Monthly", snapshot.Primary.Label);
         Assert.AreEqual(68d, snapshot.Primary.UsedPercent, 0.001);
+        Assert.IsNull(snapshot.Primary.DetailText);
         Assert.AreEqual(QuotaCadencePolicy.MonthlyMinutes, snapshot.Primary.WindowMinutes);
         Assert.IsTrue(snapshot.Primary.CountsForAvailability);
         Assert.AreEqual("2026-09-12T16:00:00Z", snapshot.Primary.ResetsAt);
         Assert.AreEqual("Weekly", snapshot.Secondary!.Label);
         Assert.AreEqual("Kimi WebView", snapshot.SourceLabel);
+    }
+
+    [TestMethod]
+    public void ParsePerplexity_WithoutRecurringCredits_DoesNotRepeatThePurchasedRow()
+    {
+        var snapshot = WebLoginService.ParsePerplexity("""
+        {
+          "balance_cents": 3000,
+          "renewal_date_ts": 1893456000,
+          "current_period_purchased_cents": 2000,
+          "total_usage_cents": 500,
+          "credit_grants": [
+            { "type": "purchased", "amount_cents": 2000 },
+            { "type": "promotional", "amount_cents": 500, "expires_at_ts": 1893542400 }
+          ]
+        }
+        """);
+
+        // With no recurring pool the purchased window is promoted to Primary, so it
+        // must not be emitted a second time in the Tertiary slot.
+        Assert.AreEqual("Purchased credits", snapshot.Primary.Label);
+        Assert.AreEqual("Bonus credits", snapshot.Secondary!.Label);
+        Assert.IsNull(snapshot.Tertiary);
+    }
+
+    [TestMethod]
+    public void ParseOpenCode_RenewalRow_IsInformationalNotAFullQuotaBar()
+    {
+        var snapshot = WebLoginService.ParseOpenCode("""
+        {
+          "usage": {
+            "rollingUsage": { "usagePercent": 40, "resetInSec": 3600 },
+            "weeklyUsage": { "usagePercent": 20, "resetInSec": 604800 },
+            "renewAt": "2030-01-01T00:00:00Z"
+          }
+        }
+        """);
+
+        Assert.AreEqual("Renews", snapshot.Tertiary!.Label);
+        Assert.AreEqual(RateWindowKind.Informational, snapshot.Tertiary.Kind);
+        Assert.AreEqual("Subscription renewal", snapshot.Tertiary.ValueText);
+        Assert.IsFalse(snapshot.Tertiary.CountsForAvailability);
+    }
+
+    [TestMethod]
+    public void ParseWindsurf_WithoutDailyFigures_DoesNotFabricateAFullyAvailableDailyPool()
+    {
+        var snapshot = WebLoginService.ParseWindsurf("""
+        {
+          "planName": "teams",
+          "usage": {
+            "flowActions": 1000,
+            "usedFlowActions": 250
+          }
+        }
+        """);
+
+        Assert.AreEqual("Daily", snapshot.Primary.Label);
+        Assert.AreEqual(RateWindowKind.Informational, snapshot.Primary.Kind);
+        Assert.AreEqual("Flow actions", snapshot.Secondary!.Label);
     }
 
     [TestMethod]

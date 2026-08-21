@@ -162,6 +162,11 @@ public static class ProviderSortPolicy
             .ToList();
     }
 
+    /// <summary>
+    /// Ranks a monthly plan price and a balance on the same USD scale. Safe only
+    /// because <see cref="ProviderPriorityScore.BalanceAmount"/> is monetary USD or
+    /// zero — a credits or points count reads as 0 here rather than as dollars.
+    /// </summary>
     private static double EffectiveValue(ProviderPriorityScore score) =>
         score.PlanValue > 0
             ? score.PlanValue

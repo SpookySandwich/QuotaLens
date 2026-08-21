@@ -12,7 +12,6 @@ public sealed partial class QuotaRowViewModel : ObservableObject
 {
     public QuotaRowViewModel(
         RateWindow window,
-        bool prominent = false,
         bool hideSensitive = false)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -31,8 +30,12 @@ public sealed partial class QuotaRowViewModel : ObservableObject
         AvailablePercent = Quota.AvailablePct(window.UsedPercent);
         Severity = Quota.SeverityForAvailable(AvailablePercent);
         AvailableText = Quota.DisplayPct(AvailablePercent);
-        ResetText = ResetFormatter.FormatCaption(window);
-        IsProminent = prominent;
+        // An informational row without a reset already prints its detail as the value;
+        // the caption would only repeat it.
+        var caption = ResetFormatter.FormatCaption(window);
+        ResetText = !IsQuota && string.Equals(caption, rawValueText, StringComparison.Ordinal)
+            ? null
+            : caption;
         AutomationId = $"MetricRow_{new string(Label.Select(character => char.IsLetterOrDigit(character) ? character : '_').ToArray())}";
         AutomationName = IsQuota
             ? $"{Label}: {AvailableText} {AvailableSuffix}"
@@ -52,13 +55,20 @@ public sealed partial class QuotaRowViewModel : ObservableObject
                 "7d Pool" or "7d" or "Weekly included" or "Weekly Pool" or "Weekly usage" or "Weekly" => "按周",
                 "Gemini 5-hour" or "Gemini 5h" => "Gemini · 5小时",
                 "Gemini weekly" or "Gemini Weekly" => "Gemini · 按周",
-                "Claude/GPT 5-hour" or "Claude/GPT 5h" => "Claude/GPT · 5小时",
-                "Claude/GPT weekly" or "Claude/GPT Weekly" => "Claude/GPT · 按周",
+                // Antigravity's model-quota families spell the name "Claude / GPT"
+                // while the bucket path spells it "Claude/GPT"; both reach the card.
+                "Claude/GPT 5-hour" or "Claude/GPT 5h"
+                    or "Claude / GPT 5-hour" or "Claude / GPT 5h" => "Claude/GPT · 5小时",
+                "Claude/GPT weekly" or "Claude/GPT Weekly"
+                    or "Claude / GPT weekly" or "Claude / GPT Weekly" => "Claude/GPT · 按周",
+                "Claude / GPT" => "Claude/GPT",
                 "Monthly included" or "Monthly usage" or "Monthly" => "按月",
                 "Effective 5h" => "有效 5小时",
                 "Effective Weekly" => "有效按周",
                 "Effective Monthly" => "有效按月",
-                "Total quota" => "总额度",
+                // Legacy: snapshots persisted before Kimi renamed the pool still carry
+                // "Total quota", so cached cards render sanely until the first refresh.
+                "Total quota" => "按月",
                 _ => I18n.WindowLabel(label),
             };
         }
@@ -67,13 +77,17 @@ public sealed partial class QuotaRowViewModel : ObservableObject
         {
             "5h Pool" or "5h Window" or "5h Rate Limit" or "5-hour" => "5h",
             "7d Pool" or "7d" or "Weekly included" or "Weekly Pool" or "Weekly usage" => "Weekly",
-            "Gemini 5-hour" => "Gemini · 5h",
-            "Gemini weekly" => "Gemini · Weekly",
-            "Claude/GPT 5-hour" => "Claude/GPT · 5h",
-            "Claude/GPT weekly" => "Claude/GPT · Weekly",
-            "Monthly included" or "Monthly usage" => "Monthly",
+            "Gemini 5-hour" or "Gemini 5h" => "Gemini · 5h",
+            "Gemini weekly" or "Gemini Weekly" => "Gemini · Weekly",
+            "Claude/GPT 5-hour" or "Claude/GPT 5h"
+                or "Claude / GPT 5-hour" or "Claude / GPT 5h" => "Claude/GPT · 5h",
+            "Claude/GPT weekly" or "Claude/GPT Weekly"
+                or "Claude / GPT weekly" or "Claude / GPT Weekly" => "Claude/GPT · Weekly",
+            "Claude / GPT" => "Claude/GPT",
+            "Monthly included" or "Monthly usage" or "Monthly" => "Monthly",
             "Effective 5h" or "Effective Weekly" or "Effective Monthly" => label,
-            "Total quota" => label,
+            // Legacy alias for snapshots written before Kimi renamed the pool.
+            "Total quota" => "Monthly",
             _ => I18n.WindowLabel(label),
         };
     }
@@ -81,16 +95,13 @@ public sealed partial class QuotaRowViewModel : ObservableObject
     public QuotaRowViewModel(
         string label,
         double usedPercent,
-        string? resetsAt,
-        bool prominent = false)
-        : this(
-            new RateWindow
-            {
-                Label = label,
-                UsedPercent = usedPercent,
-                ResetsAt = resetsAt,
-            },
-            prominent)
+        string? resetsAt)
+        : this(new RateWindow
+        {
+            Label = label,
+            UsedPercent = usedPercent,
+            ResetsAt = resetsAt,
+        })
     {
     }
 
@@ -103,7 +114,6 @@ public sealed partial class QuotaRowViewModel : ObservableObject
     public Severity Severity { get; }
     public string AvailableText { get; }
     public string? ResetText { get; }
-    public bool IsProminent { get; }
     public string AutomationId { get; }
     public string AutomationName { get; }
 

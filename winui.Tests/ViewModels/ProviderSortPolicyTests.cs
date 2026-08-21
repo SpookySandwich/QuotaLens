@@ -91,6 +91,34 @@ public sealed class ProviderSortPolicyTests
     }
 
     [TestMethod]
+    public void Order_ByPlanValue_DoesNotLetCreditBalancesOutrankSubscriptions()
+    {
+        // A 12,000-credit balance used to rank as 12,000 "dollars" whenever the plan
+        // itself was unpriced, taking a top slot from a real paid subscription.
+        var jetbrains = new ProviderSnapshot
+        {
+            Name = "JetBrains AI",
+            Primary = new RateWindow { Label = "Credits", UsedPercent = 10, WindowMinutes = 30 * 24 * 60 },
+            Balance = new BalanceInfo { Currency = "credits", Total = 12_000 },
+        };
+        var claude = new ProviderSnapshot
+        {
+            Name = "Claude Code · Pro",
+            Primary = new RateWindow { Label = "5h Pool", UsedPercent = 10, WindowMinutes = 5 * 60 },
+        };
+        var items = new[]
+        {
+            new SortItem("jetbrains", ProviderPriority.Score("jetbrains", jetbrains)),
+            new SortItem("claude", ProviderPriority.Score("claude", claude)),
+        };
+
+        var ordered = ProviderSortPolicy.Order(items, ProviderSortMode.PlanValue, x => x.Score);
+
+        Assert.AreEqual("claude", ordered[0].Id);
+        Assert.AreEqual("jetbrains", ordered[1].Id);
+    }
+
+    [TestMethod]
     public void Order_ByFiveHour_FallsBackToWeeklyThenMonthly()
     {
         var items = new[]

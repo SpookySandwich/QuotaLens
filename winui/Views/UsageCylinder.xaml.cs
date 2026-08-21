@@ -582,7 +582,10 @@ public sealed partial class UsageCylinder : UserControl
         string.Join("|", segments.Select(segment =>
             string.Join(":", segment.InstanceId, segment.ProviderType, segment.Label, segment.AvailableText,
                 segment.Weight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
-                segment.ResetFrequencyText, segment.IsRemainder, segment.IsGrayedOut)));
+                segment.ResetFrequencyText, segment.IsRemainder, segment.IsGrayedOut,
+                // Two cadence views can produce a pixel-identical bar that must
+                // still be announced differently ("no 5-hour plan" vs "no weekly plan").
+                segment.AutomationName)));
 
     internal enum SegmentLabelMode
     {

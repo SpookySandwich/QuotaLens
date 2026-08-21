@@ -16,6 +16,10 @@ public sealed partial class HeroViewModel : ObservableObject
 {
     private const int MaxUsageTimelineSegments = 6;
 
+    // UsageCylinder drops any segment whose weight is not positive, so a provider
+    // at 0% must still be worth a sliver: disappearing reads as "not configured".
+    private const double MinSegmentWeight = 0.01;
+
     // "Use right now" recommendation.
     [ObservableProperty] public partial bool HasPick { get; set; }
     [ObservableProperty] public partial string PickName { get; set; } = "";
@@ -165,7 +169,10 @@ public sealed partial class HeroViewModel : ObservableObject
                     && current.AvailableText == candidate.AvailableText
                     && current.Label == candidate.Label
                     && current.ResetFrequencyText == candidate.ResetFrequencyText
-                    && current.IsGrayedOut == candidate.IsGrayedOut)
+                    && current.IsGrayedOut == candidate.IsGrayedOut
+                    // Switching cadence view keeps a no-plan bar identical except
+                    // for the phrase screen readers announce.
+                    && current.AutomationStatusText == candidate.AutomationStatusText)
                 .All(same => same);
         if (unchanged)
         {
@@ -195,104 +202,164 @@ public sealed partial class HeroViewModel : ObservableObject
         bool hideSensitiveInfo = false,
         ProviderSortMode sortMode = ProviderSortMode.PlanValue)
     {
+        // An exhausted subscription still exists, so it stays a candidate: in a
+        // cadence view its own cadence availability decides the bar (a burnt 5h
+        // pool must not hide a healthy monthly one), and in the value view its
+        // monthly price is still money on the table. Expired entitlements are the
+        // exception — ProviderMoney would invent a monthly estimate for a plan
+        // that no longer grants anything.
         var ranked = ProviderSortPolicy.Order(
                 present
-                    .Where(x => string.IsNullOrEmpty(x.Snap.Error))
+                    .Where(x => string.IsNullOrEmpty(x.Snap.Error)
+                                && x.Snap.EntitlementStatus != EntitlementStatus.Expired)
                     .Select(x => new ProviderPriorityCandidate(
                         x.Id,
                         x.Snap,
                         ProviderPriority.Score(x.Id, x.Snap, config)))
-                    .Where(x => x.Score.Bucket == ProviderPriority.UsableSubscriptionBucket
+                    .Where(x => x.Score.Bucket is ProviderPriority.UsableSubscriptionBucket
+                                    or ProviderPriority.ExhaustedSubscriptionBucket
                                 || (x.Score.IsPayAsYouGo && x.Score.BalanceAmount > 0)),
                 sortMode,
                 x => x.Score,
                 recommendedPriorityOrder)
-            .Take(MaxUsageTimelineSegments)
             .Select(x => TimelineCandidate.From(x, config, hideSensitiveInfo, sortMode))
             .ToList();
 
-        if (ranked.Count == 0)
-            return Array.Empty<UsageTimelineSegmentViewModel>();
+        // The cap is applied after the display ordering so that the metric which
+        // cuts a provider is always the metric its bar would have been drawn with.
+        var displayCandidates = sortMode == ProviderSortMode.PlanValue
+            ? OrderValueCandidates(ranked)
+            : OrderCadenceCandidates(ranked);
 
-        var matching = ranked.Where(x => x.HasMatchingCadence && (x.AvailablePercent > 0.1 || x.Priority.Score.IsPayAsYouGo || sortMode == ProviderSortMode.PlanValue)).ToList();
-        var displayCandidates = sortMode is ProviderSortMode.FiveHour or ProviderSortMode.Weekly or ProviderSortMode.Monthly
-            ? matching
-            : ranked;
-        displayCandidates = displayCandidates
-            .OrderByDescending(x => sortMode == ProviderSortMode.PlanValue
-                ? x.Money.AmountUsd
-                : x.ResetFrequencySortMinutes)
-            .ThenByDescending(x => x.Priority.Score.PlanValue)
-            .ThenBy(x => x.Priority.Id, StringComparer.Ordinal)
+        var segments = displayCandidates
+            .Take(MaxUsageTimelineSegments)
+            .Select(candidate => BuildSegment(candidate, sortMode))
             .ToList();
 
-        var segments = new List<UsageTimelineSegmentViewModel>();
-        foreach (var candidate in displayCandidates)
+        // The chart is a fixed part of the dashboard, not something that appears
+        // only when it has good news. With nothing to draw — no providers yet, all
+        // of them still connecting, or none priced in this view — it holds its
+        // place as one gray bar instead of collapsing the card and reflowing the
+        // page every time the user switches cadence.
+        return segments.Count > 0
+            ? segments
+            : new List<UsageTimelineSegmentViewModel> { BuildEmptySegment(sortMode) };
+    }
+
+    /// <summary>
+    /// The empty bar. It stands for nothing — no provider, no plan, no number — so it
+    /// carries no label and no value text, only the gray track holding the chart's
+    /// place. No instance id, so it is inert: no hover highlight, no click-to-scroll,
+    /// and screen readers hear the reason instead of a measurement that never existed.
+    /// </summary>
+    private static UsageTimelineSegmentViewModel BuildEmptySegment(ProviderSortMode sortMode)
+    {
+        var reason = sortMode == ProviderSortMode.PlanValue
+            ? I18n.T("timeline.noPlanValue")
+            : NoCadenceText(sortMode);
+        return new UsageTimelineSegmentViewModel(
+            providerType: "",
+            label: "",
+            weight: 1,
+            availablePercent: 0,
+            resetText: null,
+            resetToolTip: null,
+            resetFrequencyText: null,
+            instanceId: "",
+            isGrayedOut: true,
+            customAvailableText: "",
+            automationStatusText: reason);
+    }
+
+    /// Money view: every bar is a USD amount, biggest first.
+    private static IEnumerable<TimelineCandidate> OrderValueCandidates(IEnumerable<TimelineCandidate> candidates) =>
+        candidates
+            .Where(candidate => candidate.Money.AmountUsd > 0)
+            .OrderByDescending(candidate => candidate.Money.AmountUsd)
+            .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
+            .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal);
+
+    /// Cadence views: only a provider that actually has a pool at this cadence gets a
+    /// bar, and those bars share the full width between them. A provider with no
+    /// monthly plan has no monthly number to draw, and inventing a placeholder for it
+    /// would shrink the plans the user does have in order to display nothing.
+    private static IEnumerable<TimelineCandidate> OrderCadenceCandidates(IEnumerable<TimelineCandidate> candidates) =>
+        candidates
+            .Where(candidate => candidate.HasMatchingCadence)
+            // A subscription with no token allowance has nothing to size a bar
+            // with; a balance is sized by money, so pay-as-you-go is exempt.
+            .Where(candidate => candidate.Priority.Score.IsPayAsYouGo || candidate.WeeklyTokensMillions > 0)
+            .OrderByDescending(candidate => candidate.ResetFrequencySortMinutes)
+            .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
+            .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal);
+
+    private static UsageTimelineSegmentViewModel BuildSegment(TimelineCandidate candidate, ProviderSortMode sortMode)
+    {
+        var isValueMode = sortMode == ProviderSortMode.PlanValue;
+        var isPayAsYouGo = candidate.Priority.Score.IsPayAsYouGo;
+
+        double weight;
+        double availablePercent = candidate.AvailablePercent;
+        string? customAvailableText;
+        string? toolTip;
+
+        if (isValueMode)
         {
-            var isValueMode = sortMode == ProviderSortMode.PlanValue;
-            var tokensRemaining = candidate.WeeklyTokensMillions * candidate.AvailablePercent / 100.0;
-            if (isValueMode)
+            var amount = Quota.FormatUsd(candidate.Money.AmountUsd);
+            customAvailableText = amount;
+            weight = Math.Max(candidate.Money.AmountUsd, MinSegmentWeight);
+            toolTip = AppendValueEstimate(candidate.ResetToolTip, candidate);
+        }
+        else if (isPayAsYouGo)
+        {
+            var bal = candidate.Priority.Snapshot.Balance;
+            // Total is remaining, never spend (see ProviderPriority): falling back to
+            // Paid here would print the amount already consumed as if it were available.
+            var total = Math.Max(0, bal?.Total ?? 0.0);
+            var sym = bal?.Currency?.ToUpperInvariant() switch
             {
-                if (candidate.Money.AmountUsd <= 0)
-                    continue;
-            }
-            else if (!candidate.Priority.Score.IsPayAsYouGo && tokensRemaining <= 0)
-            {
-                continue;
-            }
-
-            bool isGrayedOut = candidate.Priority.Score.IsPayAsYouGo
-                               || (matching.Count == 0 && !candidate.HasMatchingCadence);
-
-            double weight;
-            string availableText;
-            string? customAvailableText;
-            if (isValueMode)
-            {
-                availableText = Quota.FormatUsd(candidate.Money.AmountUsd);
-                customAvailableText = availableText;
-                weight = Math.Max(candidate.Money.AmountUsd, 0.01);
-            }
-            else if (candidate.Priority.Score.IsPayAsYouGo)
-            {
-                var bal = candidate.Priority.Snapshot.Balance;
-                var total = bal?.Total > 0 ? bal.Total : (bal?.Paid ?? 0.0);
-                var sym = bal?.Currency?.ToUpperInvariant() switch { "CNY" or "RMB" => "¥", _ => "$" };
-                availableText = $"{sym}{total:0.##}";
-                customAvailableText = availableText;
-                weight = Math.Max(candidate.Priority.Score.BalanceAmount, 0.01);
-            }
-            else
-            {
-                var percent = Quota.DisplayPct(candidate.AvailablePercent);
-                var reset = string.IsNullOrWhiteSpace(candidate.ResetText)
-                    ? null
-                    : candidate.ResetText.TrimStart('~').Trim();
-                availableText = percent;
-                customAvailableText = string.IsNullOrWhiteSpace(reset) ? null : $"{percent} · {reset}";
-                weight = tokensRemaining;
-            }
-
-            segments.Add(new UsageTimelineSegmentViewModel(
-                candidate.ProviderType,
-                candidate.Label,
-                weight,
-                candidate.AvailablePercent,
-                candidate.ResetText,
-                isValueMode
-                    ? AppendValueEstimate(candidate.ResetToolTip, candidate)
-                    : candidate.Priority.Score.IsPayAsYouGo
-                        ? $"Balance: {availableText}"
-                        : AppendTokenEstimate(candidate.ResetToolTip, candidate),
-                candidate.ResetFrequencyText,
-                candidate.ResetFrequencySortMinutes,
-                instanceId: candidate.Priority.Id,
-                isGrayedOut: isGrayedOut,
-                customAvailableText: customAvailableText));
+                "CNY" or "RMB" => "¥",
+                "EUR" => "€",
+                _ => "$",
+            };
+            var balanceText = $"{sym}{total:0.##}";
+            customAvailableText = balanceText;
+            weight = Math.Max(candidate.Priority.Score.BalanceAmount, MinSegmentWeight);
+            toolTip = $"Balance: {balanceText}";
+        }
+        else
+        {
+            var percent = Quota.DisplayPct(candidate.AvailablePercent);
+            var reset = string.IsNullOrWhiteSpace(candidate.ResetText)
+                ? null
+                : candidate.ResetText.TrimStart('~').Trim();
+            customAvailableText = string.IsNullOrWhiteSpace(reset) ? null : $"{percent} · {reset}";
+            weight = Math.Max(candidate.WeeklyTokensMillions * candidate.AvailablePercent / 100.0, MinSegmentWeight);
+            toolTip = AppendTokenEstimate(candidate.ResetToolTip, candidate, candidate.AvailablePercent);
         }
 
-        return segments;
+        return new UsageTimelineSegmentViewModel(
+            candidate.ProviderType,
+            candidate.Label,
+            weight,
+            availablePercent,
+            candidate.ResetText,
+            toolTip,
+            candidate.ResetFrequencyText,
+            candidate.ResetFrequencySortMinutes,
+            instanceId: candidate.Priority.Id,
+            isGrayedOut: !isValueMode && isPayAsYouGo,
+            customAvailableText: customAvailableText);
     }
+
+    /// The plan a cadence view could not find. Only the three cadence modes reach
+    /// this: the value view always resolves to a dollar figure.
+    private static string NoCadenceText(ProviderSortMode sortMode) => sortMode switch
+    {
+        ProviderSortMode.FiveHour => I18n.T("timeline.noPlan5h"),
+        ProviderSortMode.Weekly => I18n.T("timeline.noPlanWeekly"),
+        _ => I18n.T("timeline.noPlanMonthly"),
+    };
 
     private static string? AppendValueEstimate(string? toolTip, TimelineCandidate candidate)
     {
@@ -305,15 +372,18 @@ public sealed partial class HeroViewModel : ObservableObject
             ProviderMoneyKind.Estimate => $"{Quota.FormatUsd(candidate.Money.AmountUsd)}/mo {I18n.T("timeline.tokensEstimateUnknownPlan")}",
             _ => $"{Quota.FormatUsd(candidate.Money.AmountUsd)}/mo plan",
         };
-        return string.IsNullOrWhiteSpace(toolTip) ? line : $"{toolTip}\n{line}";
+        return AppendLine(toolTip, line);
     }
 
-    private static string? AppendTokenEstimate(string? toolTip, TimelineCandidate candidate)
+    /// The caller passes the percentage the bar was actually sized with: a no-plan
+    /// bar is sized by overall availability, and the cadence percentage would
+    /// claim "0 of N tokens left" under a bar that is visibly not empty.
+    private static string? AppendTokenEstimate(string? toolTip, TimelineCandidate candidate, double availablePercent)
     {
         if (candidate.WeeklyTokensMillions <= 0)
             return toolTip;
 
-        var remaining = candidate.WeeklyTokensMillions * candidate.AvailablePercent / 100.0;
+        var remaining = candidate.WeeklyTokensMillions * availablePercent / 100.0;
         var qualifier = candidate.TokenEstimateKind switch
         {
             PlanTokenRules.TokenEstimateKind.Measured => I18n.T("timeline.tokensMeasured"),
@@ -338,8 +408,11 @@ public sealed partial class HeroViewModel : ObservableObject
                 FormatTokensMillions(candidate.Priority.Snapshot.MeasuredWeeklyTokensMillions.Value));
         }
 
-        return string.IsNullOrWhiteSpace(toolTip) ? line : $"{toolTip}\n{line}";
+        return AppendLine(toolTip, line);
     }
+
+    private static string AppendLine(string? toolTip, string line) =>
+        string.IsNullOrWhiteSpace(toolTip) ? line : $"{toolTip}\n{line}";
 
     internal static string FormatTokensMillions(double millions) =>
         millions >= 1000

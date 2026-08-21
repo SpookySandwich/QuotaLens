@@ -71,7 +71,7 @@ public sealed class CodexProvider : IProvider
         var rateLimit = ObjectProperty(root, "rate_limit");
         var primary = WindowFromProperty(rateLimit, "primary_window");
         var secondary = WindowFromProperty(rateLimit, "secondary_window");
-        (primary, secondary) = NormalizeWindows(primary, secondary);
+        (primary, secondary) = FillPrimarySlot(primary, secondary);
         var additionalWindows = AdditionalWindowsFromProperty(root, "additional_rate_limits");
 
         var credits = CreditsFromProperty(root, "credits");
@@ -237,13 +237,14 @@ public sealed class CodexProvider : IProvider
         return null;
     }
 
-    private static (RateWindow? Primary, RateWindow? Secondary) NormalizeWindows(RateWindow? primary, RateWindow? secondary)
+    /// <summary>
+    /// A snapshot's Primary slot is mandatory and gates availability, so a lone
+    /// non-weekly window has to fill it. Cadence order on the card is no longer this
+    /// provider's business — the shared row sort puts 5h ahead of weekly for everyone.
+    /// </summary>
+    private static (RateWindow? Primary, RateWindow? Secondary) FillPrimarySlot(RateWindow? primary, RateWindow? secondary)
     {
-        var primaryRole = WindowRoleFor(primary);
-        var secondaryRole = WindowRoleFor(secondary);
-        if (primaryRole == WindowRole.Weekly && secondaryRole is WindowRole.Session or WindowRole.Unknown)
-            return (secondary, primary);
-        if (primary is null && secondaryRole is WindowRole.Session or WindowRole.Unknown)
+        if (primary is null && WindowRoleFor(secondary) is WindowRole.Session or WindowRole.Unknown)
             return (secondary, null);
         return (primary, secondary);
     }

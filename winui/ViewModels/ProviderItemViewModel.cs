@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using QuotaLens.Core;
@@ -393,25 +394,100 @@ public sealed partial class ProviderItemViewModel : ObservableObject
             }
         }
 
-        // Standard primary / secondary / tertiary rows.
-        Rows.Add(new QuotaRowViewModel(
-            snap.Primary,
-            prominent: true,
-            hideSensitive: _isSensitiveHidden));
+        // Standard primary / secondary / tertiary rows, then any extra windows.
+        var windows = new List<RateWindow>(3 + snap.AdditionalWindows.Count) { snap.Primary };
         if (snap.Secondary != null)
-            Rows.Add(new QuotaRowViewModel(snap.Secondary, hideSensitive: _isSensitiveHidden));
+            windows.Add(snap.Secondary);
         if (snap.Tertiary != null)
-            Rows.Add(new QuotaRowViewModel(snap.Tertiary, hideSensitive: _isSensitiveHidden));
-        foreach (var window in snap.AdditionalWindows)
+            windows.Add(snap.Tertiary);
+        windows.AddRange(snap.AdditionalWindows);
+
+        var displayWindows = OrderForDisplay(windows);
+        foreach (var window in displayWindows)
             Rows.Add(new QuotaRowViewModel(window, hideSensitive: _isSensitiveHidden));
         OnPropertyChanged(nameof(HasRows));
 
-        var reset = snap.Primary.Kind == RateWindowKind.Quota
-            ? ResetFormatter.FormatReset(snap.Primary.ResetsAt)
-            : null;
-        FooterReset = reset;
+        // The footer echoes the reset of the first quota row the user reads, not the
+        // Primary slot: slots decide what counts toward availability, display order
+        // decides what the card leads with, and the two no longer have to agree.
+        var footerWindow = displayWindows.FirstOrDefault(window => window.Kind == RateWindowKind.Quota);
+        FooterReset = footerWindow is null ? null : ResetFormatter.FormatReset(footerWindow.ResetsAt);
 
         BuildAccountsAndInlineBalance(snap);
+    }
+
+    /// <summary>
+    /// Presentation-only row order: inside each availability group the cadence pools
+    /// come first, shortest window first (5h → weekly → monthly), and everything
+    /// without a cadence keeps the order the provider emitted it in. Slot roles are
+    /// deliberately left untouched — Primary/Secondary gate availability scoring, so
+    /// re-assigning them to fix row order would silently move a provider's headline
+    /// percentage. Applied before the balance component rows are appended.
+    /// </summary>
+    private static List<RateWindow> OrderForDisplay(IReadOnlyList<RateWindow> windows)
+    {
+        // Alternative-capacity families (Doubao products, Gemini/Antigravity model
+        // families) are only readable while their windows stay contiguous, so groups
+        // sort as blocks in first-appearance order and never interleave. Ungrouped
+        // windows share one implicit group that takes its rank the same way.
+        var groupRanks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var entries = new List<(RateWindow Window, int Group, double SortMinutes, int Index)>(windows.Count);
+        for (var index = 0; index < windows.Count; index++)
+        {
+            var window = windows[index];
+            var groupKey = string.IsNullOrWhiteSpace(window.AvailabilityGroup) ? "" : window.AvailabilityGroup!;
+            if (!groupRanks.TryGetValue(groupKey, out var group))
+            {
+                group = groupRanks.Count;
+                groupRanks[groupKey] = group;
+            }
+
+            entries.Add((window, group, DisplaySortMinutes(window), index));
+        }
+
+        // OrderBy is stable, but the original index is still an explicit tiebreak so
+        // equal-cadence rows can never shuffle between refreshes.
+        return entries
+            .OrderBy(entry => entry.Group)
+            .ThenBy(entry => entry.SortMinutes)
+            .ThenBy(entry => entry.Index)
+            .Select(entry => entry.Window)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Effective window length used to order cadence rows. Informational metrics,
+    /// balances and credit rows have no cadence and sort last within their group.
+    /// </summary>
+    private static double DisplaySortMinutes(RateWindow window)
+    {
+        if (window.Kind != RateWindowKind.Quota)
+            return double.PositiveInfinity;
+
+        var cadence = QuotaCadencePolicy.For(
+            window.Label,
+            window.WindowMinutes,
+            MinutesUntil(window.ResetsAt));
+        if (cadence == QuotaCadence.None)
+            return double.PositiveInfinity;
+
+        // Many pools only declare their cadence through the label, so fall back to
+        // the cadence's nominal length rather than dropping the row out of order.
+        return window.WindowMinutes is > 0
+            ? window.WindowMinutes.Value
+            : QuotaCadencePolicy.DefaultWindowMinutes(cadence);
+    }
+
+    private static double MinutesUntil(string? iso)
+    {
+        return !string.IsNullOrWhiteSpace(iso)
+            && DateTimeOffset.TryParse(
+                iso,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                out var when)
+            ? Math.Max(0, (when - DateTimeOffset.UtcNow).TotalMinutes)
+            : double.PositiveInfinity;
     }
 
     private static bool HasRateContent(ProviderSnapshot snap) =>
@@ -449,8 +525,9 @@ public sealed partial class ProviderItemViewModel : ObservableObject
 
         if (bal.Currency == "CNY")
             InlineBalance = SensitiveDisplay.InlineBalance($"¥{bal.Total:0.00} balance", _isSensitiveHidden);
-        else if (bal.Currency == "credits")
+        else if (string.Equals(bal.Currency, "credits", StringComparison.OrdinalIgnoreCase))
         {
+            // Providers echo their own unit string, so casing is not ours to assume.
             InlineBalance = SensitiveDisplay.InlineBalance($"{bal.Total:#,0} credits remaining", _isSensitiveHidden);
             InlineBalanceDetail = SensitiveDisplay.InlineBalanceDetail($"of {bal.Granted:#,0} total", _isSensitiveHidden);
         }

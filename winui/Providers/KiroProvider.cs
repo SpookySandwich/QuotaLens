@@ -235,13 +235,24 @@ public sealed class KiroProvider : IProvider
         }
     }
 
-    private static RateWindow ContextWindow(string label, double usedPercent) => new()
+    /// <summary>
+    /// Context occupancy is a live conversation metric, not a refillable pool, so it
+    /// is informational: as a quota window it drew a bar and competed for the card's
+    /// next-reset ranking despite never resetting.
+    /// </summary>
+    private static RateWindow ContextWindow(string label, double usedPercent)
     {
-        Label = label,
-        UsedPercent = Quota.ClampPercent(usedPercent),
-        DetailText = "Current conversation context",
-        CountsForAvailability = false,
-    };
+        var clamped = Quota.ClampPercent(usedPercent);
+        return new RateWindow
+        {
+            Label = label,
+            Kind = RateWindowKind.Informational,
+            UsedPercent = clamped,
+            ValueText = $"{clamped.ToString("0.#", CultureInfo.InvariantCulture)}% used",
+            DetailText = "Current conversation context",
+            CountsForAvailability = false,
+        };
+    }
 
     private static string ParsePlanName(string output)
     {

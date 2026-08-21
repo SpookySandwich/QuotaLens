@@ -605,6 +605,8 @@ public sealed class GrokProvider : IProvider
         BalanceInfo? balance = null;
         if (limitCents > 0)
         {
+            // Total is allowance REMAINING, never spend: shared code reads it as
+            // money still available, so a fully consumed period must report zero.
             balance = new BalanceInfo
             {
                 Currency = "USD",
@@ -741,6 +743,9 @@ public sealed class GrokProvider : IProvider
                 WindowMinutes = monthlyLimitCents > 0 ? windowMinutes : null,
             },
             Secondary = secondary,
+            // Total is allowance REMAINING, never spend. With no monthly limit there
+            // is nothing remaining to report, so it stays zero rather than echoing
+            // the amount already burned.
             Balance = new BalanceInfo
             {
                 Currency = "USD",

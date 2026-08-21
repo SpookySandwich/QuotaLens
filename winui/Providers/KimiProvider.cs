@@ -567,7 +567,7 @@ public sealed class KimiProvider : IProvider
             Name = "Kimi",
             PlanId = planIdentity.PlanId,
             PlanName = planIdentity.PlanName,
-            // Total quota leads when present; otherwise weekly leads.
+            // The monthly pool leads when the account has one; otherwise weekly leads.
             Primary = total ?? weeklyWindow,
             Secondary = total is not null ? weeklyWindow : rateWindow,
             Tertiary = total is not null ? rateWindow : null,
@@ -732,7 +732,8 @@ public sealed class KimiProvider : IProvider
             })
             .ToList();
 
-        // Total quota ("总额度") is the monthly remaining pool when the account has one.
+        // The API's totalQuota ("总额度") is the monthly remaining pool when the
+        // account has one; the card labels it "Monthly" like every other provider.
         var total = data.TotalQuota is { } totalQuota
             && (ParseLong(totalQuota.Limit) is not null
                 || ParseLong(totalQuota.Remaining) is not null
@@ -802,11 +803,12 @@ public sealed class KimiProvider : IProvider
             ? Quota.UtilizationToUsedPercent((double)resolvedUsed / resolvedLimit)
             : 0.0;
 
-        // The CLI endpoint normalizes limits to 100 (percent) for the observed account;
-        // keep the raw x/y form for any account where the limit is a real request count.
+        // The CLI endpoint normalizes limits to 100 (percent) for the observed account,
+        // where a "{n}% used" caption would only restate the percent pill and the bar.
+        // Keep the raw x/y form for accounts whose limit is a real request count.
         var prefix = descriptionPrefix ?? "";
-        var description = resolvedLimit == 100
-            ? $"{prefix}{resolvedUsed}% used"
+        var description = resolvedLimit is 0 or 100
+            ? null
             : $"{prefix}{resolvedUsed}/{resolvedLimit} requests";
 
         return new RateWindow
@@ -822,7 +824,7 @@ public sealed class KimiProvider : IProvider
     private static RateWindow BuildTotalQuotaWindow(CliUsageDetail detail, string? fallbackResetsAt = null)
     {
         var window = BuildWindow(
-            "Total quota",
+            "Monthly",
             detail,
             windowMinutes: QuotaCadencePolicy.MonthlyMinutes,
             descriptionPrefix: null);

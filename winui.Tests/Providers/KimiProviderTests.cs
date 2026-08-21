@@ -44,9 +44,11 @@ public sealed class KimiProviderTests
 
         Assert.AreEqual("kimi", snapshot.ProviderId);
         Assert.AreEqual("Kimi", snapshot.Name);
-        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        Assert.AreEqual("Monthly", snapshot.Primary.Label);
         Assert.AreEqual(1.0, snapshot.Primary.UsedPercent);
-        Assert.AreEqual("1% used", snapshot.Primary.DetailText);
+        // A normalized (limit == 100) account gets the plain percent + reset caption
+        // every other provider uses; "{n}% used" only restated the pill and the bar.
+        Assert.IsNull(snapshot.Primary.DetailText);
         Assert.AreEqual(QuotaCadencePolicy.MonthlyMinutes, snapshot.Primary.WindowMinutes);
         Assert.IsTrue(snapshot.Primary.CountsForAvailability);
 
@@ -55,13 +57,13 @@ public sealed class KimiProviderTests
         Assert.AreEqual(16.0, snapshot.Secondary.UsedPercent);
         Assert.AreEqual(10080, snapshot.Secondary.WindowMinutes);
         Assert.AreEqual("2026-07-22T16:39:20.750079Z", snapshot.Secondary.ResetsAt);
-        Assert.AreEqual("16% used", snapshot.Secondary.DetailText);
+        Assert.IsNull(snapshot.Secondary.DetailText);
 
         Assert.IsNotNull(snapshot.Tertiary);
         Assert.AreEqual("5h Rate Limit", snapshot.Tertiary!.Label);
         Assert.AreEqual(66.0, snapshot.Tertiary.UsedPercent);
         Assert.AreEqual(300, snapshot.Tertiary.WindowMinutes);
-        Assert.AreEqual("Rate: 66% used", snapshot.Tertiary.DetailText);
+        Assert.IsNull(snapshot.Tertiary.DetailText);
 
         Assert.AreEqual(1, snapshot.AdditionalWindows.Count);
         Assert.AreEqual("Concurrency", snapshot.AdditionalWindows[0].Label);
@@ -152,7 +154,7 @@ public sealed class KimiProviderTests
             """,
             periodEnd: "2026-09-12T16:00:00Z");
 
-        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        Assert.AreEqual("Monthly", snapshot.Primary.Label);
         Assert.AreEqual("2026-09-12T16:00:00Z", snapshot.Primary.ResetsAt);
     }
 
@@ -231,7 +233,7 @@ public sealed class KimiProviderTests
     }
 
     [TestMethod]
-    public void ParseAppUsage_OrdersTotalQuotaThenWeeklyThenRate()
+    public void ParseAppUsage_AssignsMonthlyThenWeeklyThenRateToTheAvailabilitySlots()
     {
         var snapshot = KimiProvider.ParseAppUsage(
             """
@@ -245,7 +247,10 @@ public sealed class KimiProviderTests
             }
             """);
 
-        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        // Slot order is availability policy, not display order: Primary and Secondary
+        // gate the headline percentage unconditionally, so the largest pools stay
+        // there and the card's 5h-first row order comes from the shared row sort.
+        Assert.AreEqual("Monthly", snapshot.Primary.Label);
         Assert.AreEqual(59.0, snapshot.Primary.UsedPercent);
         Assert.AreEqual(QuotaCadencePolicy.MonthlyMinutes, snapshot.Primary.WindowMinutes);
         Assert.IsTrue(snapshot.Primary.CountsForAvailability);
@@ -312,14 +317,14 @@ public sealed class KimiProviderTests
                 {
                     ProviderId = "kimi",
                     Name = "Kimi",
-                    Primary = new RateWindow { Label = "Total quota", UsedPercent = 59 },
+                    Primary = new RateWindow { Label = "Monthly", UsedPercent = 59 },
                 });
             });
 
         var snapshot = await provider.FetchAsync("kimi", new EmptyConfig(), CancellationToken.None);
 
         Assert.AreEqual(1, appCalls);
-        Assert.AreEqual("Total quota", snapshot.Primary.Label);
+        Assert.AreEqual("Monthly", snapshot.Primary.Label);
     }
 
     [TestMethod]

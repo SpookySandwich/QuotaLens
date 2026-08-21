@@ -111,5 +111,10 @@ public sealed class KiroProviderTests
         Assert.AreEqual(1.3, snapshot.AdditionalWindows[0].UsedPercent, 0.001);
         Assert.IsTrue(snapshot.AdditionalWindows.All(window => !window.CountsForAvailability));
         Assert.AreEqual(75, Quota.ProviderAvailability(snapshot), 0.001);
+
+        // Context occupancy never refills, so it is a metric rather than a pool: no
+        // quota bar, and no entry in the card's next-reset ranking.
+        Assert.IsTrue(snapshot.AdditionalWindows.All(window => window.Kind == RateWindowKind.Informational));
+        Assert.AreEqual("1.3% used", snapshot.AdditionalWindows[0].ValueText);
     }
 }
