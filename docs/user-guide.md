@@ -14,7 +14,7 @@ After launch:
 ## Read the dashboard
 
 - **Recommended** favors the highest-value active plan that still has headroom. Pay-as-you-go balances are treated as fallback capacity.
-- **Usage timeline** compares estimated weekly tokens remaining across configured plans. Segment width represents remaining capacity rather than percentage used.
+- **Effective usage** compares how many tokens each plan can supply in the next five hours, independent of the sort below it. A plan that resets every five hours contributes what is left of its current window; a weekly or monthly plan contributes its whole remaining pool, because nothing stops you spending it today. Square brackets group the bars by how often each plan resets, with metered API balances converted to tokens at an estimated blended rate.
 - **Provider cards** show quota windows, reset countdowns, balances, account breakdowns, and warning or recovery actions.
 - **Privacy mode** masks emails and balances when sharing the screen.
 - **Sort** can prioritize plan value, reset frequency, or the next reset.
