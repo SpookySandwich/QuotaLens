@@ -17,6 +17,7 @@ public sealed partial class UsageCylinder : UserControl
 {
     private const double BarHeight = 44;
     private const double BarRadius = 4;
+    private const double BracketHeight = 5;
     private const double FullLabelMinWidth = 108;
     private const double PercentOnlyMinWidth = 44;
     private const double SegmentMinWidth = 4;
@@ -45,6 +46,7 @@ public sealed partial class UsageCylinder : UserControl
     private readonly List<SegmentTrack> _tracks = new();
     private Grid? _barGrid;
     private Border? _barBorder;
+    private Grid? _bracketGrid;
     private DispatcherTimer? _morphTimer;
     private DateTimeOffset _morphStartTime;
 
@@ -123,6 +125,7 @@ public sealed partial class UsageCylinder : UserControl
             _tracks.Clear();
             _barGrid = null;
             _barBorder = null;
+            _bracketGrid = null;
             RootPanel.Children.Clear();
             _lastRenderedSignature = "";
             return;
@@ -207,7 +210,12 @@ public sealed partial class UsageCylinder : UserControl
 
         _barBorder.Child = _barGrid;
         RootPanel.Children.Add(_barBorder);
+
+        _bracketGrid = new Grid { ColumnSpacing = 0, Margin = new Thickness(0, 4, 0, 0) };
+        RootPanel.Children.Add(_bracketGrid);
+
         UpdateCornerRadii();
+        RebuildBrackets();
     }
 
     private void UpdateTracksAndMorph(IReadOnlyList<UsageTimelineSegmentViewModel> segments)
@@ -307,7 +315,108 @@ public sealed partial class UsageCylinder : UserControl
             track.Column.MinWidth = MinWidthFor(track);
             Grid.SetColumn(track.Element, index);
         }
+
+        RebuildBrackets();
     }
+
+    /// <summary>
+    /// The row of square brackets under the bar. Consecutive segments that reset on
+    /// the same cadence share one bracket, so the chart reads as "these three refill
+    /// every five hours, that one only comes back next week" without the user having
+    /// to know each provider's schedule.
+    /// </summary>
+    private void RebuildBrackets()
+    {
+        if (_bracketGrid == null)
+            return;
+
+        _bracketGrid.Children.Clear();
+        _bracketGrid.ColumnDefinitions.Clear();
+
+        var drawable = _tracks
+            .Where(track => !track.IsLeaving && track.TargetWeight > 0.001)
+            .ToList();
+        if (drawable.Count == 0)
+            return;
+
+        foreach (var track in drawable)
+        {
+            _bracketGrid.ColumnDefinitions.Add(new ColumnDefinition
+            {
+                Width = new GridLength(Math.Max(0.0001, track.CurrentWeight), GridUnitType.Star),
+                MinWidth = MinWidthFor(track),
+            });
+        }
+
+        for (var index = 0; index < drawable.Count;)
+        {
+            var segment = drawable[index].Segment;
+            if (segment.IsRemainder || !segment.HasResetFrequencyText)
+            {
+                index++;
+                continue;
+            }
+
+            var key = segment.GroupKey;
+            var span = 1;
+            while (index + span < drawable.Count
+                   && !drawable[index + span].Segment.IsRemainder
+                   && string.Equals(drawable[index + span].Segment.GroupKey, key, StringComparison.Ordinal))
+            {
+                span++;
+            }
+
+            var panel = new StackPanel { Spacing = 3, Margin = new Thickness(3, 0, 3, 0) };
+            panel.Children.Add(new Border
+            {
+                Height = BracketHeight,
+                Opacity = 0.58,
+                BorderBrush = ResolveBrush("TextFillColorTertiaryBrush", Color.FromArgb(0xA0, 0xFF, 0xFF, 0xFF)),
+                BorderThickness = new Thickness(1, 0, 1, 1),
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = segment.ResetFrequencyText,
+                FontSize = 10,
+                TextAlignment = TextAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                MaxLines = 1,
+                Foreground = ResolveBrush("TextFillColorSecondaryBrush", Colors.White),
+            });
+            AutomationProperties.SetName(panel, segment.ResetFrequencyText);
+            Grid.SetColumn(panel, index);
+            Grid.SetColumnSpan(panel, span);
+            _bracketGrid.Children.Add(panel);
+
+            index += span;
+        }
+    }
+
+    /// Brackets have to breathe with the bars they sit under, or a 300ms morph
+    /// leaves every caption pointing at the wrong provider.
+    private void SyncBracketColumns()
+    {
+        if (_bracketGrid == null)
+            return;
+
+        var drawable = _tracks
+            .Where(track => !track.IsLeaving && track.TargetWeight > 0.001)
+            .ToList();
+        if (_bracketGrid.ColumnDefinitions.Count != drawable.Count)
+            return;
+
+        for (var index = 0; index < drawable.Count; index++)
+        {
+            var column = _bracketGrid.ColumnDefinitions[index];
+            column.Width = new GridLength(Math.Max(0.0001, drawable[index].CurrentWeight), GridUnitType.Star);
+            column.MinWidth = drawable[index].Column.MinWidth;
+        }
+    }
+
+    private static Brush ResolveBrush(string key, Color fallback) =>
+        Application.Current?.Resources.TryGetValue(key, out var value) == true && value is Brush brush
+            ? brush
+            : new SolidColorBrush(fallback);
 
     /// <summary>
     /// A segment's width floor follows what the segment IS, not the star weight it
@@ -365,6 +474,7 @@ public sealed partial class UsageCylinder : UserControl
         }
 
         UpdateCornerRadii();
+        SyncBracketColumns();
 
         if (progress >= 1.0)
         {
@@ -407,10 +517,12 @@ public sealed partial class UsageCylinder : UserControl
 
     private static void UpdateTrackVisual(SegmentTrack track, UsageTimelineSegmentViewModel seg)
     {
-        if (track.LabelParts != null)
+        if (track.LabelParts is { } parts)
         {
-            track.LabelParts.Label.Text = seg.Label;
-            track.LabelParts.Percent.Text = seg.AvailableText;
+            parts.Label.Text = seg.Label;
+            parts.FullText = seg.AvailableText;
+            parts.CompactText = seg.CompactAvailableText;
+            ApplySegmentLabelMode(parts.LastWidth, parts);
         }
 
         var background = seg.IsGrayedOut
@@ -523,7 +635,7 @@ public sealed partial class UsageCylinder : UserControl
         Grid.SetRow(label, 0);
         panel.Children.Add(label);
 
-        var percent = new TextBlock
+        var value = new TextBlock
         {
             Text = segment.AvailableText,
             FontSize = 13,
@@ -534,10 +646,10 @@ public sealed partial class UsageCylinder : UserControl
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Foreground = new SolidColorBrush(Colors.White),
         };
-        Grid.SetRow(percent, 1);
-        panel.Children.Add(percent);
+        Grid.SetRow(value, 1);
+        panel.Children.Add(value);
 
-        labelParts = new SegmentLabelParts(label, percent);
+        labelParts = new SegmentLabelParts(label, value, segment.AvailableText, segment.CompactAvailableText);
         return panel;
     }
 
@@ -574,34 +686,58 @@ public sealed partial class UsageCylinder : UserControl
         if (parts is null)
             return;
 
+        parts.LastWidth = width;
         switch (SegmentLabelModeForWidth(width))
         {
             case SegmentLabelMode.Full:
                 parts.Label.Visibility = Visibility.Visible;
-                parts.Percent.Visibility = Visibility.Visible;
-                Grid.SetRow(parts.Percent, 1);
+                parts.Value.Visibility = Visibility.Visible;
+                parts.Value.Text = parts.FullText;
+                Grid.SetRow(parts.Value, 1);
                 break;
             case SegmentLabelMode.PercentOnly:
                 parts.Label.Visibility = Visibility.Collapsed;
-                parts.Percent.Visibility = Visibility.Visible;
-                Grid.SetRow(parts.Percent, 0);
+                parts.Value.Visibility = Visibility.Visible;
+                // Losing the provider name leaves no room for "26.8M · 4h 2m"
+                // either; keep the number and drop the reset rather than ellipsize.
+                parts.Value.Text = parts.CompactText;
+                Grid.SetRow(parts.Value, 0);
                 break;
             default:
                 parts.Label.Visibility = Visibility.Collapsed;
-                parts.Percent.Visibility = Visibility.Collapsed;
+                parts.Value.Visibility = Visibility.Collapsed;
                 break;
         }
     }
 
-    private sealed record SegmentLabelParts(TextBlock Label, TextBlock Percent);
+    private sealed class SegmentLabelParts
+    {
+        public SegmentLabelParts(TextBlock label, TextBlock value, string fullText, string compactText)
+        {
+            Label = label;
+            Value = value;
+            FullText = fullText;
+            CompactText = compactText;
+        }
+
+        public TextBlock Label { get; }
+        public TextBlock Value { get; }
+        public string FullText { get; set; }
+        public string CompactText { get; set; }
+
+        /// <summary>
+        /// Last width the segment was measured at. A value refreshed between size
+        /// changes has to be re-fitted against it, or a narrow bar quietly goes back
+        /// to the full text it has no room for.
+        /// </summary>
+        public double LastWidth { get; set; } = double.PositiveInfinity;
+    }
 
     private static string RenderSignature(IEnumerable<UsageTimelineSegmentViewModel> segments) =>
         string.Join("|", segments.Select(segment =>
             string.Join(":", segment.InstanceId, segment.ProviderType, segment.Label, segment.AvailableText,
                 segment.Weight.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture),
-                segment.ResetFrequencyText, segment.IsRemainder, segment.IsGrayedOut,
-                // Two cadence views can produce a pixel-identical bar that must
-                // still be announced differently ("no 5-hour plan" vs "no weekly plan").
+                segment.ResetFrequencyText, segment.GroupKey, segment.IsRemainder, segment.IsGrayedOut,
                 segment.AutomationName)));
 
     internal enum SegmentLabelMode

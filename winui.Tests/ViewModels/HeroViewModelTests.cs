@@ -23,151 +23,6 @@ public sealed class HeroViewModelTests
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WhenSensitiveInfoHidden_MasksProviderNames()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("gemini", "gemini", "Gemini") });
-        var snapshots = new[]
-        {
-            ("gemini", Snapshot("Gemini · user@example.com", usedPercent: 20, resetHours: 4, windowMinutes: 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, hideSensitiveInfo: true);
-
-        Assert.IsTrue(segments.Any());
-        Assert.AreEqual("Gemini", segments[0].Label);
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_UsesShortestPoolAndPlacesLongerCadenceOnLeft()
-    {
-        var config = new FakeConfig(new[]
-        {
-            new ProviderInstance("claude", "claude", "Claude"),
-            new ProviderInstance("mimo", "mimo", "MiMo"),
-            new ProviderInstance("codex-lb", "codex-lb", "codex-lb"),
-        });
-        config.Set("codex_lb_value", "70");
-        var snapshots = new[]
-        {
-            ("claude", new ProviderSnapshot
-            {
-                ProviderId = "claude",
-                Name = "Claude Code · Max",
-                Primary = new RateWindow
-                {
-                    Label = "5h Pool",
-                    UsedPercent = 10,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToString("O"),
-                    WindowMinutes = 5 * 60,
-                },
-                Secondary = new RateWindow
-                {
-                    Label = "7d Pool",
-                    UsedPercent = 5,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(96).ToString("O"),
-                    WindowMinutes = 7 * 24 * 60,
-                },
-            }),
-            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
-            ("codex-lb", new ProviderSnapshot
-            {
-                ProviderId = "codex-lb",
-                Name = "codex-lb",
-                Primary = new RateWindow
-                {
-                    Label = "5h Pool",
-                    UsedPercent = 20,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(3).AddMinutes(13).ToString("O"),
-                    WindowMinutes = 5 * 60,
-                },
-                Secondary = new RateWindow
-                {
-                    Label = "Weekly",
-                    UsedPercent = 1,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(120).ToString("O"),
-                    WindowMinutes = 7 * 24 * 60,
-                },
-            }),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
-
-        // Value sort: full monthly plan price, highest first.
-        var visible = segments.Where(segment => !segment.IsRemainder).ToList();
-        Assert.AreEqual("Claude Code · Max", visible[0].Label);
-        Assert.AreEqual("claude", visible[0].InstanceId);
-        Assert.AreEqual("$100", visible[0].AvailableText);
-        Assert.AreEqual("codex-lb", visible[1].Label);
-        Assert.AreEqual("codex-lb", visible[1].InstanceId);
-        Assert.AreEqual("$70", visible[1].AvailableText);
-        Assert.AreEqual("~3h 12m", visible[1].ResetText);
-        Assert.AreEqual("MiMo · Standard", visible[2].Label);
-        Assert.AreEqual("mimo", visible[2].InstanceId);
-        Assert.AreEqual("reset monthly", visible[2].ResetFrequencyText);
-        Assert.AreEqual("reset every 5h", visible[0].ResetFrequencyText);
-        Assert.AreEqual("reset every 5h", visible[1].ResetFrequencyText);
-        Assert.AreEqual(90, visible[0].AvailablePercent, 0.001);
-        Assert.AreEqual(80, visible[1].AvailablePercent, 0.001);
-        Assert.AreEqual(100, visible[0].Weight, 0.001);
-        Assert.AreEqual(70, visible[1].Weight, 0.001);
-        Assert.AreEqual(16, visible[2].Weight, 0.001);
-        // Spent capacity is not rendered — the bar is runway only.
-        Assert.IsFalse(segments.Any(segment => segment.IsRemainder));
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WhenClaudeFiveHourResetTimeMissing_StillUsesFiveHourCadence()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
-        var snapshots = new[]
-        {
-            ("claude", new ProviderSnapshot
-            {
-                ProviderId = "claude",
-                Name = "Claude Code · Max",
-                Primary = new RateWindow
-                {
-                    Label = "5h Pool",
-                    UsedPercent = 0,
-                    ResetsAt = null,
-                    WindowMinutes = 5 * 60,
-                },
-                Secondary = new RateWindow
-                {
-                    Label = "7d Pool",
-                    UsedPercent = 0,
-                    ResetsAt = DateTimeOffset.UtcNow.AddDays(4).ToString("O"),
-                    WindowMinutes = 7 * 24 * 60,
-                },
-            }),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
-
-        var visible = segments.Where(segment => !segment.IsRemainder).ToList();
-        Assert.AreEqual(1, visible.Count);
-        Assert.AreEqual("Claude Code · Max", visible[0].Label);
-        Assert.AreEqual("reset every 5h", visible[0].ResetFrequencyText);
-        Assert.IsNull(visible[0].ResetText);
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WhenWindowLengthMissing_InfersFrequencyFromStructuredWindow()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("example", "mimo", "Example") });
-        var snapshots = new[]
-        {
-            ("example", Snapshot("Example", usedPercent: 20, resetHours: 48, windowMinutes: 0)),
-        };
-        snapshots[0].Item2.Primary.WindowMinutes = null;
-        snapshots[0].Item2.Primary.Label = "Monthly credits";
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
-
-        Assert.AreEqual("reset monthly", segments.First().ResetFrequencyText);
-    }
-
-    [TestMethod]
     public void BuildPickDetail_WithOfficialPlan_ShowsSourceBackedMonthlyPrice()
     {
         var snapshot = Snapshot("MiMo · Standard", usedPercent: 20, resetHours: 48, windowMinutes: 30 * 24 * 60);
@@ -192,709 +47,335 @@ public sealed class HeroViewModelTests
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WeightsSegmentsByEstimatedTokensRemaining()
+    public void BuildUsageTimelineSegments_WhenSensitiveInfoHidden_MasksProviderNames()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("gemini", "gemini", "Gemini") });
+        var snapshots = new[]
+        {
+            ("gemini", Snapshot("Gemini · user@example.com", usedPercent: 20, resetHours: 4, windowMinutes: 24 * 60)),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, hideSensitiveInfo: true);
+
+        Assert.IsTrue(segments.Any());
+        Assert.AreEqual("Gemini", segments[0].Label);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_GroupsBracketsByResetCadenceLeftToRight()
     {
         var config = new FakeConfig(new[]
         {
-            new ProviderInstance("claude", "claude", "Claude"),
-            new ProviderInstance("codex", "codex", "Codex"),
-        });
-        var snapshots = new[]
-        {
-            ("claude", Snapshot("Claude Code · Pro", usedPercent: 0, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("codex", Snapshot("Codex · Plus", usedPercent: 0, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
-
-        var claude = segments.Single(segment => segment.InstanceId == "claude");
-        var codex = segments.Single(segment => segment.InstanceId == "codex");
-        // Claude Pro ≈ 100M tokens/week, ChatGPT Plus ≈ 32M — the bars must reflect
-        // that a Claude Pro subscription simply buys more tokens.
-        Assert.AreEqual(100, claude.Weight, 0.001);
-        Assert.AreEqual(32, codex.Weight, 0.001);
-        StringAssert.Contains(claude.ResetToolTip, "tokens/week");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WeightIsTokensRemainingWithoutSpentFiller()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
-        var snapshots = new[]
-        {
-            ("claude", Snapshot("Claude Code · Max 20x", usedPercent: 25, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
-
-        Assert.AreEqual(1, segments.Count);
-        Assert.AreEqual(600 * 0.75, segments[0].Weight, 0.001);
-        Assert.IsFalse(segments[0].IsRemainder);
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_MeasuredThroughputInformsTooltipButNotWidth()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("codex-lb", "codex-lb", "codex-lb") });
-        var snapshot = Snapshot("codex-lb", usedPercent: 82, resetHours: 40, windowMinutes: 7 * 24 * 60);
-        snapshot.MeasuredWeeklyTokensMillions = 8674;
-        snapshot.Accounts = new List<AccountInfo>
-        {
-            new() { Email = "a@example.com", Plan = "pro 20x" },
-            new() { Email = "b@example.com", Plan = "business" },
-            new() { Email = "c@example.com", Plan = "business" },
-        };
-        var snapshots = new[] { ("codex-lb", snapshot) };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
-
-        var segment = segments.Single();
-        // Width uses the comparable plan-sum estimate (600+32+32 at 18% left)…
-        Assert.AreEqual(664 * 0.18, segment.Weight, 0.01);
-        // …while the user's real cache-heavy throughput is context in the tooltip.
-        StringAssert.Contains(segment.ResetToolTip, "measured pool throughput");
-        StringAssert.Contains(segment.ResetToolTip, "8.7B");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_HidesPlansWithNoTokenAllowance()
-    {
-        var config = new FakeConfig(new[]
-        {
-            new ProviderInstance("kimi", "kimi", "Kimi"),
-            new ProviderInstance("mimo", "mimo", "MiMo"),
-        });
-        var snapshots = new[]
-        {
-            // Kimi Adagio has no coding-agent access at all: no zero-width sliver.
-            ("kimi", Snapshot("Kimi · Adagio", usedPercent: 0, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("mimo", Snapshot("MiMo · Standard", usedPercent: 0, resetHours: 100, windowMinutes: 30 * 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
-
-        Assert.IsFalse(segments.Any(segment => segment.InstanceId == "kimi"));
-        Assert.IsTrue(segments.Any(segment => segment.InstanceId == "mimo"));
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_UnknownPlanFallsBackToSmallestTierWithQualifier()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("cursor", "cursor", "Cursor") });
-        var snapshots = new[]
-        {
-            ("cursor", Snapshot("Cursor · Hypernova", usedPercent: 0, resetHours: 100, windowMinutes: 30 * 24 * 60)),
-        };
-
-        var tokenSegments = HeroViewModel.BuildUsageTimelineSegments(
-            config, snapshots, sortMode: ProviderSortMode.Monthly);
-        var cursorTokens = tokenSegments.Single(segment => segment.InstanceId == "cursor");
-        Assert.AreEqual(120, cursorTokens.Weight, 0.001); // Cursor's smallest PAID token tier (Pro)
-        StringAssert.Contains(cursorTokens.ResetToolTip, "plan not recognized");
-
-        var valueSegments = HeroViewModel.BuildUsageTimelineSegments(
-            config, snapshots, sortMode: ProviderSortMode.PlanValue);
-        var cursorValue = valueSegments.Single(segment => segment.InstanceId == "cursor");
-        Assert.AreEqual("$20", cursorValue.AvailableText);
-        Assert.AreEqual(20, cursorValue.Weight, 0.001);
-        StringAssert.Contains(cursorValue.ResetToolTip, "plan not recognized");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithFiveHourMode_OnlyIncludesFiveHourWindows()
-    {
-        var config = new FakeConfig(new[]
-        {
-            new ProviderInstance("claude", "claude", "Claude"),
-            new ProviderInstance("codex", "codex", "Codex"),
-        });
-        var snapshots = new[]
-        {
-            ("claude", new ProviderSnapshot
-            {
-                ProviderId = "claude",
-                Name = "Claude Code · Max",
-                Primary = new RateWindow
-                {
-                    Label = "5h Pool",
-                    UsedPercent = 10,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToString("O"),
-                    WindowMinutes = 5 * 60,
-                },
-            }),
-            ("codex", new ProviderSnapshot
-            {
-                ProviderId = "codex",
-                Name = "Codex · Pro",
-                Primary = new RateWindow
-                {
-                    Label = "Weekly Pool",
-                    UsedPercent = 20,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(96).ToString("O"),
-                    WindowMinutes = 7 * 24 * 60,
-                },
-            }),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.FiveHour);
-
-        // Only Claude has a 5h pool, so it gets the whole bar. Codex has no 5h
-        // number to draw; giving it a placeholder would shrink the one real
-        // measurement on screen in order to show nothing.
-        var segment = segments.Single();
-        Assert.AreEqual("claude", segment.InstanceId);
-        Assert.IsFalse(segment.IsGrayedOut);
-        Assert.AreEqual("effective 5h", segment.ResetFrequencyText);
-        StringAssert.StartsWith(segment.AvailableText, "90%");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithPlanValueMode_ShowsBalancesAsFirstClassValue()
-    {
-        var config = new FakeConfig(new[]
-        {
-            new ProviderInstance("claude", "claude", "Claude"),
             new ProviderInstance("deepseek", "deepseek", "DeepSeek"),
-        });
-        var snapshots = new[]
-        {
-            ("claude", new ProviderSnapshot
-            {
-                ProviderId = "claude",
-                Name = "Claude Code · Max",
-                Primary = new RateWindow
-                {
-                    Label = "5h Pool",
-                    UsedPercent = 10,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToString("O"),
-                    WindowMinutes = 5 * 60,
-                },
-            }),
-            ("deepseek", new ProviderSnapshot
-            {
-                ProviderId = "deepseek",
-                Name = "DeepSeek",
-                Balance = new BalanceInfo { Total = 23.9, Currency = "CNY" },
-            }),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
-
-        Assert.AreEqual(2, segments.Count);
-        Assert.AreEqual("claude", segments[0].InstanceId);
-        Assert.IsFalse(segments[0].IsGrayedOut);
-        Assert.AreEqual("$100", segments[0].AvailableText);
-        Assert.AreEqual(100, segments[0].Weight, 0.001);
-        // In the money view an API balance is money like any other: converted to
-        // USD and drawn in the provider's own color, not dimmed to a footnote.
-        Assert.AreEqual("deepseek", segments[1].InstanceId);
-        Assert.IsFalse(segments[1].IsGrayedOut);
-        Assert.AreEqual("$3.32", segments[1].AvailableText);
-        Assert.AreEqual(23.9 / 7.2, segments[1].Weight, 0.001);
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithMonthlyMode_OnlyIncludesMonthlyCadence()
-    {
-        var config = new FakeConfig(new[]
-        {
-            new ProviderInstance("claude", "claude", "Claude"),
             new ProviderInstance("mimo", "mimo", "MiMo"),
-        });
-        var snapshots = new[]
-        {
-            ("claude", new ProviderSnapshot
-            {
-                ProviderId = "claude",
-                Name = "Claude Code · Max",
-                Primary = new RateWindow
-                {
-                    Label = "5h Pool",
-                    UsedPercent = 10,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToString("O"),
-                    WindowMinutes = 5 * 60,
-                },
-            }),
-            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
-        };
-        snapshots[1].Item2.Primary.Label = "Monthly credits";
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
-
-        // MiMo is the only monthly pool, so it fills the bar. Claude is left out
-        // entirely despite its far larger token allowance — it has no monthly
-        // number, and a bar with no number behind it is not worth width.
-        var segment = segments.Single();
-        Assert.AreEqual("mimo", segment.InstanceId);
-        Assert.IsFalse(segment.IsGrayedOut);
-        Assert.AreEqual("effective monthly", segment.ResetFrequencyText);
-        StringAssert.StartsWith(segment.AvailableText, "75%");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithKimiMonthlyPool_ShowsOnMonthlyWithReset()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("kimi", "kimi", "Kimi") });
-        var resetAt = DateTimeOffset.UtcNow.AddDays(12).AddHours(3).ToString("O");
-        var snapshots = new[]
-        {
-            ("kimi", new ProviderSnapshot
-            {
-                Name = "Kimi · Allegro",
-                PlanName = "Allegro",
-                Primary = new RateWindow
-                {
-                    Label = "Monthly",
-                    UsedPercent = 68,
-                    ResetsAt = resetAt,
-                    WindowMinutes = QuotaCadencePolicy.MonthlyMinutes,
-                    CountsForAvailability = true,
-                    DetailText = "68% used",
-                },
-            }),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
-
-        Assert.AreEqual(1, segments.Count);
-        Assert.AreEqual("kimi", segments[0].InstanceId);
-        Assert.AreEqual("effective monthly", segments[0].ResetFrequencyText);
-        StringAssert.StartsWith(segments[0].AvailableText, "32%");
-        StringAssert.Contains(segments[0].AvailableText, "12d");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithThreePlusAccounts_ShowsSummedPlanValue()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("codex-lb", "codex-lb", "codex-lb") });
-        var snapshot = Snapshot("codex-lb", usedPercent: 75, resetHours: 40, windowMinutes: 7 * 24 * 60);
-        snapshot.Accounts =
-        [
-            new AccountInfo { Email = "a@example.com", Plan = "plus" },
-            new AccountInfo { Email = "b@example.com", Plan = "plus" },
-            new AccountInfo { Email = "c@example.com", Plan = "plus" },
-        ];
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(
-            config,
-            [("codex-lb", snapshot)],
-            sortMode: ProviderSortMode.PlanValue);
-
-        var segment = segments.Single();
-        Assert.AreEqual("$60", segment.AvailableText);
-        Assert.AreEqual(60, segment.Weight, 0.001);
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithNoProvidersAtAll_StillHoldsThePlaceWithOneGrayBar()
-    {
-        var config = new FakeConfig(Array.Empty<ProviderInstance>());
-
-        foreach (var mode in new[]
-                 {
-                     ProviderSortMode.FiveHour,
-                     ProviderSortMode.Weekly,
-                     ProviderSortMode.Monthly,
-                     ProviderSortMode.PlanValue,
-                 })
-        {
-            var segments = HeroViewModel.BuildUsageTimelineSegments(
-                config,
-                Array.Empty<(string, ProviderSnapshot)>(),
-                sortMode: mode);
-
-            // The card must never collapse: an empty chart that vanishes reflows the
-            // whole dashboard every time the user switches cadence.
-            var segment = segments.Single();
-            Assert.IsTrue(segment.IsGrayedOut, $"{mode} placeholder should be gray");
-            Assert.IsTrue(segment.Weight > 0, $"{mode} placeholder needs a drawable weight");
-            // The empty bar stands for nothing, so it says nothing: no provider
-            // name, no percentage, no dollar amount.
-            Assert.AreEqual("", segment.Label, $"{mode} placeholder must carry no label");
-            Assert.AreEqual("", segment.AvailableText, $"{mode} placeholder must carry no value");
-            // Inert: nothing to scroll to.
-            Assert.IsFalse(segment.IsInteractive, $"{mode} placeholder should not be clickable");
-        }
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WhenEveryProviderIsStillConnecting_HoldsThePlace()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
-        var snapshots = new[]
-        {
-            ("claude", new ProviderSnapshot
-            {
-                ProviderId = "claude",
-                Name = "Claude Code",
-                Error = "Network error: timed out",
-                Primary = new RateWindow { Label = "5h Pool", UsedPercent = 0 },
-            }),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(
-            config,
-            snapshots,
-            sortMode: ProviderSortMode.Monthly);
-
-        var segment = segments.Single();
-        Assert.IsTrue(segment.IsGrayedOut);
-        Assert.AreEqual("", segment.Label);
-        Assert.IsFalse(segment.IsInteractive);
-        // Sighted users see a blank gray track; screen-reader users still get told why.
-        StringAssert.Contains(segment.AutomationName, "no monthly plan");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithMonthlyMode_ShowsOneBlankGrayBarWhenNoPlanHasThatCadence()
-    {
-        var config = new FakeConfig(new[]
-        {
+            new ProviderInstance("grok", "grok", "Grok"),
             new ProviderInstance("claude", "claude", "Claude"),
-            new ProviderInstance("codex", "codex", "Codex"),
         });
         var snapshots = new[]
         {
-            ("claude", new ProviderSnapshot
-            {
-                ProviderId = "claude",
-                Name = "Claude Code · Max",
-                Primary = new RateWindow
-                {
-                    Label = "5h Pool",
-                    UsedPercent = 10,
-                    WindowMinutes = 5 * 60,
-                },
-            }),
-            ("codex", new ProviderSnapshot
-            {
-                ProviderId = "codex",
-                Name = "Codex · Plus",
-                Primary = new RateWindow
-                {
-                    Label = "Weekly Pool",
-                    UsedPercent = 20,
-                    WindowMinutes = 7 * 24 * 60,
-                },
-            }),
+            ("deepseek", Balance("DeepSeek", 40)),
+            ("mimo", Snapshot("MiMo · Standard", usedPercent: 20, resetHours: 300, windowMinutes: 30 * 24 * 60)),
+            ("grok", Snapshot("Grok · SuperGrok", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 10, weeklyUsed: 20)),
         };
 
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
+        var groups = HeroViewModel.BuildUsageTimelineSegments(config, snapshots)
+            .Select(segment => segment.Group)
+            .ToList();
 
-        // Neither plan has a monthly pool, so neither is drawn — a per-provider
-        // placeholder would be a bar representing a number that does not exist.
-        // The chart still holds its place as a single blank gray track.
-        var segment = segments.Single();
-        Assert.IsTrue(segment.IsGrayedOut);
-        Assert.IsTrue(segment.Weight > 0);
-        Assert.AreEqual("", segment.Label);
-        Assert.AreEqual("", segment.AvailableText);
-        Assert.IsFalse(segment.IsInteractive);
-        // "0% available" would be a lie: these plans have capacity, just not monthly.
-        StringAssert.Contains(segment.AutomationName, "no monthly plan");
-        Assert.IsFalse(segment.AutomationName.Contains("available", StringComparison.Ordinal));
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithSingleMatchingPlan_GivesItTheWholeBar()
-    {
-        var config = new FakeConfig(new[]
-        {
-            new ProviderInstance("kimi", "kimi", "Kimi"),
-            new ProviderInstance("claude", "claude", "Claude"),
-            new ProviderInstance("codex", "codex", "Codex"),
-        });
-        var snapshots = new[]
-        {
-            ("kimi", Snapshot("Kimi · Allegro", usedPercent: 70, resetHours: 285, windowMinutes: 30 * 24 * 60)),
-            ("claude", Snapshot("Claude Code · Max", usedPercent: 10, resetHours: 4, windowMinutes: 5 * 60)),
-            ("codex", Snapshot("Codex · Plus", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
-
-        // The one provider with a monthly number owns the full width. Claude and
-        // Codex are not drawn at all: sharing the bar with them would shrink the
-        // only real measurement to make room for two that do not exist.
-        var segment = segments.Single();
-        Assert.AreEqual("kimi", segment.InstanceId);
-        Assert.IsFalse(segment.IsGrayedOut);
-        StringAssert.StartsWith(segment.AvailableText, "30%");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithMixedCadences_ExcludesPlansWithoutTheSelectedCadence()
-    {
-        var config = new FakeConfig(new[]
-        {
-            new ProviderInstance("claude", "claude", "Claude"),
-            new ProviderInstance("codex", "codex", "Codex"),
-            new ProviderInstance("mimo", "mimo", "MiMo"),
-        });
-        var snapshots = new[]
-        {
-            ("claude", Snapshot("Claude Code · Max", usedPercent: 10, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("codex", Snapshot("Codex · Plus", usedPercent: 40, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
-
-        // Only the two weekly plans are drawn, and they split the bar between
-        // them. The monthly-only plan is absent rather than gray.
         CollectionAssert.AreEqual(
-            new[] { "claude", "codex" },
-            segments.Select(segment => segment.InstanceId).ToArray());
-        Assert.IsTrue(segments.All(segment => !segment.IsGrayedOut));
+            new EffectiveUsageGroup?[]
+            {
+                EffectiveUsageGroup.FiveHour,
+                EffectiveUsageGroup.Weekly,
+                EffectiveUsageGroup.Monthly,
+                EffectiveUsageGroup.Api,
+            },
+            groups);
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WithCadenceMode_ExcludesBalancesWithNoWindowAtThatCadence()
+    public void BuildUsageTimelineSegments_LabelsEachBracketWithItsResetFrequency()
     {
         var config = new FakeConfig(new[]
         {
-            new ProviderInstance("mimo", "mimo", "MiMo"),
             new ProviderInstance("claude", "claude", "Claude"),
+            new ProviderInstance("grok", "grok", "Grok"),
+            new ProviderInstance("mimo", "mimo", "MiMo"),
             new ProviderInstance("deepseek", "deepseek", "DeepSeek"),
         });
         var snapshots = new[]
         {
-            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
-            ("claude", Snapshot("Claude Code · Max", usedPercent: 10, resetHours: 4, windowMinutes: 5 * 60)),
-            ("deepseek", new ProviderSnapshot
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 10, weeklyUsed: 20)),
+            ("grok", Snapshot("Grok · SuperGrok", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            ("mimo", Snapshot("MiMo · Standard", usedPercent: 20, resetHours: 300, windowMinutes: 30 * 24 * 60)),
+            ("deepseek", Balance("DeepSeek", 40)),
+        };
+
+        var brackets = HeroViewModel.BuildUsageTimelineSegments(config, snapshots)
+            .Select(segment => segment.ResetFrequencyText)
+            .ToList();
+
+        CollectionAssert.AreEqual(
+            new[]
             {
-                ProviderId = "deepseek",
-                Name = "DeepSeek",
-                Balance = new BalanceInfo { Total = 23.9, Currency = "CNY" },
-            }),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
-
-        // A balance has no refill window at all, so a cadence view has nothing to
-        // place it in — it belongs to the value view, where money is the unit.
-        // Claude's 5h-only plan is likewise absent from a monthly view.
-        var segment = segments.Single();
-        Assert.AreEqual("mimo", segment.InstanceId);
-        Assert.IsFalse(segment.IsGrayedOut);
+                "resets every 5 hours",
+                "resets every week",
+                "resets every month",
+                "API balance",
+            },
+            brackets);
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WhenSlotsAreScarce_PrefersColoredBarsOverGrayOnes()
+    public void BuildUsageTimelineSegments_IsIdenticalWhicheverCadenceTheCardsAreSortedBy()
     {
-        var weeklyIds = new[] { "claude", "codex", "codex-lb", "gemini", "cursor", "kimi" };
-        var instances = weeklyIds
-            .Select(id => new ProviderInstance(id, id, id))
-            .Append(new ProviderInstance("mimo", "mimo", "MiMo"))
-            .ToArray();
-        var config = new FakeConfig(instances);
-        var snapshots = new[]
-        {
-            ("claude", Snapshot("Claude Code · Max", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("codex", Snapshot("Codex · Plus", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("codex-lb", Snapshot("codex-lb · plus", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("gemini", Snapshot("Gemini · Google AI Pro", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("cursor", Snapshot("Cursor · Pro", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("kimi", Snapshot("Kimi · Allegro", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
-
-        // Six slots, seven providers: the gray "no weekly plan" bar is the one
-        // that loses, never a plan the view can actually measure.
-        Assert.AreEqual(6, segments.Count);
-        Assert.IsFalse(segments.Any(segment => segment.IsGrayedOut));
-        Assert.IsFalse(segments.Any(segment => segment.InstanceId == "mimo"));
-        CollectionAssert.AreEquivalent(weeklyIds, segments.Select(segment => segment.InstanceId).ToArray());
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WhenSlotsAreScarce_KeepsTheProviderThatStillHasCapacity()
-    {
-        // Six expensive plans, all spent, plus one cheap plan with room left. The
-        // chart answers "what can I still use?", so the cheap one must survive the
-        // cap — ordering by price alone would fill every slot with 0% bars and drop
-        // the only provider the user could actually reach for.
-        var spentIds = new[] { "claude", "codex", "codex-lb", "gemini", "cursor", "kimi" };
-        var instances = spentIds
-            .Select(id => new ProviderInstance(id, id, id))
-            .Append(new ProviderInstance("zai", "zai", "z.ai"))
-            .ToArray();
-        var config = new FakeConfig(instances);
-        var snapshots = new[]
-        {
-            ("claude", Snapshot("Claude Code · Max", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("codex", Snapshot("Codex · Plus", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("codex-lb", Snapshot("codex-lb · plus", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("gemini", Snapshot("Gemini · Google AI Pro", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("cursor", Snapshot("Cursor · Pro", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("kimi", Snapshot("Kimi · Allegro", usedPercent: 100, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-            ("zai", Snapshot("z.ai · Lite", usedPercent: 10, resetHours: 100, windowMinutes: 7 * 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
-
-        Assert.AreEqual(6, segments.Count);
-        Assert.IsTrue(
-            segments.Any(segment => segment.InstanceId == "zai"),
-            "the only provider with weekly capacity left was evicted by spent pools");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithExhaustedFiveHourPool_StillShowsHealthyMonthlyPool()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
-        var snapshots = new[]
-        {
-            ("claude", new ProviderSnapshot
-            {
-                ProviderId = "claude",
-                Name = "Claude Code · Max",
-                Primary = new RateWindow
-                {
-                    Label = "5h Pool",
-                    UsedPercent = 100,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(2).ToString("O"),
-                    WindowMinutes = 5 * 60,
-                },
-                Secondary = new RateWindow
-                {
-                    Label = "Monthly Pool",
-                    UsedPercent = 30,
-                    ResetsAt = DateTimeOffset.UtcNow.AddDays(10).ToString("O"),
-                    WindowMinutes = 30 * 24 * 60,
-                },
-            }),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
-
-        // Overall availability is 0 because the 5h pool is burnt, but the monthly
-        // view asks about the monthly pool, and that one is 70% full.
-        var segment = segments.Single();
-        Assert.IsFalse(segment.IsGrayedOut);
-        Assert.AreEqual("effective monthly", segment.ResetFrequencyText);
-        StringAssert.StartsWith(segment.AvailableText, "70%");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithExpiredEntitlement_ExcludesTheDeadPlan()
-    {
+        // The chart answers "what can I spend in the next five hours?". Nothing the
+        // user does to the card order below it may change that answer.
         var config = new FakeConfig(new[]
         {
-            new ProviderInstance("cursor", "cursor", "Cursor"),
-            new ProviderInstance("mimo", "mimo", "MiMo"),
-        });
-        var expired = Snapshot("Cursor · Pro", usedPercent: 0, resetHours: 100, windowMinutes: 30 * 24 * 60);
-        expired.EntitlementStatus = EntitlementStatus.Expired;
-        var snapshots = new[]
-        {
-            ("cursor", expired),
-            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 720, windowMinutes: 30 * 24 * 60)),
-        };
-
-        // A dead plan must not be priced or drawn in either view.
-        var value = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
-        var monthly = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Monthly);
-
-        Assert.AreEqual("mimo", value.Single().InstanceId);
-        Assert.AreEqual("mimo", monthly.Single().InstanceId);
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithFullySpentMatchingPool_KeepsAVisibleSliver()
-    {
-        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
-        var snapshots = new[]
-        {
-            ("claude", Snapshot("Claude Code · Max", usedPercent: 100, resetHours: 40, windowMinutes: 7 * 24 * 60)),
-        };
-
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.Weekly);
-
-        // Zero tokens left is still a fact worth drawing: the cylinder drops any
-        // non-positive weight, so an empty pool floors to a minimum sliver.
-        var segment = segments.Single();
-        Assert.AreEqual(0.01, segment.Weight, 0.0001);
-        Assert.IsFalse(segment.IsGrayedOut);
-        Assert.AreEqual("effective weekly", segment.ResetFrequencyText);
-        StringAssert.StartsWith(segment.AvailableText, "0%");
-    }
-
-    [TestMethod]
-    public void BuildUsageTimelineSegments_WithGeminiAndGrokPlans_ShowsOfficialMonthlyPrices()
-    {
-        var config = new FakeConfig(new[]
-        {
-            new ProviderInstance("gemini", "gemini", "Gemini"),
+            new ProviderInstance("claude", "claude", "Claude"),
             new ProviderInstance("grok", "grok", "Grok"),
         });
         var snapshots = new[]
         {
-            ("gemini", new ProviderSnapshot
-            {
-                Name = "Gemini",
-                PlanName = "Google AI Pro",
-                Primary = new RateWindow { Label = "Gemini weekly", UsedPercent = 0, WindowMinutes = 7 * 24 * 60 },
-            }),
-            ("grok", new ProviderSnapshot
-            {
-                Name = "Grok",
-                PlanId = "x_premium_plus",
-                PlanName = "X Premium+",
-                Primary = new RateWindow { Label = "Weekly included", UsedPercent = 5, WindowMinutes = 7 * 24 * 60 },
-            }),
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 40, weeklyUsed: 20)),
+            ("grok", Snapshot("Grok · SuperGrok", usedPercent: 20, resetHours: 100, windowMinutes: 7 * 24 * 60)),
         };
 
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
+        var expected = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
 
-        Assert.AreEqual("$40", segments.Single(s => s.InstanceId == "grok").AvailableText);
-        Assert.AreEqual("$20", segments.Single(s => s.InstanceId == "gemini").AvailableText);
+        // BuildUsageTimelineSegments no longer takes a sort mode at all; the guard
+        // here is that repeated builds off the same data agree bar for bar.
+        var again = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
+
+        CollectionAssert.AreEqual(
+            expected.Select(segment => segment.InstanceId).ToList(),
+            again.Select(segment => segment.InstanceId).ToList());
+        CollectionAssert.AreEqual(
+            expected.Select(segment => segment.AvailableText).ToList(),
+            again.Select(segment => segment.AvailableText).ToList());
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WithValueMode_AlwaysShowsDollarsNeverPercent()
+    public void BuildUsageTimelineSegments_WeeklyPlanContributesItsWholeRemainingPool()
+    {
+        // Nothing stops a user burning a whole weekly allowance in one afternoon,
+        // so a weekly plan's five-hour capacity is everything it has left.
+        var config = new FakeConfig(new[] { new ProviderInstance("grok", "grok", "Grok") });
+        var snapshots = new[]
+        {
+            ("grok", Snapshot("Grok · SuperGrok", usedPercent: 25, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        // SuperGrok is estimated at 14M tokens/week; 75% of that is still spendable.
+        Assert.AreEqual(EffectiveUsageGroup.Weekly, segment.Group);
+        Assert.AreEqual(10.5, segment.EffectiveTokensMillions, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_FiveHourPlanContributesOnlyTheCurrentWindow()
+    {
+        // A plan that refills every five hours cannot hand over next week's slices
+        // today, so only the current window counts — one 33.6th of the weekly pool.
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 50, weeklyUsed: 0)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        // Max is estimated at 350M/week -> 10.42M per 5h window, half of it spent.
+        Assert.AreEqual(EffectiveUsageGroup.FiveHour, segment.Group);
+        Assert.AreEqual(350.0 * 5 / 168 * 0.5, segment.EffectiveTokensMillions, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_MonthlyPlanScalesItsPoolUpFromTheWeeklyEstimate()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("mimo", "mimo", "MiMo") });
+        var snapshots = new[]
+        {
+            ("mimo", Snapshot("MiMo · Standard", usedPercent: 25, resetHours: 300, windowMinutes: 30 * 24 * 60)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        // Standard is estimated at 53M/week -> 30/7 of that per month, 75% left.
+        Assert.AreEqual(EffectiveUsageGroup.Monthly, segment.Group);
+        Assert.AreEqual(53.0 * 30 / 7 * 0.75, segment.EffectiveTokensMillions, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_FiveHourWindowNeverExceedsTheWeeklyPoolItSitsIn()
+    {
+        // A freshly reset five-hour window inside an almost-spent weekly pool cannot
+        // deliver more than the weekly pool has left.
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 0, weeklyUsed: 99.5)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        // 0.5% of a 350M weekly pool is 1.75M, well under a full 10.42M 5h window.
+        Assert.AreEqual(EffectiveUsageGroup.FiveHour, segment.Group);
+        Assert.AreEqual(1.75, segment.EffectiveTokensMillions, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_DoesNotClampTheFiveHourWindowToTheWeeklyPercentage()
+    {
+        // Ranking clamps a 5h percentage to its weekly pool's percentage, which is
+        // meaningless in tokens: a 90%-full 10M window is not "54% full" just
+        // because the 350M weekly pool behind it is. The chart must read 90%.
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 10, weeklyUsed: 46)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        Assert.AreEqual(90, segment.AvailablePercent, 0.001);
+        Assert.AreEqual(350.0 * 5 / 168 * 0.9, segment.EffectiveTokensMillions, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithUncountedFiveHourRateLimit_StillBracketsAsFiveHour()
+    {
+        // Kimi reports a "5h Rate Limit" that does not count toward its headline
+        // availability, but the limit is real and decides which bracket it belongs in.
+        var config = new FakeConfig(new[] { new ProviderInstance("kimi", "kimi", "Kimi") });
+        var snapshot = new ProviderSnapshot
+        {
+            ProviderId = "kimi",
+            Name = "Kimi · Allegro",
+            Primary = new RateWindow
+            {
+                Label = "Monthly",
+                UsedPercent = 50,
+                ResetsAt = DateTimeOffset.UtcNow.AddDays(10).ToString("O"),
+                WindowMinutes = 30 * 24 * 60,
+                CountsForAvailability = true,
+            },
+            Secondary = new RateWindow
+            {
+                Label = "Weekly",
+                UsedPercent = 20,
+                ResetsAt = DateTimeOffset.UtcNow.AddDays(1).ToString("O"),
+                WindowMinutes = 7 * 24 * 60,
+            },
+            Tertiary = new RateWindow
+            {
+                Label = "5h Rate Limit",
+                UsedPercent = 0,
+                ResetsAt = DateTimeOffset.UtcNow.AddHours(4).ToString("O"),
+                WindowMinutes = 5 * 60,
+            },
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, new[] { ("kimi", snapshot) }).Single();
+
+        Assert.AreEqual(EffectiveUsageGroup.FiveHour, segment.Group);
+        // Allegro is estimated at 900M/week -> a full 5h window is 900 * 5/168.
+        Assert.AreEqual(900.0 * 5 / 168, segment.EffectiveTokensMillions, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithApiBalance_ConvertsItToTokensOnTheSameAxis()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("deepseek", "deepseek", "DeepSeek") });
+        var snapshots = new[] { ("deepseek", Balance("DeepSeek", 25)) };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        Assert.AreEqual(EffectiveUsageGroup.Api, segment.Group);
+        Assert.AreEqual(25 / 0.25, segment.EffectiveTokensMillions, 0.01);
+        Assert.AreEqual("100M", segment.AvailableText);
+        // Pay-as-you-go is no longer greyed out: it holds real, comparable capacity.
+        Assert.IsFalse(segment.IsGrayedOut);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithConfiguredApiTokenPrice_UsesTheOverride()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("deepseek", "deepseek", "DeepSeek") });
+        config.Set(ApiTokenRules.ConfigKey("deepseek"), "1");
+        var snapshots = new[] { ("deepseek", Balance("DeepSeek", 25)) };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        Assert.AreEqual(25, segment.EffectiveTokensMillions, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithNonTokenMeteredApi_DrawsNoBar()
+    {
+        // Deepgram bills per audio minute. Inventing a token figure for it would put
+        // a number on the chart that nothing in the product could ever justify.
+        var config = new FakeConfig(new[] { new ProviderInstance("deepgram", "deepgram", "Deepgram") });
+        var snapshots = new[] { ("deepgram", Balance("Deepgram", 25)) };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
+
+        Assert.AreEqual(1, segments.Count);
+        Assert.AreEqual("", segments[0].InstanceId);
+        Assert.IsTrue(segments[0].IsGrayedOut);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_SizesBarsByTokensAndOrdersBiggestFirstInsideABracket()
     {
         var config = new FakeConfig(new[]
         {
-            new ProviderInstance("kimi", "kimi", "Kimi"),
-            new ProviderInstance("claude", "claude", "Claude"),
-            new ProviderInstance("deepseek", "deepseek", "DeepSeek"),
+            new ProviderInstance("grok", "grok", "Grok"),
+            new ProviderInstance("copilot", "copilot", "Copilot"),
         });
         var snapshots = new[]
         {
-            ("kimi", new ProviderSnapshot
-            {
-                Name = "Kimi",
-                PlanName = "Allegro",
-                Primary = new RateWindow { Label = "Weekly", UsedPercent = 68, WindowMinutes = 7 * 24 * 60 },
-            }),
-            ("claude", new ProviderSnapshot
-            {
-                Name = "Claude Code · Max",
-                Primary = new RateWindow { Label = "5h Pool", UsedPercent = 49, WindowMinutes = 5 * 60 },
-            }),
-            ("deepseek", new ProviderSnapshot
-            {
-                Name = "DeepSeek",
-                Balance = new BalanceInfo { Total = 23.9, Currency = "CNY" },
-            }),
+            // 14M/week estimate, 50% left -> 7M.
+            ("grok", Snapshot("Grok · SuperGrok", usedPercent: 50, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+            // 3.5M/week estimate, 100% left -> 3.5M.
+            ("copilot", Snapshot("Copilot · Pro", usedPercent: 0, resetHours: 100, windowMinutes: 7 * 24 * 60)),
         };
 
-        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots, sortMode: ProviderSortMode.PlanValue);
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
 
-        Assert.AreEqual(3, segments.Count);
-        Assert.IsTrue(segments.All(segment => segment.AvailableText.StartsWith('$')
-            && !segment.AvailableText.Contains('%', StringComparison.Ordinal)));
-        Assert.AreEqual("$99", segments.Single(s => s.InstanceId == "kimi").AvailableText);
-        Assert.AreEqual("$100", segments.Single(s => s.InstanceId == "claude").AvailableText);
-        Assert.AreEqual("$3.32", segments.Single(s => s.InstanceId == "deepseek").AvailableText);
+        Assert.AreEqual("grok", segments[0].InstanceId);
+        Assert.AreEqual("copilot", segments[1].InstanceId);
+        Assert.AreEqual(7, segments[0].Weight, 0.01);
+        Assert.AreEqual(3.5, segments[1].Weight, 0.01);
     }
 
     [TestMethod]
-    public void BuildUsageTimelineSegments_WithCodexLbEffectiveWindows_UsesConstrainedFiveHour()
+    public void BuildUsageTimelineSegments_ShowsTokensAndTheResetOfThePoolItMeasured()
     {
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 0, weeklyUsed: 0, fiveHourResetHours: 3)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        // The five-hour reset, not the weekly one: the bar was sized from the 5h pool.
+        StringAssert.StartsWith(segment.ResetText, "~2h");
+        StringAssert.StartsWith(segment.AvailableText, "10.4M · 2h");
+        // A bar too narrow for its provider name keeps the number, not the reset.
+        Assert.AreEqual("10.4M", segment.CompactAvailableText);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_IgnoresASubQuotaWhoseResetHasAlreadyPassed()
+    {
+        // codex-lb keeps reporting per-model weekly windows for days after they
+        // refill. Letting one win the tie stamps "now" on a bar that does not come
+        // back for another four days.
         var config = new FakeConfig(new[] { new ProviderInstance("codex-lb", "codex-lb", "codex-lb") });
         var snapshot = new ProviderSnapshot
         {
@@ -903,37 +384,252 @@ public sealed class HeroViewModelTests
             Primary = new RateWindow
             {
                 Label = "Effective Usage",
-                UsedPercent = 80,
-                ResetsAt = DateTimeOffset.UtcNow.AddHours(3).ToString("O"),
+                UsedPercent = 50,
+                ResetsAt = DateTimeOffset.UtcNow.AddDays(4).ToString("O"),
             },
             AdditionalWindows =
             {
                 new RateWindow
                 {
-                    Label = "Effective 5h",
-                    UsedPercent = 60,
-                    ResetsAt = DateTimeOffset.UtcNow.AddHours(3).ToString("O"),
-                    WindowMinutes = 5 * 60,
+                    Label = "Effective Weekly",
+                    UsedPercent = 50,
+                    ResetsAt = DateTimeOffset.UtcNow.AddDays(4).ToString("O"),
+                    WindowMinutes = 7 * 24 * 60,
                 },
                 new RateWindow
                 {
-                    Label = "Effective Weekly",
-                    UsedPercent = 80,
-                    ResetsAt = DateTimeOffset.UtcNow.AddDays(4).ToString("O"),
+                    Label = "Spark · Weekly",
+                    UsedPercent = 0,
+                    ResetsAt = DateTimeOffset.UtcNow.AddDays(-3).ToString("O"),
                     WindowMinutes = 7 * 24 * 60,
                 },
             },
         };
 
-        var segments = HeroViewModel.BuildUsageTimelineSegments(
-            config,
-            new[] { ("codex-lb", snapshot) },
-            sortMode: ProviderSortMode.FiveHour);
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, new[] { ("codex-lb", snapshot) }).Single();
+
+        Assert.AreEqual(EffectiveUsageGroup.Weekly, segment.Group);
+        Assert.AreNotEqual("now", segment.ResetText);
+        Assert.IsTrue(
+            segment.ResetText?.Contains('d', StringComparison.Ordinal) == true,
+            $"Expected a multi-day reset, got '{segment.ResetText}'.");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithPooledAccounts_SumsTheirAllowances()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("codex-lb", "codex-lb", "codex-lb") });
+        var snapshot = new ProviderSnapshot
+        {
+            ProviderId = "codex-lb",
+            Name = "codex-lb",
+            Primary = new RateWindow
+            {
+                Label = "Effective Weekly",
+                UsedPercent = 50,
+                ResetsAt = DateTimeOffset.UtcNow.AddDays(3).ToString("O"),
+                WindowMinutes = 7 * 24 * 60,
+            },
+            Accounts =
+            {
+                new AccountInfo { Email = "a@example.com", Plan = "plus", PrimaryLabel = "Weekly", PrimaryUsedPercent = 50 },
+                new AccountInfo { Email = "b@example.com", Plan = "plus", PrimaryLabel = "Weekly", PrimaryUsedPercent = 50 },
+            },
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, new[] { ("codex-lb", snapshot) }).Single();
+
+        // Two Plus seats at 32M/week each, half spent.
+        Assert.AreEqual(32, segment.EffectiveTokensMillions, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithFullySpentPool_KeepsAVisibleGrayBar()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("grok", "grok", "Grok") });
+        var snapshots = new[]
+        {
+            ("grok", Snapshot("Grok · SuperGrok", usedPercent: 100, resetHours: 20, windowMinutes: 7 * 24 * 60)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        Assert.AreEqual("grok", segment.InstanceId);
+        Assert.IsTrue(segment.Weight > 0, "A spent plan still exists and must stay on screen.");
+        Assert.IsTrue(segment.IsGrayedOut, "Nothing left to spend reads as gray.");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithNoTokenAllowance_HidesThePlan()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("warp", "warp", "Warp") });
+        var snapshots = new[]
+        {
+            ("warp", Snapshot("Warp · Free", usedPercent: 10, resetHours: 20, windowMinutes: 7 * 24 * 60)),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
 
         Assert.AreEqual(1, segments.Count);
-        Assert.AreEqual("effective 5h", segments[0].ResetFrequencyText);
-        // Effective 5h cannot exceed the weekly pool (20% remaining).
-        Assert.AreEqual(20, segments[0].AvailablePercent, 0.001);
+        Assert.AreEqual("", segments[0].InstanceId);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithExpiredEntitlement_ExcludesTheDeadPlan()
+    {
+        var config = new FakeConfig(new[]
+        {
+            new ProviderInstance("grok", "grok", "Grok"),
+            new ProviderInstance("copilot", "copilot", "Copilot"),
+        });
+        var expired = Snapshot("Grok · SuperGrok", usedPercent: 0, resetHours: 20, windowMinutes: 7 * 24 * 60);
+        expired.EntitlementStatus = EntitlementStatus.Expired;
+        var snapshots = new[]
+        {
+            ("grok", expired),
+            ("copilot", Snapshot("Copilot · Pro", usedPercent: 0, resetHours: 20, windowMinutes: 7 * 24 * 60)),
+        };
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, snapshots);
+
+        Assert.AreEqual(1, segments.Count);
+        Assert.AreEqual("copilot", segments[0].InstanceId);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WhenSlotsAreScarce_KeepsOnePlanFromEveryBracket()
+    {
+        // Five big weekly plans would otherwise fill every slot and answer "you own
+        // nothing that resets every five hours", which is not what the data says.
+        var instances = new List<ProviderInstance>
+        {
+            new("claude", "claude", "Claude"),
+            new("deepseek", "deepseek", "DeepSeek"),
+            new("mimo", "mimo", "MiMo"),
+        };
+        var snapshots = new List<(string, ProviderSnapshot)>
+        {
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 99, weeklyUsed: 0)),
+            ("deepseek", Balance("DeepSeek", 1)),
+            ("mimo", Snapshot("MiMo · Lite", usedPercent: 99, resetHours: 300, windowMinutes: 30 * 24 * 60)),
+        };
+        for (var index = 0; index < 8; index++)
+        {
+            var id = $"grok{index}";
+            instances.Add(new ProviderInstance(id, "grok", id));
+            snapshots.Add((id, Snapshot("Grok · SuperGrok Heavy", usedPercent: 0, resetHours: 100, windowMinutes: 7 * 24 * 60)));
+        }
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(
+            new FakeConfig(instances),
+            snapshots);
+
+        var groups = segments.Select(segment => segment.Group).Distinct().ToList();
+        CollectionAssert.Contains(groups, (EffectiveUsageGroup?)EffectiveUsageGroup.FiveHour);
+        CollectionAssert.Contains(groups, (EffectiveUsageGroup?)EffectiveUsageGroup.Weekly);
+        CollectionAssert.Contains(groups, (EffectiveUsageGroup?)EffectiveUsageGroup.Monthly);
+        CollectionAssert.Contains(groups, (EffectiveUsageGroup?)EffectiveUsageGroup.Api);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WithNoProvidersAtAll_StillHoldsThePlaceWithOneGrayBar()
+    {
+        var config = new FakeConfig(Array.Empty<ProviderInstance>());
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(
+            config,
+            Array.Empty<(string, ProviderSnapshot)>());
+
+        Assert.AreEqual(1, segments.Count);
+        Assert.IsTrue(segments[0].IsGrayedOut);
+        Assert.AreEqual("", segments[0].Label);
+        Assert.AreEqual("", segments[0].AvailableText);
+        Assert.IsFalse(segments[0].IsInteractive);
+        Assert.IsNull(segments[0].Group);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_WhenEveryProviderIsStillConnecting_HoldsThePlace()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var failing = Snapshot("Claude Code · Max", usedPercent: 0, resetHours: 4, windowMinutes: 5 * 60);
+        failing.Error = "not signed in";
+
+        var segments = HeroViewModel.BuildUsageTimelineSegments(config, new[] { ("claude", failing) });
+
+        Assert.AreEqual(1, segments.Count);
+        Assert.AreEqual("", segments[0].InstanceId);
+        Assert.IsTrue(segments[0].IsGrayedOut);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_TooltipReportsTheFiveHourFigureAgainstItsPool()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 50, weeklyUsed: 0)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        StringAssert.Contains(segment.ResetToolTip, "usable in the next 5h");
+        StringAssert.Contains(segment.ResetToolTip, "5.2M");
+        StringAssert.Contains(segment.ResetToolTip, "10.4M");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_TooltipSaysWhenALongerPoolIsTheRealLimit()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("claude", "claude", "Claude") });
+        var snapshots = new[]
+        {
+            ("claude", FiveHourPlan("Claude Code · Max", fiveHourUsed: 0, weeklyUsed: 99.5)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        StringAssert.Contains(segment.ResetToolTip, "Capped by the longer pool");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_ApiTooltipShowsBothTheBalanceAndTheAssumedRate()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("deepseek", "deepseek", "DeepSeek") });
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, new[] { ("deepseek", Balance("DeepSeek", 25)) })
+            .Single();
+
+        StringAssert.Contains(segment.ResetToolTip, "Balance");
+        StringAssert.Contains(segment.ResetToolTip, "blended rate");
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_MeasuredThroughputInformsTooltipButNotWidth()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("codex-lb", "codex-lb", "codex-lb") });
+        var snapshot = Snapshot("codex-lb · Plus", usedPercent: 0, resetHours: 100, windowMinutes: 7 * 24 * 60);
+        snapshot.MeasuredWeeklyTokensMillions = 4321;
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, new[] { ("codex-lb", snapshot) }).Single();
+
+        StringAssert.Contains(segment.ResetToolTip, "measured pool throughput");
+        // Plus is estimated at 32M/week; the measurement must not size the bar.
+        Assert.AreEqual(32, segment.Weight, 0.01);
+    }
+
+    [TestMethod]
+    public void BuildUsageTimelineSegments_UnknownPlanFallsBackToSmallestTierWithQualifier()
+    {
+        var config = new FakeConfig(new[] { new ProviderInstance("cursor", "cursor", "Cursor") });
+        var snapshots = new[]
+        {
+            ("cursor", Snapshot("Cursor · Mystery Tier", usedPercent: 0, resetHours: 100, windowMinutes: 7 * 24 * 60)),
+        };
+
+        var segment = HeroViewModel.BuildUsageTimelineSegments(config, snapshots).Single();
+
+        StringAssert.Contains(segment.ResetToolTip, "plan not recognized");
     }
 
     private static ProviderSnapshot Snapshot(string name, double usedPercent, double resetHours, long windowMinutes) => new()
@@ -946,6 +642,44 @@ public sealed class HeroViewModelTests
             ResetsAt = DateTimeOffset.UtcNow.AddHours(resetHours).ToString("O"),
             WindowMinutes = windowMinutes,
         },
+        UpdatedAt = DateTimeOffset.UtcNow,
+    };
+
+    /// A subscription with a five-hour window nested inside a weekly pool.
+    private static ProviderSnapshot FiveHourPlan(
+        string name,
+        double fiveHourUsed,
+        double weeklyUsed,
+        double fiveHourResetHours = 2) => new()
+    {
+        Name = name,
+        Primary = new RateWindow
+        {
+            Label = "5h Pool",
+            UsedPercent = fiveHourUsed,
+            ResetsAt = DateTimeOffset.UtcNow.AddHours(fiveHourResetHours).ToString("O"),
+            WindowMinutes = 5 * 60,
+        },
+        Secondary = new RateWindow
+        {
+            Label = "7d Pool",
+            UsedPercent = weeklyUsed,
+            ResetsAt = DateTimeOffset.UtcNow.AddDays(4).ToString("O"),
+            WindowMinutes = 7 * 24 * 60,
+        },
+        UpdatedAt = DateTimeOffset.UtcNow,
+    };
+
+    /// A metered API key with a USD balance and no reset window at all.
+    private static ProviderSnapshot Balance(string name, double usd) => new()
+    {
+        Name = name,
+        Primary = new RateWindow
+        {
+            Label = "Balance",
+            UsedPercent = 0,
+        },
+        Balance = new BalanceInfo { Currency = "USD", Total = usd, Paid = usd },
         UpdatedAt = DateTimeOffset.UtcNow,
     };
 

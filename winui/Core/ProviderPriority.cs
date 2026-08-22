@@ -25,7 +25,17 @@ public readonly record struct ProviderPriorityScore(
     /// answers a different question — what it is worth in dollars — and is zero for
     /// units no rate can convert, so it must not be used to decide usability.
     /// </summary>
-    bool HasSpendableBalance = false);
+    bool HasSpendableBalance = false,
+    /// <summary>
+    /// What the five-hour window itself reports, before the nested-pool clamp that
+    /// <see cref="FiveHourAvailability"/> carries. The clamp compares percentages of
+    /// pools that are two orders of magnitude apart — 90% of a 10M five-hour window
+    /// reads as 54% because the 350M weekly pool is 54% full — so anything reasoning
+    /// in tokens has to start from the raw figure and apply the ceiling in tokens.
+    /// </summary>
+    double FiveHourWindowAvailability = 0.0,
+    /// <summary>Weekly availability before the monthly clamp; see above.</summary>
+    double WeeklyWindowAvailability = 0.0);
 
 public readonly record struct ProviderPriorityCandidate(
     string Id,
@@ -143,6 +153,11 @@ public static class ProviderPriority
             }
         }
 
+        // Kept unclamped for callers that measure tokens rather than compare
+        // percentages; the clamped figures below stay the ones ranking uses.
+        var fiveHourWindowAvailability = fiveHourAvailability;
+        var weeklyWindowAvailability = weeklyAvailability;
+
         // Same-account nested limits: a 5h window cannot exceed the weekly or
         // monthly pool it sits inside. Pooled accounts apply this per account below.
         if (snapshot.Accounts.Count == 0)
@@ -161,8 +176,10 @@ public static class ProviderPriority
         if (snapshot.Accounts.Count > 0)
         {
             double fiveHourAvailWeighted = 0;
+            double fiveHourRawWeighted = 0;
             double fiveHourCapSum = 0;
             double weeklyAvailWeighted = 0;
+            double weeklyRawWeighted = 0;
             double weeklyCapSum = 0;
             double monthlyAvailWeighted = 0;
             double monthlyCapSum = 0;
@@ -214,6 +231,7 @@ public static class ProviderPriority
                         ? Math.Min(accWeeklyAvail.Value, accMonthlyAvail.Value)
                         : accWeeklyAvail.Value;
                     weeklyAvailWeighted += effectiveWeekly * cap;
+                    weeklyRawWeighted += accWeeklyAvail.Value * cap;
                     weeklyCapSum += cap;
                     accWeeklyAvail = effectiveWeekly;
                 }
@@ -225,14 +243,23 @@ public static class ProviderPriority
                         ? Math.Min(acc5hAvail.Value, parent.Value)
                         : acc5hAvail.Value;
                     fiveHourAvailWeighted += effectiveAcc5h * cap;
+                    fiveHourRawWeighted += acc5hAvail.Value * cap;
                     fiveHourCapSum += cap;
                 }
             }
 
             if (fiveHourCapSum > 0)
+            {
                 fiveHourAvailability = fiveHourAvailWeighted / fiveHourCapSum;
+                fiveHourWindowAvailability = fiveHourRawWeighted / fiveHourCapSum;
+            }
+
             if (weeklyCapSum > 0)
+            {
                 weeklyAvailability = weeklyAvailWeighted / weeklyCapSum;
+                weeklyWindowAvailability = weeklyRawWeighted / weeklyCapSum;
+            }
+
             if (monthlyCapSum > 0)
                 monthlyAvailability = monthlyAvailWeighted / monthlyCapSum;
         }
@@ -271,7 +298,9 @@ public static class ProviderPriority
                 monthlyAvailability,
                 hasBalance,
                 balanceAmount,
-                hasSpendableBalance);
+                hasSpendableBalance,
+                fiveHourWindowAvailability,
+                weeklyWindowAvailability);
 
         double threshold = 5.0;
         if (config is not null)
@@ -304,7 +333,9 @@ public static class ProviderPriority
             monthlyAvailability,
             hasBalance,
             balanceAmount,
-            hasSpendableBalance);
+            hasSpendableBalance,
+            fiveHourWindowAvailability,
+            weeklyWindowAvailability);
     }
 
     public static IReadOnlyList<ProviderPriorityCandidate> RankUsableSubscriptions(

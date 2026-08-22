@@ -307,7 +307,7 @@ public sealed partial class DashboardViewModel : ObservableObject
 
     private void UpdateHero()
     {
-        Hero.Update(_svc, _sortPriorityOrder, IsSensitiveInfoHidden, SortMode);
+        Hero.Update(_svc, _sortPriorityOrder, IsSensitiveInfoHidden);
         OnPropertyChanged(nameof(IsUsageTimelineVisible));
         UpdateAmbientTint();
     }

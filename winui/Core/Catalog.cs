@@ -1053,6 +1053,43 @@ public static class Catalog
         },
     };
 
+    /// <summary>
+    /// Blended USD per million tokens for metered API balances, so a funded key can
+    /// be measured in tokens alongside subscription plans (see
+    /// <see cref="ApiTokenRules"/>). Each figure mixes input, cached input, and
+    /// output at the ratio an agentic coding session actually produces — roughly
+    /// cache-heavy input with a small output tail — rather than quoting list input
+    /// price, which would overstate every balance several-fold.
+    ///
+    /// A value of 0 means "not metered in tokens": the provider sells minutes or
+    /// characters, and its balance has no honest place on a token axis.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, double> DefaultApiTokenPrices =
+        new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+        {
+            // DeepSeek's cache-hit input is an order of magnitude below its miss
+            // price, and coding agents replay long prefixes, so the blend lands
+            // well under the $0.28/M list input rate.
+            ["deepseek"] = 0.25,
+            ["moonshot"] = 1.00,
+            ["alibabacloud"] = 0.60,
+            ["groq"] = 0.60,
+            ["mistral"] = 1.00,
+            ["venice"] = 1.00,
+            // Marketplace: the mix users actually route through OpenRouter sits
+            // between the open-weight tier and frontier models.
+            ["openrouter"] = 2.00,
+            ["llmproxy"] = 2.00,
+            ["openai"] = 2.50,
+            ["azureopenai"] = 2.50,
+            ["vertexai"] = 2.50,
+            // Bedrock balances are spent almost entirely on Claude-class models.
+            ["bedrock"] = 4.00,
+            // Speech-to-text billed per audio minute; no token figure exists.
+            ["deepgram"] = 0,
+            ["elevenlabs"] = 0,
+        };
+
     public static readonly IReadOnlyDictionary<string, ProviderPlanValueRule[]> DefaultPlanValueRules = new Dictionary<string, ProviderPlanValueRule[]>
     {
         ["codex-lb"] = new[]

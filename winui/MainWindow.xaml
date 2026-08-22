@@ -176,17 +176,21 @@
                             </Grid>
                 </Grid>
 
-                <!-- Aggregate usage horizon -->
+                <!-- Effective usage: what every plan can supply in the next five hours -->
                 <Border Style="{StaticResource CardStyle}"
                         Padding="16,14,16,12"
                         AutomationProperties.AutomationId="UsageTimelineCard"
                         AutomationProperties.Name="{x:Bind Vm.Hero.UsageTimelineAutomationName, Mode=OneWay}"
                         Visibility="{Binding IsUsageTimelineVisible, Converter={StaticResource BoolToVis}}">
-                    <views:UsageCylinder x:Name="UsageTimeline"
-                                         Segments="{x:Bind Vm.Hero.UsageTimelineSegments, Mode=OneWay}"
-                                         SegmentPreviewed="OnUsageTimelineSegmentPreviewed"
-                                         SegmentPreviewEnded="OnUsageTimelineSegmentPreviewEnded"
-                                         SegmentInvoked="OnUsageTimelineSegmentInvoked" />
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="{x:Bind Vm.Hero.UsageTimelineCaption, Mode=OneWay}"
+                                   Style="{StaticResource HeroEyebrowText}" />
+                        <views:UsageCylinder x:Name="UsageTimeline"
+                                             Segments="{x:Bind Vm.Hero.UsageTimelineSegments, Mode=OneWay}"
+                                             SegmentPreviewed="OnUsageTimelineSegmentPreviewed"
+                                             SegmentPreviewEnded="OnUsageTimelineSegmentPreviewEnded"
+                                             SegmentInvoked="OnUsageTimelineSegmentInvoked" />
+                    </StackPanel>
                 </Border>
 
                 <!-- Card ordering -->

@@ -14,7 +14,9 @@ namespace QuotaLens.ViewModels;
 /// </summary>
 public sealed partial class HeroViewModel : ObservableObject
 {
-    private const int MaxUsageTimelineSegments = 6;
+    // Four reset brackets have to fit side by side, and each one has to keep at
+    // least its best plan, so the chart needs more room than a flat top-N.
+    private const int MaxUsageTimelineSegments = 8;
 
     // UsageCylinder drops any segment whose weight is not positive, so a provider
     // at 0% must still be worth a sliver: disappearing reads as "not configured".
@@ -50,12 +52,17 @@ public sealed partial class HeroViewModel : ObservableObject
     public string Eyebrow => I18n.T("summary.bestPaidPlan");
     public string OnlineLabel => I18n.T("summary.online");
     public string UsageTimelineAutomationName => I18n.T("summary.usageTimeline");
+    public string UsageTimelineCaption => I18n.T("timeline.caption");
 
+    /// <summary>
+    /// <paramref name="recommendedPriorityOrder"/> steers the "use right now" pick
+    /// only. The chart below it measures effective usage and is intentionally not
+    /// parameterized by the dashboard's sort mode.
+    /// </summary>
     public void Update(
         IProviderService svc,
         IReadOnlyList<ProviderSortTerm>? recommendedPriorityOrder = null,
-        bool hideSensitiveInfo = false,
-        ProviderSortMode sortMode = ProviderSortMode.PlanValue)
+        bool hideSensitiveInfo = false)
     {
         var present = svc.Instances
             .Select(i => (Id: i.Id, Snap: svc.GetSnapshot(i.Id)))
@@ -116,12 +123,13 @@ public sealed partial class HeroViewModel : ObservableObject
         else if (connected < total) { OnlineDetail = $"{total - connected} {I18n.T("summary.pending")}"; OnlineSeverity = Severity.Busy; }
         else { OnlineDetail = I18n.T("summary.allChecked"); OnlineSeverity = Severity.Good; }
 
-        BuildUsageTimeline(svc, present, recommendedPriorityOrder, hideSensitiveInfo, sortMode);
+        BuildUsageTimeline(svc, present, hideSensitiveInfo);
 
         // Computed i18n strings: re-notify so OneWay bindings refresh on language change.
         OnPropertyChanged(nameof(Eyebrow));
         OnPropertyChanged(nameof(OnlineLabel));
         OnPropertyChanged(nameof(UsageTimelineAutomationName));
+        OnPropertyChanged(nameof(UsageTimelineCaption));
     }
 
     internal static string BuildPickDetail(
@@ -147,16 +155,9 @@ public sealed partial class HeroViewModel : ObservableObject
     private void BuildUsageTimeline(
         IProviderService svc,
         IReadOnlyList<(string Id, ProviderSnapshot Snap)> present,
-        IReadOnlyList<ProviderSortTerm>? recommendedPriorityOrder,
-        bool hideSensitiveInfo,
-        ProviderSortMode sortMode)
+        bool hideSensitiveInfo)
     {
-        ReplaceUsageTimeline(BuildUsageTimelineSegments(
-            svc.Config,
-            present,
-            recommendedPriorityOrder,
-            hideSensitiveInfo,
-            sortMode));
+        ReplaceUsageTimeline(BuildUsageTimelineSegments(svc.Config, present, hideSensitiveInfo));
     }
 
     private void ReplaceUsageTimeline(IReadOnlyList<UsageTimelineSegmentViewModel> next)
@@ -170,8 +171,7 @@ public sealed partial class HeroViewModel : ObservableObject
                     && current.Label == candidate.Label
                     && current.ResetFrequencyText == candidate.ResetFrequencyText
                     && current.IsGrayedOut == candidate.IsGrayedOut
-                    // Switching cadence view keeps a no-plan bar identical except
-                    // for the phrase screen readers announce.
+                    && current.Group == candidate.Group
                     && current.AutomationStatusText == candidate.AutomationStatusText)
                 .All(same => same);
         if (unchanged)
@@ -195,55 +195,94 @@ public sealed partial class HeroViewModel : ObservableObject
         HasUsageTimeline = UsageTimelineSegments.Count > 0;
     }
 
+    /// <summary>
+    /// The chart answers one question, always the same one: how many tokens can
+    /// each plan supply in the next five hours? It is deliberately independent of
+    /// the card sort order — switching the dashboard between 5h, weekly, monthly,
+    /// and value views changes which cards lead, never what the chart measures.
+    ///
+    /// An exhausted subscription still exists, so it stays a candidate and simply
+    /// draws a spent bar. Expired entitlements are the exception: PlanTokenRules
+    /// would invent an allowance for a plan that no longer grants anything.
+    /// </summary>
     internal static IReadOnlyList<UsageTimelineSegmentViewModel> BuildUsageTimelineSegments(
         IConfig config,
         IReadOnlyList<(string Id, ProviderSnapshot Snap)> present,
-        IReadOnlyList<ProviderSortTerm>? recommendedPriorityOrder = null,
-        bool hideSensitiveInfo = false,
-        ProviderSortMode sortMode = ProviderSortMode.PlanValue)
+        bool hideSensitiveInfo = false)
     {
-        // An exhausted subscription still exists, so it stays a candidate: in a
-        // cadence view its own cadence availability decides the bar (a burnt 5h
-        // pool must not hide a healthy monthly one), and in the value view its
-        // monthly price is still money on the table. Expired entitlements are the
-        // exception — ProviderMoney would invent a monthly estimate for a plan
-        // that no longer grants anything.
-        var ranked = ProviderSortPolicy.Order(
-                present
-                    .Where(x => string.IsNullOrEmpty(x.Snap.Error)
-                                && x.Snap.EntitlementStatus != EntitlementStatus.Expired)
-                    .Select(x => new ProviderPriorityCandidate(
-                        x.Id,
-                        x.Snap,
-                        ProviderPriority.Score(x.Id, x.Snap, config)))
-                    .Where(x => x.Score.Bucket is ProviderPriority.UsableSubscriptionBucket
-                                    or ProviderPriority.ExhaustedSubscriptionBucket
-                                || (x.Score.IsPayAsYouGo && x.Score.BalanceAmount > 0)),
-                sortMode,
-                x => x.Score,
-                recommendedPriorityOrder)
-            .Select(x => TimelineCandidate.From(x, config, hideSensitiveInfo, sortMode))
+        var candidates = present
+            .Where(x => string.IsNullOrEmpty(x.Snap.Error)
+                        && x.Snap.EntitlementStatus != EntitlementStatus.Expired)
+            .Select(x => new ProviderPriorityCandidate(
+                x.Id,
+                x.Snap,
+                ProviderPriority.Score(x.Id, x.Snap, config)))
+            .Where(x => x.Score.Bucket is ProviderPriority.UsableSubscriptionBucket
+                            or ProviderPriority.ExhaustedSubscriptionBucket
+                        || x.Score.IsPayAsYouGo)
+            .Select(x => TimelineCandidate.From(x, config, hideSensitiveInfo))
+            // A plan with no allowance at all has nothing to size a bar with, and a
+            // metered key priced in minutes rather than tokens has no token figure.
+            .Where(candidate => candidate.Effective.PoolTokensMillions > 0)
             .ToList();
 
-        // The cap is applied after the display ordering so that the metric which
-        // cuts a provider is always the metric its bar would have been drawn with.
-        var displayCandidates = sortMode == ProviderSortMode.PlanValue
-            ? OrderValueCandidates(ranked)
-            : OrderCadenceCandidates(ranked);
-
-        var segments = displayCandidates
-            .Take(MaxUsageTimelineSegments)
-            .Select(candidate => BuildSegment(candidate, sortMode))
+        var segments = SelectCandidates(candidates)
+            .Select(BuildSegment)
             .ToList();
 
         // The chart is a fixed part of the dashboard, not something that appears
         // only when it has good news. With nothing to draw — no providers yet, all
-        // of them still connecting, or none priced in this view — it holds its
-        // place as one gray bar instead of collapsing the card and reflowing the
-        // page every time the user switches cadence.
+        // of them still connecting — it holds its place as one gray bar instead of
+        // collapsing the card and reflowing the page.
         return segments.Count > 0
             ? segments
-            : new List<UsageTimelineSegmentViewModel> { BuildEmptySegment(sortMode) };
+            : new List<UsageTimelineSegmentViewModel> { BuildEmptySegment() };
+    }
+
+    /// <summary>
+    /// Slots are scarce, so capacity picks the survivors — but every bracket the
+    /// user actually owns keeps its best plan first. Letting raw capacity fill all
+    /// the slots would silently answer "you have nothing that resets weekly" when
+    /// the truth is only that the weekly pool is smaller.
+    /// </summary>
+    private static IReadOnlyList<TimelineCandidate> SelectCandidates(IReadOnlyList<TimelineCandidate> candidates)
+    {
+        var byCapacity = candidates
+            .OrderByDescending(candidate => candidate.Effective.TokensMillions)
+            .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
+            .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal)
+            .ToList();
+
+        var kept = new List<TimelineCandidate>();
+        var keptIds = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var group in byCapacity
+                     .Select(candidate => candidate.Effective.Group)
+                     .Distinct()
+                     .OrderBy(group => group))
+        {
+            var best = byCapacity.First(candidate => candidate.Effective.Group == group);
+            if (keptIds.Add(best.Priority.Id))
+                kept.Add(best);
+        }
+
+        foreach (var candidate in byCapacity)
+        {
+            if (kept.Count >= MaxUsageTimelineSegments)
+                break;
+            if (keptIds.Add(candidate.Priority.Id))
+                kept.Add(candidate);
+        }
+
+        // Layout is applied to the survivors unchanged: brackets left to right in
+        // cadence order, biggest plan first inside each bracket.
+        return kept
+            .Take(MaxUsageTimelineSegments)
+            .OrderBy(candidate => candidate.Effective.Group)
+            .ThenByDescending(candidate => candidate.Effective.TokensMillions)
+            .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
+            .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal)
+            .ToList();
     }
 
     /// <summary>
@@ -252,12 +291,8 @@ public sealed partial class HeroViewModel : ObservableObject
     /// place. No instance id, so it is inert: no hover highlight, no click-to-scroll,
     /// and screen readers hear the reason instead of a measurement that never existed.
     /// </summary>
-    private static UsageTimelineSegmentViewModel BuildEmptySegment(ProviderSortMode sortMode)
-    {
-        var reason = sortMode == ProviderSortMode.PlanValue
-            ? I18n.T("timeline.noPlanValue")
-            : NoCadenceText(sortMode);
-        return new UsageTimelineSegmentViewModel(
+    private static UsageTimelineSegmentViewModel BuildEmptySegment() =>
+        new(
             providerType: "",
             label: "",
             weight: 1,
@@ -268,165 +303,119 @@ public sealed partial class HeroViewModel : ObservableObject
             instanceId: "",
             isGrayedOut: true,
             customAvailableText: "",
-            automationStatusText: reason);
-    }
+            automationStatusText: I18n.T("timeline.noCapacity"));
 
-    /// Money view: every bar is a USD amount, biggest first.
-    private static IEnumerable<TimelineCandidate> OrderValueCandidates(IEnumerable<TimelineCandidate> candidates) =>
-        candidates
-            .Where(candidate => candidate.Money.AmountUsd > 0)
-            .OrderByDescending(candidate => candidate.Money.AmountUsd)
-            .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
-            .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal);
-
-    /// Cadence views: only a provider that actually has a pool at this cadence gets a
-    /// bar, and those bars share the full width between them. A provider with no
-    /// monthly plan has no monthly number to draw, and inventing a placeholder for it
-    /// would shrink the plans the user does have in order to display nothing.
-    private static IEnumerable<TimelineCandidate> OrderCadenceCandidates(IEnumerable<TimelineCandidate> candidates)
+    private static UsageTimelineSegmentViewModel BuildSegment(TimelineCandidate candidate)
     {
-        var eligible = candidates
-            .Where(candidate => candidate.HasMatchingCadence)
-            // A subscription with no token allowance has nothing to size a bar
-            // with; a balance is sized by money, so pay-as-you-go is exempt.
-            .Where(candidate => candidate.Priority.Score.IsPayAsYouGo || candidate.WeeklyTokensMillions > 0);
-
-        // Slots are scarce and the chart answers "what can I still use?". A spent
-        // pool is worth drawing, but never at the price of one that still has room:
-        // capacity picks the survivors first. Without this the cap fills up with
-        // 0% bars ordered by price and drops the plan the user could actually use.
-        var survivors = eligible
-            .OrderByDescending(candidate =>
-                candidate.AvailablePercent > 0.1 || candidate.Priority.Score.IsPayAsYouGo)
-            .ThenByDescending(candidate => candidate.ResetFrequencySortMinutes)
-            .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
-            .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal)
-            .Take(MaxUsageTimelineSegments);
-
-        // Layout is then applied to the survivors unchanged: least-frequent reset
-        // on the left, regardless of which of them had capacity.
-        return survivors
-            .OrderByDescending(candidate => candidate.ResetFrequencySortMinutes)
-            .ThenByDescending(candidate => candidate.Priority.Score.PlanValue)
-            .ThenBy(candidate => candidate.Priority.Id, StringComparer.Ordinal);
-    }
-
-    private static UsageTimelineSegmentViewModel BuildSegment(TimelineCandidate candidate, ProviderSortMode sortMode)
-    {
-        var isValueMode = sortMode == ProviderSortMode.PlanValue;
-        var isPayAsYouGo = candidate.Priority.Score.IsPayAsYouGo;
-
-        double weight;
-        double availablePercent = candidate.AvailablePercent;
-        string? customAvailableText;
-        string? toolTip;
-
-        if (isValueMode)
-        {
-            var amount = Quota.FormatUsd(candidate.Money.AmountUsd);
-            customAvailableText = amount;
-            weight = Math.Max(candidate.Money.AmountUsd, MinSegmentWeight);
-            toolTip = AppendValueEstimate(candidate.ResetToolTip, candidate);
-        }
-        else if (isPayAsYouGo)
-        {
-            var bal = candidate.Priority.Snapshot.Balance;
-            // Total is remaining, never spend (see ProviderPriority): falling back to
-            // Paid here would print the amount already consumed as if it were available.
-            var total = Math.Max(0, bal?.Total ?? 0.0);
-            var sym = bal?.Currency?.ToUpperInvariant() switch
-            {
-                "CNY" or "RMB" => "¥",
-                "EUR" => "€",
-                _ => "$",
-            };
-            var balanceText = $"{sym}{total:0.##}";
-            customAvailableText = balanceText;
-            weight = Math.Max(candidate.Priority.Score.BalanceAmount, MinSegmentWeight);
-            toolTip = $"Balance: {balanceText}";
-        }
-        else
-        {
-            var percent = Quota.DisplayPct(candidate.AvailablePercent);
-            var reset = string.IsNullOrWhiteSpace(candidate.ResetText)
-                ? null
-                : candidate.ResetText.TrimStart('~').Trim();
-            customAvailableText = string.IsNullOrWhiteSpace(reset) ? null : $"{percent} · {reset}";
-            weight = Math.Max(candidate.WeeklyTokensMillions * candidate.AvailablePercent / 100.0, MinSegmentWeight);
-            toolTip = AppendTokenEstimate(candidate.ResetToolTip, candidate, candidate.AvailablePercent);
-        }
+        var effective = candidate.Effective;
+        var tokensText = FormatTokensMillions(effective.TokensMillions);
+        var reset = string.IsNullOrWhiteSpace(candidate.ResetText)
+            ? null
+            : candidate.ResetText.TrimStart('~').Trim();
 
         return new UsageTimelineSegmentViewModel(
             candidate.ProviderType,
             candidate.Label,
-            weight,
-            availablePercent,
+            Math.Max(WeightForTokens(effective.TokensMillions), MinSegmentWeight),
+            effective.AvailablePercent,
             candidate.ResetText,
-            toolTip,
-            candidate.ResetFrequencyText,
-            candidate.ResetFrequencySortMinutes,
+            BuildToolTip(candidate),
+            BracketTextFor(effective.Group),
+            EffectiveUsage.SortMinutesFor(effective.Group),
             instanceId: candidate.Priority.Id,
-            isGrayedOut: !isValueMode && isPayAsYouGo,
-            customAvailableText: customAvailableText);
+            // Gray now means "nothing to spend here right now", which is what the
+            // chart is asked. It no longer marks pay-as-you-go: a funded API key
+            // holds real capacity and sits in its own bracket instead.
+            isGrayedOut: effective.TokensMillions <= 0.0005,
+            customAvailableText: reset is null ? tokensText : $"{tokensText} · {reset}",
+            group: effective.Group,
+            effectiveTokensMillions: effective.TokensMillions,
+            compactAvailableText: tokensText);
     }
 
-    /// The plan a cadence view could not find. Only the three cadence modes reach
-    /// this: the value view always resolves to a dollar figure.
-    private static string NoCadenceText(ProviderSortMode sortMode) => sortMode switch
+    /// <summary>
+    /// Bar width is the token figure itself. Effective usage compresses the range
+    /// on its own — five hours of a very large plan lands near a whole small weekly
+    /// pool — so a linear axis stays readable while "twice as wide" keeps meaning
+    /// "twice as many tokens". Swap this for a log curve if real data ever spreads
+    /// far enough to make the small bars unreadable.
+    /// </summary>
+    private static double WeightForTokens(double tokensMillions) => Math.Max(0, tokensMillions);
+
+    internal static string BracketTextFor(EffectiveUsageGroup group) => group switch
     {
-        ProviderSortMode.FiveHour => I18n.T("timeline.noPlan5h"),
-        ProviderSortMode.Weekly => I18n.T("timeline.noPlanWeekly"),
-        _ => I18n.T("timeline.noPlanMonthly"),
+        EffectiveUsageGroup.FiveHour => I18n.T("timeline.bracket5h"),
+        EffectiveUsageGroup.Weekly => I18n.T("timeline.bracketWeekly"),
+        EffectiveUsageGroup.Monthly => I18n.T("timeline.bracketMonthly"),
+        EffectiveUsageGroup.Api => I18n.T("timeline.bracketApi"),
+        _ => I18n.T("timeline.bracketUnspecified"),
     };
 
-    private static string? AppendValueEstimate(string? toolTip, TimelineCandidate candidate)
+    private static string? BuildToolTip(TimelineCandidate candidate)
     {
-        if (candidate.Money.AmountUsd <= 0)
+        var effective = candidate.Effective;
+        var toolTip = candidate.ResetToolTip;
+
+        if (effective.Group == EffectiveUsageGroup.Api)
+            return ApiToolTip(candidate, toolTip);
+
+        if (effective.PoolTokensMillions <= 0)
             return toolTip;
 
-        var line = candidate.Money.Kind switch
-        {
-            ProviderMoneyKind.Balance => $"Balance: {Quota.FormatUsd(candidate.Money.AmountUsd)}",
-            ProviderMoneyKind.Estimate => $"{Quota.FormatUsd(candidate.Money.AmountUsd)}/mo {I18n.T("timeline.tokensEstimateUnknownPlan")}",
-            _ => $"{Quota.FormatUsd(candidate.Money.AmountUsd)}/mo plan",
-        };
-        return AppendLine(toolTip, line);
-    }
-
-    /// The caller passes the percentage the bar was actually sized with: a no-plan
-    /// bar is sized by overall availability, and the cadence percentage would
-    /// claim "0 of N tokens left" under a bar that is visibly not empty.
-    private static string? AppendTokenEstimate(string? toolTip, TimelineCandidate candidate, double availablePercent)
-    {
-        if (candidate.WeeklyTokensMillions <= 0)
-            return toolTip;
-
-        var remaining = candidate.WeeklyTokensMillions * availablePercent / 100.0;
         var qualifier = candidate.TokenEstimateKind switch
         {
             PlanTokenRules.TokenEstimateKind.Measured => I18n.T("timeline.tokensMeasured"),
             PlanTokenRules.TokenEstimateKind.Fallback => I18n.T("timeline.tokensEstimateUnknownPlan"),
             _ => I18n.T("timeline.tokensEstimate"),
         };
-        var line = string.Format(
+        toolTip = AppendLine(toolTip, string.Format(
             CultureInfo.CurrentCulture,
-            I18n.T("timeline.tokensRemaining"),
-            FormatTokensMillions(remaining),
-            FormatTokensMillions(candidate.WeeklyTokensMillions),
-            qualifier);
+            I18n.T("timeline.effectiveTokens"),
+            FormatTokensMillions(effective.TokensMillions),
+            FormatTokensMillions(effective.PoolTokensMillions),
+            qualifier));
+
+        // A fresh five-hour window inside a spent weekly pool would otherwise read
+        // as a bug: the percentage says full, the bar says nearly nothing.
+        if (effective.IsCappedByLongerPool)
+            toolTip = AppendLine(toolTip, I18n.T("timeline.cappedByLongerPool"));
 
         // Measured throughput (e.g. codex-lb's real token metrics) is shown as
         // context but never sizes the bar: one user's cache-heavy measurement is
         // not comparable with the normalized estimates used for other providers.
         if (candidate.Priority.Snapshot.MeasuredWeeklyTokensMillions is > 0)
         {
-            line += "\n" + string.Format(
+            toolTip = AppendLine(toolTip, string.Format(
                 CultureInfo.CurrentCulture,
                 I18n.T("timeline.tokensMeasuredThroughput"),
-                FormatTokensMillions(candidate.Priority.Snapshot.MeasuredWeeklyTokensMillions.Value));
+                FormatTokensMillions(candidate.Priority.Snapshot.MeasuredWeeklyTokensMillions.Value)));
         }
 
-        return AppendLine(toolTip, line);
+        return toolTip;
+    }
+
+    /// A metered key is money, so the bar says what the money buys and the tooltip
+    /// shows both halves of the conversion — the balance and the rate it assumed.
+    private static string? ApiToolTip(TimelineCandidate candidate, string? toolTip)
+    {
+        var balance = candidate.Priority.Snapshot.Balance;
+        var total = Math.Max(0, balance?.Total ?? 0.0);
+        var symbol = balance?.Currency?.ToUpperInvariant() switch
+        {
+            "CNY" or "RMB" => "¥",
+            "EUR" => "€",
+            _ => "$",
+        };
+        toolTip = AppendLine(toolTip, $"{I18n.T("timeline.balance")}: {symbol}{total:0.##}");
+
+        var rate = ApiTokenRules.UsdPerMillionTokens(candidate.ProviderType);
+        return rate is > 0
+            ? AppendLine(toolTip, string.Format(
+                CultureInfo.CurrentCulture,
+                I18n.T("timeline.apiTokens"),
+                FormatTokensMillions(candidate.Effective.TokensMillions),
+                Quota.FormatUsd(rate.Value)))
+            : toolTip;
     }
 
     private static string AppendLine(string? toolTip, string line) =>
@@ -441,25 +430,18 @@ public sealed partial class HeroViewModel : ObservableObject
         ProviderPriorityCandidate Priority,
         string ProviderType,
         string Label,
-        double AvailablePercent,
-        double ResetSortMinutes,
         string? ResetText,
         string? ResetToolTip,
-        string? ResetFrequencyText,
-        double ResetFrequencySortMinutes,
         double WeeklyTokensMillions,
         PlanTokenRules.TokenEstimateKind TokenEstimateKind,
-        bool HasMatchingCadence,
-        ProviderMoney Money)
+        EffectiveUsage Effective)
     {
         public static TimelineCandidate From(
             ProviderPriorityCandidate candidate,
             IConfig config,
-            bool hideSensitiveInfo,
-            ProviderSortMode sortMode = ProviderSortMode.PlanValue)
+            bool hideSensitiveInfo)
         {
             var providerType = Catalog.ProviderTypeForInstance(candidate.Id, config);
-            var reset = TimelineReset.For(candidate.Snapshot, sortMode);
             var label = SensitiveDisplay.ProviderName(candidate.Snapshot.Name, hideSensitiveInfo);
             var weeklyTokens = PlanTokenRules.EstimateWeeklyTokensMillions(
                 providerType,
@@ -467,68 +449,39 @@ public sealed partial class HeroViewModel : ObservableObject
                 config,
                 out var tokenEstimateKind,
                 preferMeasured: false);
-
-            var availablePct = sortMode switch
-            {
-                ProviderSortMode.FiveHour => Math.Clamp(candidate.Score.FiveHourAvailability, 0, 100),
-                ProviderSortMode.Weekly => Math.Clamp(candidate.Score.WeeklyAvailability, 0, 100),
-                ProviderSortMode.Monthly => Math.Clamp(candidate.Score.MonthlyAvailability, 0, 100),
-                _ => Math.Clamp(candidate.Score.Availability, 0, 100),
-            };
-
-            var hasMatchingCadence = sortMode switch
-            {
-                ProviderSortMode.FiveHour => candidate.Score.HasFiveHour,
-                ProviderSortMode.Weekly => candidate.Score.HasWeekly,
-                ProviderSortMode.Monthly => candidate.Score.HasMonthly,
-                _ => true,
-            };
-
-            var frequencyText = FrequencyTextFor(sortMode, hasMatchingCadence, reset.FrequencyText);
+            var effective = EffectiveUsage.For(
+                candidate.Id,
+                candidate.Snapshot,
+                candidate.Score,
+                weeklyTokens,
+                config);
+            var reset = TimelineReset.For(candidate.Snapshot, effective.Group);
 
             return new TimelineCandidate(
                 candidate,
                 providerType,
                 label,
-                availablePct,
-                reset.SortMinutes,
                 reset.DisplayText,
                 reset.ToolTip,
-                frequencyText,
-                reset.FrequencyMinutes,
                 weeklyTokens,
                 tokenEstimateKind,
-                hasMatchingCadence,
-                ProviderMoney.For(candidate.Id, candidate.Snapshot, candidate.Score, config));
-        }
-
-        private static string? FrequencyTextFor(
-            ProviderSortMode sortMode,
-            bool hasMatchingCadence,
-            string? fallback)
-        {
-            if (!hasMatchingCadence)
-                return fallback;
-
-            return sortMode switch
-            {
-                ProviderSortMode.FiveHour => I18n.T("timeline.effective5h"),
-                ProviderSortMode.Weekly => I18n.T("timeline.effectiveWeekly"),
-                ProviderSortMode.Monthly => I18n.T("timeline.effectiveMonthly"),
-                _ => fallback,
-            };
+                effective);
         }
     }
 
     private sealed record TimelineReset(
         double SortMinutes,
         string? DisplayText,
-        string? ToolTip,
-        double FrequencyMinutes,
-        string? FrequencyText,
-        double AvailablePercent = 0.0)
+        string? ToolTip)
     {
-        public static TimelineReset For(ProviderSnapshot snapshot, ProviderSortMode sortMode = ProviderSortMode.PlanValue)
+        private static readonly TimelineReset None = new(double.PositiveInfinity, null, null);
+
+        /// <summary>
+        /// The reset shown on a bar is the one belonging to the pool the bar was
+        /// sized from. Any other window would date-stamp a number it does not
+        /// describe.
+        /// </summary>
+        public static TimelineReset For(ProviderSnapshot snapshot, EffectiveUsageGroup group)
         {
             var candidates = ResetCandidates(snapshot)
                 .Select(ResetCandidate.From)
@@ -537,36 +490,39 @@ public sealed partial class HeroViewModel : ObservableObject
                 .ToList();
 
             if (candidates.Count == 0)
-                return new TimelineReset(double.PositiveInfinity, null, null, double.PositiveInfinity, null, 0);
+                return None;
 
-            IEnumerable<ResetCandidate> filtered = sortMode switch
+            var wanted = group switch
             {
-                ProviderSortMode.FiveHour => candidates.Where(c => c.Cadence == QuotaCadence.FiveHour),
-                ProviderSortMode.Weekly => candidates.Where(c => c.Cadence == QuotaCadence.Weekly),
-                ProviderSortMode.Monthly => candidates.Where(c => c.Cadence == QuotaCadence.Monthly),
-                _ => candidates,
+                EffectiveUsageGroup.FiveHour => QuotaCadence.FiveHour,
+                EffectiveUsageGroup.Weekly => QuotaCadence.Weekly,
+                EffectiveUsageGroup.Monthly => QuotaCadence.Monthly,
+                _ => QuotaCadence.None,
             };
 
-            var selected = filtered
-                .OrderBy(candidate => candidate.WindowSortMinutes)
-                .ThenBy(candidate => candidate.MinutesUntil)
-                .FirstOrDefault()
-                ?? candidates
-                    .OrderBy(candidate => candidate.WindowSortMinutes)
-                    .ThenBy(candidate => candidate.MinutesUntil)
-                    .FirstOrDefault();
+            IEnumerable<ResetCandidate> filtered = wanted == QuotaCadence.None
+                ? candidates
+                : candidates.Where(candidate => candidate.Cadence == wanted);
 
-            if (selected is null)
-                return new TimelineReset(double.PositiveInfinity, null, null, double.PositiveInfinity, null, 0);
+            var selected = Best(filtered) ?? Best(candidates);
 
-            return new TimelineReset(
-                selected.MinutesUntil,
-                selected.DisplayText,
-                selected.ToolTip,
-                selected.WindowSortMinutes,
-                selected.FrequencyText,
-                selected.AvailablePercent);
+            return selected is null
+                ? None
+                : new TimelineReset(selected.MinutesUntil, selected.DisplayText, selected.ToolTip);
         }
+
+        /// <summary>
+        /// A window whose reset instant has already passed has nothing left to
+        /// announce — its quota is back. Providers keep reporting such windows
+        /// (codex-lb's per-model sub-quotas linger for days), and letting one win
+        /// the tie stamps "now" on a bar that does not refill for another 15 hours.
+        /// </summary>
+        private static ResetCandidate? Best(IEnumerable<ResetCandidate> candidates) =>
+            candidates
+                .OrderBy(candidate => candidate.MinutesUntil <= 0 ? 1 : 0)
+                .ThenBy(candidate => candidate.WindowSortMinutes)
+                .ThenBy(candidate => candidate.MinutesUntil)
+                .FirstOrDefault();
 
         private static IEnumerable<SnapshotRateWindow> ResetCandidates(ProviderSnapshot snapshot)
         {
@@ -584,7 +540,6 @@ public sealed partial class HeroViewModel : ObservableObject
             foreach (var window in ProviderSnapshotWindows.ResetWindows(snapshot))
                 yield return window;
         }
-
     }
 
     private sealed record ResetCandidate(
@@ -592,9 +547,7 @@ public sealed partial class HeroViewModel : ObservableObject
         double WindowSortMinutes,
         double MinutesUntil,
         string? DisplayText,
-        string? ToolTip,
-        string? FrequencyText,
-        double AvailablePercent)
+        string? ToolTip)
     {
         public static ResetCandidate? From(SnapshotRateWindow window)
         {
@@ -626,41 +579,7 @@ public sealed partial class HeroViewModel : ObservableObject
             if (windowSortMinutes <= 0)
                 windowSortMinutes = double.IsFinite(minutesUntil) ? minutesUntil : double.PositiveInfinity;
 
-            var avail = Math.Clamp(100.0 - window.UsedPercent, 0, 100);
-            return new ResetCandidate(
-                cadence,
-                windowSortMinutes,
-                minutesUntil,
-                displayText,
-                toolTip,
-                FormatFrequency(windowSortMinutes),
-                avail);
-        }
-
-        private static string? FormatFrequency(double minutes)
-        {
-            if (!double.IsFinite(minutes))
-                return null;
-
-            const double hour = 60;
-            const double day = 24 * hour;
-            const double week = 7 * day;
-
-            if (Math.Abs(minutes - hour) < 0.1)
-                return I18n.T("timeline.resetHourly");
-            if (Math.Abs(minutes - day) < 0.1)
-                return I18n.T("timeline.resetDaily");
-            if (Math.Abs(minutes - week) < 0.1)
-                return I18n.T("timeline.resetWeekly");
-            if (minutes >= 28 * day)
-                return I18n.T("timeline.resetMonthly");
-
-            if (minutes >= day && Math.Abs(minutes % day) < 0.1)
-                return I18n.T("timeline.resetEveryD", "n", (minutes / day).ToString("0", CultureInfo.InvariantCulture));
-            if (minutes >= hour && Math.Abs(minutes % hour) < 0.1)
-                return I18n.T("timeline.resetEveryH", "n", (minutes / hour).ToString("0", CultureInfo.InvariantCulture));
-
-            return I18n.T("timeline.resetEveryM", "n", minutes.ToString("0", CultureInfo.InvariantCulture));
+            return new ResetCandidate(cadence, windowSortMinutes, minutesUntil, displayText, toolTip);
         }
     }
 }
